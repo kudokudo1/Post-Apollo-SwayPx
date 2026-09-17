@@ -19,6 +19,7 @@ enum animation_event {
         ANIMATION_EVENT_MOVE,
         ANIMATION_EVENT_RESIZE,
         ANIMATION_EVENT_WORKSPACE,
+        ANIMATION_EVENT_COUNT,
 };
 
 // TODO: make animation just a pointer to progress, make multiplier and callback private
@@ -49,5 +50,6 @@ void start_animations();
 
 float get_animated_value(float from, float to, const struct animation *animation);
 
-#endif
+enum animation_style get_animation_style(const struct animation *animation);
 
+#endif

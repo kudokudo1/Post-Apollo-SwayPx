@@ -133,3 +133,11 @@ float get_animated_value(float from, float to, const struct animation *animation
 	return lerp(from, to, animation->multiplier);
 }
 
+enum animation_style get_animation_style(const struct animation *animation) {
+if (!animation || animation->event <= ANIMATION_EVENT_NONE ||
+         animation->event >= ANIMATION_EVENT_COUNT) {
+        return ANIMATION_STYLE_DEFAULT;  
+    }
+
+  return config->animation_styles[animation->event];
+}

@@ -492,7 +492,7 @@ enum xwayland_mode {
  */
 struct sway_config {
 	float animation_duration_ms;
-	enum animation_style animation_style;
+	enum animation_style animation_styles[ANIMATION_EVENT_COUNT];
 	int corner_radius;
 	bool smart_corner_radius;
 
