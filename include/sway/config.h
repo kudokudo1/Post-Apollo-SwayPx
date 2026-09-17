@@ -18,6 +18,7 @@
 #include "tree/container.h"
 #include "sway/input/tablet.h"
 #include "sway/tree/root.h"
+#include "sway/animation_manager.h"
 #include "wlr-layer-shell-unstable-v1-protocol.h"
 #include <pango/pangocairo.h>
 
@@ -491,6 +492,7 @@ enum xwayland_mode {
  */
 struct sway_config {
 	float animation_duration_ms;
+	enum animation_style animation_style;
 	int corner_radius;
 	bool smart_corner_radius;
 

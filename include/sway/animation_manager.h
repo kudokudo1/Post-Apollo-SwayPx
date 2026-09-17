@@ -7,6 +7,11 @@
 struct sway_container;
 struct sway_server;
 
+enum animation_style {
+        ANIMATION_STYLE_DEFAULT,
+        ANIMATION_STYLE_CRT,
+};
+
 // TODO: make animation just a pointer to progress, make multiplier and callback private
 struct animation {
 	struct wl_list link;
