@@ -19,6 +19,7 @@ struct animation init_animation(void *data) {
 	return (struct animation){
 		.data = data,
 		.progress = 0.0f,
+		.event = ANIMATION_EVENT_NONE,
 		.multiplier = 0.0f,
 		.initialized = false,
 		.update = NULL,

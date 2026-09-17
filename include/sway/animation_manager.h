@@ -12,15 +12,26 @@ enum animation_style {
         ANIMATION_STYLE_CRT,
 };
 
+enum animation_event {
+	    ANIMATION_EVENT_NONE,
+        ANIMATION_EVENT_OPEN,
+        ANIMATION_EVENT_CLOSE,
+        ANIMATION_EVENT_MOVE,
+        ANIMATION_EVENT_RESIZE,
+        ANIMATION_EVENT_WORKSPACE,
+};
+
 // TODO: make animation just a pointer to progress, make multiplier and callback private
 struct animation {
 	struct wl_list link;
 	float progress;
+	enum animation_event event;
 	void *data;
 	float multiplier;
 	bool initialized;
 	void (*update)(void *);
 	void (*complete)(void *);
+	
 };
 
 void animation_manager_init(struct sway_server *server);
