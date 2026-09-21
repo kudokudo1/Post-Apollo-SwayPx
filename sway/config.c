@@ -350,11 +350,12 @@ static void config_defaults(struct sway_config *config) {
 
 	color_to_rgba(config->border_colors.background, 0xFFFFFFFF);
 
-	// SwayFX defaults
-	config->animation_duration_ms = 0.0f;
+    // SwayFX defaults
+    config->animation_duration_ms = 0.0f;
+    config->animation_style = ANIMATION_STYLE_DEFAULT;
 
-     for (int i = 0; i < ANIMATION_EVENT_COUNT; ++i) { 
-    	config->animation_styles[i] = ANIMATION_STYLE_DEFAULT;
+     for (int i = 0; i < ANIMATION_EVENT_COUNT; ++i) {
+	   config->animation_styles[i] = ANIMATION_STYLE_INHERIT;
     }
 
 	config->corner_radius = 0;

@@ -8,6 +8,7 @@ struct sway_container;
 struct sway_server;
 
 enum animation_style {
+	    ANIMATION_STYLE_INHERIT,
         ANIMATION_STYLE_DEFAULT,
         ANIMATION_STYLE_CRT,
 };

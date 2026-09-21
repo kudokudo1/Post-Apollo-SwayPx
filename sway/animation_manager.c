@@ -134,10 +134,20 @@ float get_animated_value(float from, float to, const struct animation *animation
 }
 
 enum animation_style get_animation_style(const struct animation *animation) {
-if (!animation || animation->event <= ANIMATION_EVENT_NONE ||
-         animation->event >= ANIMATION_EVENT_COUNT) {
-        return ANIMATION_STYLE_DEFAULT;  
-    }
+	if (!config) {
+		return ANIMATION_STYLE_DEFAULT;
+	}
 
-  return config->animation_styles[animation->event];
+	if (!animation || animation->event <= ANIMATION_EVENT_NONE ||
+			animation->event >= ANIMATION_EVENT_COUNT) {
+		return config->animation_style;
+	}
+
+	enum animation_style style = config->animation_styles[animation->event];
+
+	if (style == ANIMATION_STYLE_INHERIT) {
+		return config->animation_style;
+	}
+
+	return style;
 }
