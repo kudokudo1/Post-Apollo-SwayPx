@@ -758,34 +758,51 @@ static void arrange_container(struct sway_container *con,
 	con->animation_state.to_height = height;
 	con->animation_state.to_alpha = 1.0f;
 
-	// open animation — pop-in: grow from center while fading in
+	// Select the starting state for this animation
 	if (con->animation_state.from_x == -1) {
-		con->animation_state.from_x = x + width * (1.0f - POPIN_FACTOR) / 2.0f;
-		con->animation_state.from_y = y + height * (1.0f - POPIN_FACTOR) / 2.0f;
-		con->animation_state.from_width = width * POPIN_FACTOR;
-		con->animation_state.from_height = height * POPIN_FACTOR;
-		con->animation_state.from_alpha = 0.0f;
-
 		con->animation_state.animation.event = ANIMATION_EVENT_OPEN;
 
-		add_animation(&con->animation_state.animation, anim_update_callback, NULL);
+		if (get_animation_style(&con->animation_state.animation) == ANIMATION_STYLE_CRT) {
+			// CRT open: start as a thin horizontal line
+			con->animation_state.from_x = x;
+			con->animation_state.from_y = y + (height - 1) / 2;
+			con->animation_state.from_width = width;
+			con->animation_state.from_height = 1;
+			con->animation_state.from_alpha = 1.0f;
+		} else {
+			// Default SwayFX pop-in
+			con->animation_state.from_x =
+				x + width * (1.0f - POPIN_FACTOR) / 2.0f;
+			con->animation_state.from_y =
+				y + height * (1.0f - POPIN_FACTOR) / 2.0f;
+			con->animation_state.from_width = width * POPIN_FACTOR;
+			con->animation_state.from_height = height * POPIN_FACTOR;
+			con->animation_state.from_alpha = 0.0f;
+		}
 	} else {
-		// move animation
+		// Move or resize animation
 		snap_animation_position(con);
 
 		if (con->animation_state.current_width != con->animation_state.to_width ||
-		               con->animation_state.current_height != con->animation_state.to_height) {
-		           con->animation_state.animation.event = ANIMATION_EVENT_RESIZE;
-        } else { 
-                   con->animation_state.animation.event = ANIMATION_EVENT_MOVE;
-        }
+				con->animation_state.current_height != con->animation_state.to_height) {
+			con->animation_state.animation.event = ANIMATION_EVENT_RESIZE;
+		} else {
+			con->animation_state.animation.event = ANIMATION_EVENT_MOVE;
+		}
 
-		con->animation_state.from_width = con->animation_state.current_width;
-		con->animation_state.from_height = con->animation_state.current_height;
-		con->animation_state.from_alpha = get_animated_value(con->animation_state.from_alpha,
-			con->animation_state.to_alpha, &con->animation_state.animation);
-		add_animation(&con->animation_state.animation, anim_update_callback, NULL);
+		con->animation_state.from_width =
+			con->animation_state.current_width;
+		con->animation_state.from_height =
+			con->animation_state.current_height;
+		con->animation_state.from_alpha =
+			get_animated_value(
+				con->animation_state.from_alpha,
+				con->animation_state.to_alpha,
+				&con->animation_state.animation);
 	}
+
+	add_animation(&con->animation_state.animation,
+		anim_update_callback, NULL);
 
 	// arrange at starting state to "win" position race between animation start and the reparent
 	_arrange_container(con, con->animation_state.from_width,
@@ -1360,3 +1377,4 @@ void transaction_commit_dirty(void) {
 void transaction_commit_dirty_client(void) {
 	_transaction_commit_dirty(false);
 }
+
