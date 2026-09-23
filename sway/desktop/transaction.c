@@ -74,14 +74,52 @@ static void anim_update_callback(void *data) {
 		return;
 	}
 
-	int width = get_animated_value(con->animation_state.from_width,
-		con->animation_state.to_width, &con->animation_state.animation);
-	int height = get_animated_value(con->animation_state.from_height,
-		con->animation_state.to_height, &con->animation_state.animation);
-	int x = get_animated_value(con->animation_state.from_x,
-		con->animation_state.to_x, &con->animation_state.animation);
-	int y = get_animated_value(con->animation_state.from_y,
-		con->animation_state.to_y, &con->animation_state.animation);
+	struct animation *animation = &con->animation_state.animation;
+
+	int width;
+	int height;
+	int x;
+	int y;
+
+	if (animation->event == ANIMATION_EVENT_CLOSE &&
+			get_animation_style(animation) == ANIMATION_STYLE_CRT) {
+		// CRT close uses the first 80% of the animation to collapse the
+		// picture into a horizontal line, then holds only the container
+		// line for the final 20%. The actual app surface is switched off
+		// before the hold so terminal contents are never crushed into it.
+		const float collapse_end = 0.80f;
+		float progress = animation->progress / collapse_end;
+
+		if (progress > 1.0f) {
+			progress = 1.0f;
+		}
+
+		// Local ease-out cubic for the collapse stage.
+		float inverse = 1.0f - progress;
+		float eased = 1.0f - inverse * inverse * inverse;
+
+		width = con->animation_state.from_width +
+			(con->animation_state.to_width - con->animation_state.from_width) * eased;
+		height = con->animation_state.from_height +
+			(con->animation_state.to_height - con->animation_state.from_height) * eased;
+		x = con->animation_state.from_x +
+			(con->animation_state.to_x - con->animation_state.from_x) * eased;
+		y = con->animation_state.from_y +
+			(con->animation_state.to_y - con->animation_state.from_y) * eased;
+
+		if (animation->progress >= collapse_end && con->view) {
+			wlr_scene_node_set_enabled(&con->view->scene_tree->node, false);
+		}
+	} else {
+		width = get_animated_value(con->animation_state.from_width,
+			con->animation_state.to_width, animation);
+		height = get_animated_value(con->animation_state.from_height,
+			con->animation_state.to_height, animation);
+		x = get_animated_value(con->animation_state.from_x,
+			con->animation_state.to_x, animation);
+		y = get_animated_value(con->animation_state.from_y,
+			con->animation_state.to_y, animation);
+	}
 
 	bool title_bar = con_has_title_bar(con);
 	_arrange_container(con, width, height, x, y, title_bar, 0);
@@ -167,27 +205,48 @@ static void transaction_destroy(struct sway_transaction *transaction) {
 				workspace_destroy(node->sway_workspace);
 				break;
 			case N_CONTAINER:
-				// close animation — pop-out: shrink and fade out centered
 				if (node->sway_container->view) {
 					struct sway_container *con = node->sway_container;
 					snap_animation_position(con);
-					con->animation_state.from_alpha = get_animated_value(con->animation_state.from_alpha,
-						con->animation_state.to_alpha, &con->animation_state.animation);
-					con->animation_state.to_alpha = 0.0f;
-					con->animation_state.from_width = get_animated_value(con->animation_state.from_width,
-						con->animation_state.to_width, &con->animation_state.animation);
-					con->animation_state.from_height = get_animated_value(con->animation_state.from_height,
-						con->animation_state.to_height, &con->animation_state.animation);
-					con->animation_state.to_x = con->animation_state.from_x +
-						(con->animation_state.from_width * (1.0f - POPIN_FACTOR)) / 2.0f;
-					con->animation_state.to_y = con->animation_state.from_y +
-						(con->animation_state.from_height * (1.0f - POPIN_FACTOR)) / 2.0f;
-					con->animation_state.to_width = con->animation_state.from_width * POPIN_FACTOR;
-					con->animation_state.to_height = con->animation_state.from_height * POPIN_FACTOR;
 
-                    con->animation_state.animation.event = ANIMATION_EVENT_CLOSE;
+					con->animation_state.from_alpha = get_animated_value(
+						con->animation_state.from_alpha,
+						con->animation_state.to_alpha,
+						&con->animation_state.animation);
+					con->animation_state.from_width = get_animated_value(
+						con->animation_state.from_width,
+						con->animation_state.to_width,
+						&con->animation_state.animation);
+					con->animation_state.from_height = get_animated_value(
+						con->animation_state.from_height,
+						con->animation_state.to_height,
+						&con->animation_state.animation);
 
-					add_animation(&con->animation_state.animation, anim_update_callback, close_anim_complete_callback);
+					con->animation_state.animation.event = ANIMATION_EVENT_CLOSE;
+
+					if (get_animation_style(&con->animation_state.animation) == ANIMATION_STYLE_CRT) {
+						// CRT close: collapse vertically into a centered horizontal line
+						con->animation_state.to_x = con->animation_state.from_x;
+						con->animation_state.to_y = con->animation_state.from_y +
+							(con->animation_state.from_height - 3) / 2;
+						con->animation_state.to_width = con->animation_state.from_width;
+						con->animation_state.to_height = 3;
+						con->animation_state.to_alpha = 1.0f;
+					} else {
+						// Default SwayFX close: shrink and fade out centered
+						con->animation_state.to_alpha = 0.0f;
+						con->animation_state.to_x = con->animation_state.from_x +
+							(con->animation_state.from_width * (1.0f - POPIN_FACTOR)) / 2.0f;
+						con->animation_state.to_y = con->animation_state.from_y +
+							(con->animation_state.from_height * (1.0f - POPIN_FACTOR)) / 2.0f;
+						con->animation_state.to_width =
+							con->animation_state.from_width * POPIN_FACTOR;
+						con->animation_state.to_height =
+							con->animation_state.from_height * POPIN_FACTOR;
+					}
+
+					add_animation(&con->animation_state.animation,
+						anim_update_callback, close_anim_complete_callback);
 				} else {
 					container_destroy(node->sway_container);
 				}
