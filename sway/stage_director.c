@@ -29,7 +29,7 @@ static void shadow_open(void) {
 	if (shadow_log) {
 		return;
 	}
-	shadow_log = fopen(STAGE_DIRECTOR_LOG_PATH, "a");
+	shadow_log = fopen(STAGE_DIRECTOR_LOG_PATH, "w");
 	if (!shadow_log) {
 		sway_log(SWAY_ERROR,
 			"[stage-director][SD0] unable to open shadow log %s",
