@@ -28,6 +28,7 @@
 #include "sway/output.h"
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director.h"
 #include "sway/server.h"
 #include "sway/sway_text_node.h"
 #include "sway/tree/arrange.h"
@@ -998,9 +999,12 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	} else if ((class = view_get_class(view)) != NULL) {
 		wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel, class);
 	}
+
+	stage_director_view_mapped(view);
 }
 
 void view_unmap(struct sway_view *view) {
+	stage_director_view_unmapped(view);
 	wl_signal_emit_mutable(&view->events.unmap, view);
 
 	view->executed_criteria->length = 0;
@@ -1134,6 +1138,8 @@ void view_update_app_id(struct sway_view *view) {
 	if (view->ext_foreign_toplevel) {
 		update_ext_foreign_toplevel(view);
 	}
+
+	stage_director_view_identity_changed(view);
 }
 
 void view_update_title(struct sway_view *view, bool force) {
@@ -1186,6 +1192,8 @@ void view_update_title(struct sway_view *view, bool force) {
 	if (view->ext_foreign_toplevel) {
 		update_ext_foreign_toplevel(view);
 	}
+
+	stage_director_view_identity_changed(view);
 }
 
 bool view_is_visible(struct sway_view *view) {

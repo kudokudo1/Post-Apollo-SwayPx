@@ -8,6 +8,7 @@
 #include "sway/animation_manager.h"
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director.h"
 #include "sway/desktop/idle_inhibit_v1.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
@@ -428,6 +429,8 @@ static void apply_container_state(struct sway_container *container,
 		if (view->surface) {
 			view_center_and_clip_surface(view);
 		}
+
+		stage_director_observe_container(container, "transaction");
 	}
 }
 

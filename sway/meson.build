@@ -11,6 +11,8 @@ sway_sources = files(
 	'main.c',
 	'realtime.c',
 	'scene_descriptor.c',
+	'stage_director.c',
+	'stage_director_profile_post_apollo_tv.c',
 	'server.c',
 	'sway_text_node.c',
 	'swaynag.c',
