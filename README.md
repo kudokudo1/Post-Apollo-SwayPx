@@ -1,3 +1,29 @@
+✦︎✦︎✦︎ Meta Apollo Logos //
+
+# ⊹⚙ POST-APOLLO // ANIMATE SWAYFX
+
+![](BUILD/assets/design/chassis/system-rail.svg)
+
+> **STATE //** active \~\~ **VIEW //** compositor / runtime infrastructure
+
+> **Animate SwayFX is the compositor-side runtime foundation being absorbed into the Meta Apollo / Post-Apollo system.**
+
+### 🧭 MAP // REPOSITORY
+
+![](BUILD/assets/design/chassis/nav-rail.svg)
+
+// [🧭 ATLAS](./ATLAS/) \~\~ // [✮˙๋࣭⭑ MODEL](./MODEL/) \~\~ // [🖨 BUILD](./BUILD/) \~\~ // [⚒ DEV](./DEV/) \~\~ // [🖳 OPERATE](./OPERATE/) \~\~ // [⊹ ࣪ℼ˖ EVIDENCE](./EVIDENCE/) \~\~ // [࣪⋅˚🕮‧₊˚ ARCHIVE](./ARCHIVE/)
+
+---
+
+### ★⋆˙ CORE // RUNTIME LAYOUT
+
+This repository is runtime infrastructure. Its SwayFX source, Meson build files, protocols, client tools, packaging files, and upstream-oriented layout stay where the compositor expects them.
+
+> **Meta Apollo supplies semantic organization without erasing fork provenance or breaking upstream-compatible structure.**
+
+---
+
 <p align="center">
     <img src="assets/swayfx_logo.svg" width="256" alt="swayfx logo">
 </p>
@@ -160,4 +186,3 @@ We would also like to thank the talented artists in our community for contibutin
 + spooky_skeleton for the swayfx logo, and [Basil](https://basil.cafe) for making some fine adjustments to it
 
 Lastly, we would like to thank you, the community, for enjoying and using window manager that we have spent so much time maintaining.
-
