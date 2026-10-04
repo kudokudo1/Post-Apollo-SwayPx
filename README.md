@@ -4,9 +4,15 @@
 
 ![](BUILD/assets/design/chassis/system-rail.svg)
 
+![SwayFX // SwayPX](./BUILD/assets/design/swaypx-banner.svg)
+
 > **STATE //** active \~\~ **VIEW //** compositor / runtime infrastructure
 
-> **Animate SwayFX is the compositor-side runtime foundation being absorbed into the Meta Apollo / Post-Apollo system.**
+The spatial compositor layer of the Post-Apollo Family — enhancing the relationship between operator, input, windows, motion, and screen space, turning independent application surfaces into a custom, coordinated, animated environment where windows move, snap, arrange, and behave as parts of a larger physical workspace.
+
+**PUBLIC FAMILY //** [META APOLLO LOGOS](https://github.com/kudokudo1/Meta-Apollo-Logos) · [DEV EXP](https://github.com/kudokudo1/The-Post-Apollo-Dev-Exp) · [FOREST](https://github.com/kudokudo1/The-Post-Apollo-Forest-Project) · [LAN MOUSE // 2-PLAYER MODE](https://github.com/kudokudo1/Lan-Mouse-2-Player-Mode)
+
+> **FORK LINEAGE //** SwayPX preserves the inherited SwayFX codebase and upstream-facing structure while extending it as part of Post-Apollo.
 
 ### 🧭 MAP // REPOSITORY
 
