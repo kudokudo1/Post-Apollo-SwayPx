@@ -1,6 +1,6 @@
 ✦︎✦︎✦︎ Meta Apollo Logos //
 
-# ⊹⚙ POST-APOLLO // ANIMATE SWAYFX
+# ⊹⚙ SWAYFX // SWAYPX
 
 ![](BUILD/assets/design/chassis/system-rail.svg)
 
