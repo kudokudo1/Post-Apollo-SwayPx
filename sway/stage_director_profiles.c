@@ -6,6 +6,10 @@ static const struct stage_director_profile profiles[] = {
 		.id = "post-apollo-tv",
 		.classify = stage_director_profile_post_apollo_tv_classify,
 	},
+	{
+		.id = "weather-station",
+		.classify = stage_director_profile_weather_station_classify,
+	},
 };
 
 bool stage_director_profile_classify(
