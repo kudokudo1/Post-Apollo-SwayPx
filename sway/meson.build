@@ -14,6 +14,7 @@ sway_sources = files(
 	'stage_director.c',
 	'stage_director_profiles.c',
 	'stage_director_profile_post_apollo_tv.c',
+	'stage_director_profile_weather_station.c',
 	'server.c',
 	'sway_text_node.c',
 	'swaynag.c',
