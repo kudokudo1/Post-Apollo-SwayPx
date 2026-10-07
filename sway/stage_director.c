@@ -54,7 +54,7 @@ static void announce_once(void) {
 	announced = true;
 	shadow_write(
 		"[stage-director][SD0] shadow online: generic scene registry; "
-		"observe/classify/log only; NO geometry, focus, layout, or lifecycle authority");
+		"observe/classify/model/log only; NO geometry, focus, layout, or lifecycle authority");
 }
 
 static struct stage_director_actor *find_actor(struct sway_view *view) {
@@ -161,6 +161,31 @@ static void classify(struct sway_view *view, const char *reason) {
 			view_get_app_id(view) ? view_get_app_id(view) : "-",
 			view_get_title(view) ? view_get_title(view) : "-");
 		shadow_write(line);
+
+		if (identity.scene_geometry.declared || identity.transform.declared) {
+			char model_line[768];
+			snprintf(model_line, sizeof(model_line),
+				"[stage-director][SD0] model profile=%s scene=%s role=%s "
+				"scene_size=%dx%d transform_declared=%s "
+				"transform=x(%.3f*W%+d) y(%.3f*H%+d) "
+				"w(%.3f*W%+d) h(%.3f*H%+d) authority=NONE",
+				identity.profile ? identity.profile : "-",
+				identity.scene,
+				identity.role,
+				identity.scene_geometry.width,
+				identity.scene_geometry.height,
+				identity.transform.declared ? "yes" : "no",
+				identity.transform.x_rel,
+				identity.transform.x_px,
+				identity.transform.y_rel,
+				identity.transform.y_px,
+				identity.transform.width_rel,
+				identity.transform.width_px,
+				identity.transform.height_rel,
+				identity.transform.height_px);
+			shadow_write(model_line);
+		}
+
 		log_scene_status(identity.scene, identity.expected_scene_actors);
 	}
 }
