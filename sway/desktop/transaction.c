@@ -137,7 +137,7 @@ static void anim_update_callback(void *data) {
 	bool title_bar = con_has_title_bar(con);
 	_arrange_container(con, width, height, x, y, title_bar, 0);
 	// refresh decorations for parent-managed title bars (tabbed/stacked)
-	if (!title_bar) {
+	if (!title_bar && !con->node.destroying) {
 		container_update(con);
 	}
 }
@@ -518,6 +518,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int title_offset = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			bool activated = child == active;
 			int next_title_offset = round(w * i + w);
 
@@ -551,6 +554,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int y = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			bool activated = child == active;
 
 			arrange_title_bar(child, 0, y - title_height, width, title_bar_height);
@@ -573,6 +579,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int off = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			int cheight = child->current.height;
 
 			wlr_scene_node_set_enabled(&child->border.tree->node, true);
@@ -591,6 +600,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int off = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			int cwidth = child->current.width;
 
 			wlr_scene_node_set_enabled(&child->border.tree->node, true);
