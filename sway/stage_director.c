@@ -119,7 +119,14 @@ static void log_scene_status(const char *scene, int expected) {
 static void classify(struct sway_view *view, const char *reason) {
 	announce_once();
 
-	if (!view || !view->container) {
+	/*
+	 * Identity queries are only safe while the view is mapped and its
+	 * container is live. Transaction application also runs for containers
+	 * that are being torn down; asking profile classifiers to inspect those
+	 * views can reach backend state after unmap.
+	 */
+	if (!view || !view->container || !view->surface ||
+			view->container->node.destroying) {
 		return;
 	}
 
@@ -231,7 +238,8 @@ void stage_director_view_unmapped(struct sway_view *view) {
 
 void stage_director_observe_container(struct sway_container *container,
 		const char *reason) {
-	if (!container || !container->view) {
+	if (!container || !container->view || container->node.destroying ||
+			!container->view->surface) {
 		return;
 	}
 
