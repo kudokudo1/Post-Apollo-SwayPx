@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include "log.h"
