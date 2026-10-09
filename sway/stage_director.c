@@ -4,10 +4,13 @@
 #include "log.h"
 #include "sway/stage_director.h"
 #include "sway/stage_director_profile.h"
+#include "sway/layers.h"
+#include "sway/output.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
 
 #define STAGE_DIRECTOR_MAX_ACTORS 64
+#define STAGE_DIRECTOR_MAX_LAYERS 128
 #define STAGE_DIRECTOR_LOG_PATH "/tmp/swayfx-stage-director-shadow.log"
 
 struct stage_director_actor {
@@ -21,7 +24,24 @@ struct stage_director_actor {
 	int last_height;
 };
 
+struct stage_director_layer_observation {
+	struct sway_layer_surface *surface;
+	bool occupied;
+	bool last_state_valid;
+	int last_x;
+	int last_y;
+	int last_width;
+	int last_height;
+	int last_layer;
+	uint32_t last_anchor;
+	int last_exclusive_zone;
+	int last_keyboard_interactive;
+	bool last_mapped;
+};
+
 static struct stage_director_actor actors[STAGE_DIRECTOR_MAX_ACTORS];
+static struct stage_director_layer_observation
+	layers[STAGE_DIRECTOR_MAX_LAYERS];
 static FILE *shadow_log;
 static bool announced;
 
@@ -55,6 +75,134 @@ static void announce_once(void) {
 	shadow_write(
 		"[stage-director][SD0] shadow online: generic scene registry; "
 		"observe/classify/model/log only; NO geometry, focus, layout, or lifecycle authority");
+}
+
+static const char *layer_name(enum zwlr_layer_shell_v1_layer layer) {
+	switch (layer) {
+	case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND:
+		return "background";
+	case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:
+		return "bottom";
+	case ZWLR_LAYER_SHELL_V1_LAYER_TOP:
+		return "top";
+	case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:
+		return "overlay";
+	}
+	return "unknown";
+}
+
+static struct stage_director_layer_observation *find_layer(
+		struct sway_layer_surface *surface) {
+	for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+		if (layers[i].occupied && layers[i].surface == surface) {
+			return &layers[i];
+		}
+	}
+	return NULL;
+}
+
+static struct stage_director_layer_observation *alloc_layer(
+		struct sway_layer_surface *surface) {
+	struct stage_director_layer_observation *observation = find_layer(surface);
+	if (observation) {
+		return observation;
+	}
+	for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+		if (!layers[i].occupied) {
+			layers[i] = (struct stage_director_layer_observation) {
+				.surface = surface,
+				.occupied = true,
+			};
+			return &layers[i];
+		}
+	}
+	shadow_write("[stage-director][SD0] layer registry full; observation dropped");
+	return NULL;
+}
+
+static void observe_layer(struct sway_layer_surface *surface,
+		const char *reason, bool force) {
+	announce_once();
+
+	if (!surface || !surface->layer_surface || !surface->scene ||
+			!surface->layer_surface->surface) {
+		return;
+	}
+
+	struct stage_director_layer_observation *observation = alloc_layer(surface);
+	if (!observation) {
+		return;
+	}
+
+	struct wlr_layer_surface_v1 *layer_surface = surface->layer_surface;
+	const bool initialized = layer_surface->initialized;
+	const enum zwlr_layer_shell_v1_layer layer = initialized
+		? layer_surface->current.layer
+		: layer_surface->pending.layer;
+	const uint32_t anchor = initialized
+		? layer_surface->current.anchor
+		: layer_surface->pending.anchor;
+	const int exclusive_zone = initialized
+		? layer_surface->current.exclusive_zone
+		: layer_surface->pending.exclusive_zone;
+	const int keyboard_interactive = initialized
+		? layer_surface->current.keyboard_interactive
+		: layer_surface->pending.keyboard_interactive;
+	const bool mapped = layer_surface->surface->mapped;
+
+	int x = 0;
+	int y = 0;
+	wlr_scene_node_coords(&surface->scene->tree->node, &x, &y);
+	const int width = layer_surface->surface->current.width;
+	const int height = layer_surface->surface->current.height;
+
+	const bool changed = !observation->last_state_valid ||
+		observation->last_x != x ||
+		observation->last_y != y ||
+		observation->last_width != width ||
+		observation->last_height != height ||
+		observation->last_layer != (int)layer ||
+		observation->last_anchor != anchor ||
+		observation->last_exclusive_zone != exclusive_zone ||
+		observation->last_keyboard_interactive != keyboard_interactive ||
+		observation->last_mapped != mapped;
+
+	if (!force && !changed) {
+		return;
+	}
+
+	observation->last_state_valid = true;
+	observation->last_x = x;
+	observation->last_y = y;
+	observation->last_width = width;
+	observation->last_height = height;
+	observation->last_layer = (int)layer;
+	observation->last_anchor = anchor;
+	observation->last_exclusive_zone = exclusive_zone;
+	observation->last_keyboard_interactive = keyboard_interactive;
+	observation->last_mapped = mapped;
+
+	const char *output_name = "-";
+	if (surface->output && surface->output->wlr_output &&
+			surface->output->wlr_output->name) {
+		output_name = surface->output->wlr_output->name;
+	}
+
+	char line[768];
+	snprintf(line, sizeof(line),
+		"[stage-director][SD0] layer reason=%s namespace=%s layer=%s "
+		"output=%s actual=%dx%d@%d,%d mapped=%s anchor=%" PRIu32 " "
+		"exclusive=%d keyboard=%d authority=NONE",
+		reason ? reason : "unknown",
+		layer_surface->namespace ? layer_surface->namespace : "-",
+		layer_name(layer),
+		output_name,
+		width, height, x, y,
+		mapped ? "yes" : "no",
+		anchor,
+		exclusive_zone,
+		keyboard_interactive);
+	shadow_write(line);
 }
 
 static struct stage_director_actor *find_actor(struct sway_view *view) {
@@ -280,4 +428,32 @@ void stage_director_observe_container(struct sway_container *container,
 		width, height, x, y,
 		container_is_floating(container) ? "yes" : "no");
 	shadow_write(line);
+}
+
+void stage_director_layer_mapped(struct sway_layer_surface *surface) {
+	observe_layer(surface, "map", true);
+}
+
+void stage_director_layer_committed(struct sway_layer_surface *surface) {
+	observe_layer(surface, "commit", false);
+}
+
+void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
+	struct stage_director_layer_observation *observation = find_layer(surface);
+	if (!observation) {
+		return;
+	}
+
+	observe_layer(surface, "unmap", true);
+	memset(observation, 0, sizeof(*observation));
+}
+
+void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
+	struct stage_director_layer_observation *observation = find_layer(surface);
+	if (!observation) {
+		return;
+	}
+
+	observe_layer(surface, "destroy", true);
+	memset(observation, 0, sizeof(*observation));
 }
