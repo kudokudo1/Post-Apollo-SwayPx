@@ -74,7 +74,7 @@ static void announce_once(void) {
 	}
 	announced = true;
 	shadow_write(
-		"[stage-director][SD0] shadow online: generic scene registry; "
+		"[stage-director][SD0] shadow online: generic scene registry + layer-shell observer; "
 		"observe/classify/model/log only; NO geometry, focus, layout, or lifecycle authority");
 }
 
@@ -455,6 +455,10 @@ void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 		return;
 	}
 
-	observe_layer(surface, "destroy", true);
+	/*
+	 * Destruction is cleanup-only. Do not inspect the scene node from its
+	 * destroy callback; map/unmap/commit already captured the observable
+	 * lifecycle and geometry we need.
+	 */
 	memset(observation, 0, sizeof(*observation));
 }
