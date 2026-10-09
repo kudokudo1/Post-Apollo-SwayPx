@@ -2,6 +2,7 @@
 #define _SWAY_STAGE_DIRECTOR_H
 
 struct sway_container;
+struct sway_layer_surface;
 struct sway_view;
 
 /*
@@ -18,5 +19,15 @@ void stage_director_view_unmapped(struct sway_view *view);
 void stage_director_view_identity_changed(struct sway_view *view);
 void stage_director_observe_container(struct sway_container *container,
 		const char *reason);
+
+/*
+ * Layer-shell observation is deliberately separate from sway_view actors.
+ * SD0 records namespace/layer/output/actual geometry only and never mutates
+ * layer-shell state.
+ */
+void stage_director_layer_mapped(struct sway_layer_surface *surface);
+void stage_director_layer_committed(struct sway_layer_surface *surface);
+void stage_director_layer_unmapped(struct sway_layer_surface *surface);
+void stage_director_layer_destroyed(struct sway_layer_surface *surface);
 
 #endif
