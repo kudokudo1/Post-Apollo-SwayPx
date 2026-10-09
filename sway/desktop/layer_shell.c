@@ -10,6 +10,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include "log.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
@@ -290,6 +291,8 @@ static void handle_node_destroy(struct wl_listener *listener, void *data) {
 	struct sway_layer_surface *layer =
 		wl_container_of(listener, layer, node_destroy);
 
+	stage_director_layer_destroyed(layer);
+
 	// destroy the scene descriptor straight away if it exists, otherwise
 	// we will try to reflow still considering the destroyed node.
 	scene_descriptor_destroy(&layer->tree->node, SWAY_SCENE_DESC_LAYER_SHELL);
@@ -362,6 +365,8 @@ static void handle_surface_commit(struct wl_listener *listener, void *data) {
 		arrange_layers(surface->output);
 		transaction_commit_dirty();
 	}
+
+	stage_director_layer_committed(surface);
 }
 
 static void handle_map(struct wl_listener *listener, void *data) {
@@ -390,12 +395,16 @@ static void handle_map(struct wl_listener *listener, void *data) {
 		arrange_layers(surface->output);
 	}
 
+	stage_director_layer_mapped(surface);
 	cursor_rebase_all();
 }
 
 static void handle_unmap(struct wl_listener *listener, void *data) {
 	struct sway_layer_surface *surface = wl_container_of(
 			listener, surface, unmap);
+
+	stage_director_layer_unmapped(surface);
+
 	struct sway_seat *seat;
 	wl_list_for_each(seat, &server.input->seats, link) {
 		if (seat->focused_layer == surface->layer_surface) {
