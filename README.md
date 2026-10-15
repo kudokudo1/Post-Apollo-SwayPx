@@ -14,6 +14,8 @@ The spatial compositor layer of the Post-Apollo Family — enhancing the relatio
 
 > **FORK LINEAGE //** SwayPX preserves the inherited SwayFX codebase and upstream-facing structure while extending it as part of Post-Apollo.
 
+**RULES //** [Syntagma // shared operator and AI working rules](https://github.com/kudokudo1/Meta-Apollo-Logos-How-I-Think/blob/main/AGENTS.md) · [Meta Apollo design grammar](https://github.com/kudokudo1/Meta-Apollo-Logos/blob/main/MODEL/Repo-Design-Language.md) · [Local technical documentation](./MODEL/README.md)
+
 ### 🧭 MAP // REPOSITORY
 
 ![](BUILD/assets/design/chassis/nav-rail.svg)
