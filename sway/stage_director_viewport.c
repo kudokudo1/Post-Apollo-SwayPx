@@ -84,6 +84,55 @@ struct stage_director_viewport_plan stage_director_viewport_plan(
 	return plan;
 }
 
+struct stage_director_viewport_clip_plan stage_director_viewport_prepare_clip(
+		const struct stage_director_viewport_request *request,
+		const struct stage_director_viewport_authority *authority,
+		int root_surface_geometry_x,
+		int root_surface_geometry_y) {
+	struct stage_director_viewport_clip_plan result = {
+		.geometry_result = SD_VIEWPORT_DENY_UNVERIFIED_ACTOR,
+	};
+	const struct stage_director_viewport_plan geometry =
+		stage_director_viewport_plan(request);
+	result.geometry_result = geometry.result;
+	if (geometry.result != SD_VIEWPORT_GEOMETRY_ONLY || !geometry.geometry_valid) {
+		return result;
+	}
+	if (!authority || !authority->operator_enabled ||
+			!authority->host_session_verified ||
+			!authority->actor_process_verified ||
+			!authority->input_hit_test_guard_installed ||
+			!authority->popup_guard_installed ||
+			!authority->teardown_guard_installed) {
+		return result;
+	}
+	/*
+	 * XDG window geometry can differ from the root wl_surface origin.
+	 * Convert actor-local viewport coordinates into wl_surface-local box.
+	 * Check 64-bit sums before narrowing back to compositor int.
+	 */
+	const int64_t crop_x = (int64_t)geometry.actor_local_crop.x +
+		root_surface_geometry_x;
+	const int64_t crop_y = (int64_t)geometry.actor_local_crop.y +
+		root_surface_geometry_y;
+	if (crop_x < INT32_MIN || crop_x > INT32_MAX ||
+			crop_y < INT32_MIN || crop_y > INT32_MAX) {
+		return result;
+	}
+	struct stage_director_rect crop = {
+		.x = (int)crop_x,
+		.y = (int)crop_y,
+		.width = geometry.actor_local_crop.width,
+		.height = geometry.actor_local_crop.height,
+	};
+	if (!stage_director_rect_valid(crop)) {
+		return result;
+	}
+	result.root_surface_clip = crop;
+	result.allowed = true;
+	return result;
+}
+
 const char *stage_director_viewport_result_name(
 		enum stage_director_viewport_result result) {
 	switch (result) {
