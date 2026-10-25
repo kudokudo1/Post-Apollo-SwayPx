@@ -62,4 +62,9 @@ bool stage_director_profile_weather_station_classify(
 		struct sway_view *view,
 		struct stage_director_identity *identity);
 
+/* Exact external browser actor identity. Classified but not activated. */
+bool stage_director_profile_weather_news_classify(
+		struct sway_view *view,
+		struct stage_director_identity *identity);
+
 #endif
