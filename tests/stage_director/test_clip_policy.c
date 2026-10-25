@@ -70,8 +70,9 @@ static void test_root_surface_crop_and_overflow(void) {
 			INT_MAX, 0).allowed);
 	assert(!stage_director_viewport_prepare_clip(&r, &a,
 			0, INT_MAX).allowed);
-	assert(!stage_director_viewport_prepare_clip(&r, &a,
-			INT_MIN, 0).allowed);
+	clip = stage_director_viewport_prepare_clip(&r, &a, INT_MIN, 0);
+	assert(clip.allowed);
+	assert(clip.root_surface_clip.x == INT_MIN + 25);
 	r.viewport.width = 0;
 	clip = stage_director_viewport_prepare_clip(&r, &a, 14, -3);
 	assert(!clip.allowed);
