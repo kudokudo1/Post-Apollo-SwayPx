@@ -33,5 +33,18 @@ jobs:
             tests/stage_director/test_viewport.c \
             -o "$test_bin"
           "$test_bin"
+      - name: Compile and execute guarded compositor clip policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            tests/stage_director/test_clip_policy.c \
+            -o "$test_bin"
+          "$test_bin"
       - name: Validate exact actor classification and shadow-only boundary
         run: python3 tests/stage_director/test_observer_boundary.py
+      - name: Verify dormant compositor clip adapter authority
+        run: python3 tests/stage_director/test_clip_adapter_boundary.py
