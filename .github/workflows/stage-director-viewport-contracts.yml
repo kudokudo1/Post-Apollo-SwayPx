@@ -1,0 +1,37 @@
+name: Stage Director viewport safety contracts
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/scene-registry-v1
+    paths:
+      - 'include/sway/stage_director*.h'
+      - 'sway/stage_director*.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/**'
+      - '.github/workflows/stage-director-viewport-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  viewport-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and execute standalone viewport policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            tests/stage_director/test_viewport.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Validate exact actor classification and shadow-only boundary
+        run: python3 tests/stage_director/test_observer_boundary.py
