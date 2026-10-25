@@ -13,6 +13,7 @@ sway_sources = files(
 	'scene_descriptor.c',
 	'stage_director.c',
 	'stage_director_viewport.c',
+	'stage_director_viewport_clip.c',
 	'stage_director_profiles.c',
 	'stage_director_profile_post_apollo_tv.c',
 	'stage_director_profile_weather_station.c',
