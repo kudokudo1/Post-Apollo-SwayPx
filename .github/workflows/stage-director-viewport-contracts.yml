@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - stage-director/scene-registry-v1
+      - stage-director/weather-viewport-v1-preflight-20261024
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
