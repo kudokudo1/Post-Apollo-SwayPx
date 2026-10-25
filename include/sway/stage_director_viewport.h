@@ -53,6 +53,41 @@ struct stage_director_viewport_plan {
 	bool can_accept_input;
 };
 
+/*
+ * V1 // clip authorization is a SEPARATE contract from geometry validity.
+ * All gates default to false. Nothing in SD0 currently mints an approved
+ * authority, so this cannot activate through the present production hooks.
+ *
+ * The future compositor session owner must bind a specific mapped layer host
+ * to a specific browser process and install both popup and pointer rejection
+ * BEFORE setting these gates. An app_id by itself is not ownership evidence.
+ */
+struct stage_director_viewport_authority {
+	bool operator_enabled;
+	bool host_session_verified;
+	bool actor_process_verified;
+	bool input_hit_test_guard_installed;
+	bool popup_guard_installed;
+	bool teardown_guard_installed;
+};
+
+struct stage_director_viewport_clip_plan {
+	bool allowed;
+	struct stage_director_rect root_surface_clip;
+	enum stage_director_viewport_result geometry_result;
+};
+
+/*
+ * Calculates the actual crop coordinates relative to the root wlr_surface:
+ * the scene origin is at view->content_tree while xdg surface geometry may
+ * have a nonzero x/y offset relative to that origin.
+ */
+struct stage_director_viewport_clip_plan stage_director_viewport_prepare_clip(
+		const struct stage_director_viewport_request *request,
+		const struct stage_director_viewport_authority *authority,
+		int root_surface_geometry_x,
+		int root_surface_geometry_y);
+
 bool stage_director_rect_valid(struct stage_director_rect rect);
 bool stage_director_rect_contains(struct stage_director_rect outer,
 		struct stage_director_rect inner);
