@@ -9,6 +9,7 @@ on:
       - stage-director/scenefx-software-headless-v0-20261026
       - stage-director/ci-udmabuf-access-v0-20261026
       - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
       - 'include/**'
@@ -19,6 +20,8 @@ on:
       - 'tests/stage_director/ci_native_news_actor_smoke.sh'
       - 'tests/stage_director/assert_native_news_actor.py'
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
+      - 'tests/stage_director/assert_news_render_pixels.py'
+      - 'tests/stage_director/test_ci_render_pixel_boundary.py'
       - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
   workflow_dispatch:
@@ -62,6 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/stage_director/test_ci_scene_probe_boundary.py
+          python3 tests/stage_director/test_ci_render_pixel_boundary.py
           probe="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in f.packages.x86_64-linux.swayfx-unwrapped-git.overrideAttrs (old: { mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-news-scene-probe=true" ]; })' --no-link --print-out-paths --show-trace | tail -n 1)"
           test -x "$probe/bin/sway"
           echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
@@ -83,6 +87,11 @@ jobs:
           compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$foot/bin/foot"
           test -x "$compositor/bin/swaymsg"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."
@@ -91,6 +100,14 @@ jobs:
           set -euo pipefail
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+      - name: Publish isolated pixel screenshot for review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-director-news-ci-pixel-screenshot
+          path: ${{ runner.temp }}/stage-director-render-evidence.png
+          retention-days: 7
+          if-no-files-found: error
       - name: State smoke-test limits
         if: always()
         run: |
