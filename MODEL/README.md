@@ -20,6 +20,8 @@ This room provides the semantic **MODEL** view while preserving the compositor's
 - animation and effects model
 - protocol / IPC relationships
 
+- **P // Weather Station virtual viewport:** [Stage Director / real Kitty compositor clipping, mouse pan/zoom and CRT reuse (strong proposal)](./weather-station-virtual-viewport-proposal-20261024.md). Documentation only; no SD0 authority expansion or implementation approval.
+
 ## 🧭 MAP // WHERE TO GO NEXT
 
 ![](../BUILD/assets/design/chassis/nav-rail.svg)
