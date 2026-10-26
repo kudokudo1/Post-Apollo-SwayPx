@@ -12,6 +12,7 @@ on:
       - stage-director/weather-news-shadow-pairing-v0-20261026
       - stage-director/weather-news-process-evidence-v0-20261026
       - stage-director/weather-news-pidfd-custody-v0-20261026
+      - stage-director/weather-news-launch-plan-v0-20261026
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
@@ -129,3 +130,30 @@ jobs:
           "$test_bin"
       - name: Ensure no browser launch or compositor actuation from plan
         run: python3 tests/stage_director/test_news_launch_boundary.py
+
+      - name: Build production supervisor without any spawn symbol
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -c \
+            sway/stage_director_news_supervisor.c -o "$output"
+          if nm -g "$output" | grep -q stage_director_news_supervisor_start_test_child; then
+            echo "FAIL: production supervisor exposes a test spawn function"
+            exit 1
+          fi
+          echo "Stage Director supervisor production spawn symbol absent: PASS"
+      - name: Run fixed harmless supervised child lifecycle
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -DSD_STAGE_DIRECTOR_TEST_HELPER -Iinclude \
+            sway/stage_director_news_supervisor.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/test_news_supervisor.c \
+            -o "$output"
+          "$output"
+      - name: Verify live NEWS hooks cannot invoke test helper
+        run: python3 tests/stage_director/test_news_supervisor_boundary.py
