@@ -3,6 +3,7 @@
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include "sway/tree/container.h"
 #include "sway/tree/view.h"
 #include "sway/stage_director_ci_scene_probe.h"
 
