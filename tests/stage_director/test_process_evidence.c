@@ -34,7 +34,7 @@ static struct fixture valid(void) {
 	f.items[0] = (struct stage_director_process_identity){100, 2, 1000, 1001};
 	f.items[1] = (struct stage_director_process_identity){101, 100, 1001, 1001};
 	f.items[2] = (struct stage_director_process_identity){102, 101, 1002, 1001};
-	f.items[3] = (struct stage_director_process_identity){200, 2, 998, 1001};
+	f.items[3] = (struct stage_director_process_identity){200, 200, 998, 1001};
 	f.count = 4;
 	return f;
 }
