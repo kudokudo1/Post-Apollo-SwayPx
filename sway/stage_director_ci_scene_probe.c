@@ -12,12 +12,49 @@
  * CI build. It never authenticates operator intent or enables NEWS playback.
  * No browser, host layer, IPC permission or persistent scene mutation.
  */
+/*
+ * Pixel screenshot mode exists ONLY in the opt-in CI compiler variant and
+ * only under GITHUB_ACTIONS=true + exact disposable test identity.
+ * It holds one native clip until the test actor unmaps, when it restores the
+ * standard Sway clipping. No process, seat, popup, or WATCH authority.
+ */
+static struct sway_view *ci_render_actor;
+static struct wlr_box ci_render_clip;
+static struct wlr_box ci_render_geometry;
+
+void stage_director_ci_scene_probe_restore(struct sway_view *view) {
+	if (!view || ci_render_actor != view) return;
+	ci_render_actor = NULL;
+	if (view->surface && view->content_tree && view->container &&
+			!view->container->node.destroying) {
+		view_center_and_clip_surface(view);
+		wlr_log(WLR_INFO, "SD_CI_RENDER_PIXEL clip_restored_on_unmap=1");
+	}
+}
+
 void stage_director_ci_scene_probe(struct sway_view *view) {
 	static bool measured = false;
-	if (measured || !view || !view->surface || !view->content_tree ||
+	if (!view || !view->surface || !view->content_tree ||
 			!view->container || view->container->node.destroying) {
 		return;
 	}
+	const char *pixel = getenv("STAGE_DIRECTOR_CI_RENDER_PROBE");
+	const bool pixel_mode = pixel && strcmp(pixel, "1") == 0;
+	if (ci_render_actor == view) {
+		if (view->geometry.x != ci_render_geometry.x ||
+				view->geometry.y != ci_render_geometry.y ||
+				view->geometry.width != ci_render_geometry.width ||
+				view->geometry.height != ci_render_geometry.height) {
+			stage_director_ci_scene_probe_restore(view);
+			wlr_log(WLR_ERROR, "SD_CI_RENDER_PIXEL stale_geometry=1 result=FAIL");
+		} else {
+			/* Ordinary XDG commits/transactions can reset the clip. */
+			wlr_scene_subsurface_tree_set_clip(
+				&view->content_tree->node, &ci_render_clip);
+		}
+		return;
+	}
+	if (measured) return;
 	const char *ci = getenv("GITHUB_ACTIONS");
 	const char *enabled = getenv("STAGE_DIRECTOR_CI_SCENE_PROBE");
 	const char *title = view_get_title(view);
@@ -60,15 +97,28 @@ void stage_director_ci_scene_probe(struct sway_view *view) {
 	struct wlr_scene_node *after_outside = wlr_scene_node_at(
 		&view->content_tree->node, outside_x, outside_y, &sx, &sy);
 
-	/* Always restore normal Sway view clipping BEFORE logging or returning.
-	 * Input, focus, other windows, and the running browser remain untouched. */
-	view_center_and_clip_surface(view);
 	const bool inside_preserved = after_inside != NULL;
 	const bool outside_rejected = after_outside == NULL;
+	const bool held = pixel_mode && inside_preserved && outside_rejected;
+	if (held) {
+		ci_render_actor = view;
+		ci_render_clip = local_clip;
+		ci_render_geometry = view->geometry;
+	} else {
+		/* Standard hit-test mode always restores in this call. */
+		view_center_and_clip_surface(view);
+	}
 	wlr_log(WLR_INFO,
 		"SD_CI_SCENE_CLIP measured=1 before_inside=1 before_outside=1 "
 		"after_inside=%d after_outside=%d "
-		"normal_clip_restored=1 result=%s",
+		"normal_clip_restored=%d result=%s",
 		inside_preserved ? 1 : 0, after_outside ? 1 : 0,
+		held ? 0 : 1,
 		inside_preserved && outside_rejected ? "PASS" : "FAIL");
+	if (held) {
+		wlr_log(WLR_INFO,
+			"SD_CI_RENDER_PIXEL inside=%d,%d outside=%d,%d "
+			"clip_held=1",
+			(int)inside_x, (int)inside_y, (int)outside_x, (int)outside_y);
+	}
 }
