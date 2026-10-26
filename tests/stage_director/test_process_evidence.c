@@ -88,6 +88,7 @@ static void test_no_spoof_or_reparent(void) {
 		SD_PROCESS_EVIDENCE_UNRELATED,false);
 	f=valid();
 	f.items[1].parent_pid=102; /* cycle: 102 -> 101 -> 102 */
+	f.items[1].start_time_ticks=1002; /* make ancestry age check neutral */
 	assert_no_authority(check(&f,&r,102,1002),
 		SD_PROCESS_EVIDENCE_UNRELATED,false);
 	f=valid();
