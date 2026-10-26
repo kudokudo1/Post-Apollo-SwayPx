@@ -135,7 +135,7 @@ static void test_depth_limit(void) {
 	}
 	/* Reverse link to root but don't allow arbitrarily long ancestry. */
 	f.items[15].parent_pid=100;
-	assert_no_authority(check(&f,&r,101,1001),
+	assert_no_authority(check(&f,&r,101,2015),
 		SD_PROCESS_EVIDENCE_UNRELATED,false);
 }
 
