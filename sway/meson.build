@@ -15,6 +15,8 @@ sway_sources = files(
 	'stage_director_viewport.c',
 	'stage_director_viewport_clip.c',
 	'stage_director_viewer_session.c',
+	'stage_director_weather_host.c',
+	'stage_director_weather_host_adapter.c',
 	'stage_director_profiles.c',
 	'stage_director_profile_post_apollo_tv.c',
 	'stage_director_profile_weather_station.c',
