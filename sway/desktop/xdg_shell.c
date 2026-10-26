@@ -7,6 +7,9 @@
 #include <wlr/util/edges.h>
 #include "log.h"
 #include "sway/decoration.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/scene_descriptor.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
@@ -332,6 +335,9 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 		}
 
 		view_center_and_clip_surface(view);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+		stage_director_ci_scene_probe(view);
+#endif
 	}
 
 	if (view->container->node.instruction) {
