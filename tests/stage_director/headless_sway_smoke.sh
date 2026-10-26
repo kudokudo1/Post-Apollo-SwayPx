@@ -59,6 +59,17 @@ export WLR_RENDERER_ALLOW_SOFTWARE=1
 unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK
 
 "$sway_binary" --version
+render_available=0
+for render_node in /dev/dri/renderD*; do
+  if [[ -c "$render_node" && -r "$render_node" && -w "$render_node" ]]; then
+    render_available=1
+    break
+  fi
+done
+if [[ "$render_available" -ne 1 ]]; then
+  echo "BLOCKED_NO_DRM_RENDER_NODE: SceneFX needs a usable DRM render device for GLES2. This machine cannot perform a live compositor rendering test." >&2
+  exit 2
+fi
 "$sway_binary" -d -c "$config" > "$log" 2>&1 &
 child=$!
 
