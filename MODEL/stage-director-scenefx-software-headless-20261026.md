@@ -26,6 +26,20 @@ This PR updates only the disposable headless test:
 - Keep GitHub Nix full binary build, no browser, no Weather Station WATCH activation, no local SwayFX changes.
 - Enable existing workflow to run against the latest stacked development base.
 
+**Measured result // runner #40402316164:** full SwayPX build succeeded. The pinned Mesa vendor/DRI configuration worked: SceneFX created an EGL context, reported `OpenGL ES 3.2 Mesa 26.2.0` and `llvmpipe (LLVM 21.1.8)`, and initialized its shaders successfully. Runtime then **failed before Wayland socket creation**:
+
+```text
+[ERROR] [wlr] [render/allocator/udmabuf.c:148] Failed to open /dev/udmabuf: Permission denied
+[ERROR] [wlr] [render/allocator/allocator.c:168] Failed to create allocator
+[ERROR] [sway/server.c:308] Failed to create allocator
+```
+
+This is different from the prior no-DRM and missing-EGL-vendor failures: graphics *initialization* has been verified in an isolated runner, but **buffer allocation and full compositor startup have not**.
+
+**Source-level dependency:** wlroots 0.20.2's `render/allocator/allocator.c::wlr_allocator_autocreate()` selects the shared-memory allocator only when backend and renderer capabilities intersect, then attempts the `udmabuf` allocator when the relevant DMA-BUF/SHM capabilities exist but there is no DRM FD. The CI runner denies opening `/dev/udmabuf`. See Debian's published wlroots 0.20.2 source or the exact pinned wlroots revision for the complete allocator logic. Changing `WLR_RENDERER_FORCE_SOFTWARE` does not grant allocator device access. Do not alter the production compositor's allocator or claim that a successful GLES context means a working session.
+
+**Acceptance needed:** run the existing isolated smoke against a separately authorized environment exposing either the compatible DRM render/allocator device(s) or an accessible, functional `udmabuf` allocator. Then verify a real compositor Wayland socket and prompt shutdown. No production-machine writes or paid/privileged runner use have been authorized. Current PR remains runtime **blocked**, not successful.
+
 ## HOW TO USE
 
 Inspect the **Stage Director isolated headless SwayPX runtime smoke** check on the draft PR. Nothing to run on the operator's Fedora desktop.
