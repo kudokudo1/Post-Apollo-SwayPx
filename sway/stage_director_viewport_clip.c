@@ -1,4 +1,5 @@
 #include <string.h>
+#include <scenefx/types/fx/blur_data.h>
 #include <wayland-util.h>
 #include <wlr/types/wlr_scene.h>
 #include "sway/stage_director_viewport_clip.h"
