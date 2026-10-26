@@ -5,6 +5,8 @@
 #include "log.h"
 #include "sway/stage_director.h"
 #include "sway/stage_director_profile.h"
+#include "sway/stage_director_weather_host.h"
+#include "sway/stage_director_news_shadow.h"
 #include "sway/layers.h"
 #include "sway/output.h"
 #include "sway/tree/container.h"
@@ -18,6 +20,7 @@ struct stage_director_actor {
 	struct sway_view *view;
 	struct stage_director_identity identity;
 	bool occupied;
+	bool news_actor_candidate;
 	bool last_geometry_valid;
 	int last_x;
 	int last_y;
@@ -28,6 +31,7 @@ struct stage_director_actor {
 struct stage_director_layer_observation {
 	struct sway_layer_surface *surface;
 	bool occupied;
+	bool news_host_candidate;
 	bool last_state_valid;
 	int last_x;
 	int last_y;
@@ -45,6 +49,8 @@ static struct stage_director_layer_observation
 	layers[STAGE_DIRECTOR_MAX_LAYERS];
 static FILE *shadow_log;
 static bool announced;
+static int last_news_hosts = -1;
+static int last_news_actors = -1;
 
 static void shadow_open(void) {
 	if (shadow_log) {
@@ -76,6 +82,42 @@ static void announce_once(void) {
 	shadow_write(
 		"[stage-director][SD0] shadow online: generic scene registry + layer-shell observer; "
 		"observe/classify/model/log only; NO geometry, focus, layout, or lifecycle authority");
+}
+
+/*
+ * SD1 NEWS shadow join: log counts from the existing native registries.
+ * Never create a browser session or infer ownership from a unique pair.
+ * No new poller, compositor mutation, IPC command or launch side effects.
+ */
+static void observe_news_shadow(void) {
+	int hosts = 0;
+	int browser_actors = 0;
+	for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+		if (layers[i].occupied && layers[i].news_host_candidate) {
+			++hosts;
+		}
+	}
+	for (int i = 0; i < STAGE_DIRECTOR_MAX_ACTORS; ++i) {
+		if (actors[i].occupied && actors[i].news_actor_candidate) {
+			++browser_actors;
+		}
+	}
+	if (hosts == last_news_hosts && browser_actors == last_news_actors) {
+		return;
+	}
+	last_news_hosts = hosts;
+	last_news_actors = browser_actors;
+	const struct stage_director_news_shadow_result candidate =
+		stage_director_news_shadow_evaluate(hosts, browser_actors);
+	char line[256];
+	snprintf(line, sizeof(line),
+		"[stage-director][SD1][NEWS] observed=%s hosts=%d actors=%d "
+		"unique=%s owner_verified=no can_launch=no can_clip=no "
+		"can_accept_input=no authority=NONE",
+		stage_director_news_shadow_state_name(candidate.state),
+		hosts, browser_actors,
+		candidate.unique_candidates ? "yes" : "no");
+	shadow_write(line);
 }
 
 static const char *layer_name(enum zwlr_layer_shell_v1_layer layer) {
@@ -156,6 +198,18 @@ static void observe_layer(struct sway_layer_surface *surface,
 	wlr_scene_node_coords(&surface->scene->tree->node, &x, &y);
 	const int width = layer_surface->surface->current.width;
 	const int height = layer_surface->surface->current.height;
+
+	/*
+	 * Match the actual layer-shell namespace, map state and output through
+	 * the native Weather host adapter. Only count observation candidates.
+	 * A namespace is not a trusted launch/session identity.
+	 */
+	const struct stage_director_weather_host_result news_host =
+		stage_director_weather_host_observe_layer(surface);
+	if (observation->news_host_candidate != news_host.candidate_observed) {
+		observation->news_host_candidate = news_host.candidate_observed;
+		observe_news_shadow();
+	}
 
 	const bool changed = !observation->last_state_valid ||
 		observation->last_x != x ||
@@ -281,6 +335,11 @@ static void classify(struct sway_view *view, const char *reason) {
 
 	struct stage_director_identity identity = {0};
 	if (!stage_director_profile_classify(view, &identity)) {
+		struct stage_director_actor *tracked = find_actor(view);
+		if (tracked && tracked->news_actor_candidate) {
+			tracked->news_actor_candidate = false;
+			observe_news_shadow();
+		}
 		return;
 	}
 
@@ -300,6 +359,13 @@ static void classify(struct sway_view *view, const char *reason) {
 		actor->identity.can_lead != identity.can_lead;
 
 	actor->identity = identity;
+	const bool news_actor = identity.scene &&
+		strcmp(identity.scene, "weather-news") == 0 &&
+		identity.role && strcmp(identity.role, "browser") == 0;
+	if (actor->news_actor_candidate != news_actor) {
+		actor->news_actor_candidate = news_actor;
+		observe_news_shadow();
+	}
 
 	if (changed) {
 		char line[768];
@@ -379,7 +445,11 @@ void stage_director_view_unmapped(struct sway_view *view) {
 		scene[0] ? scene : "-", role[0] ? role : "-");
 	shadow_write(line);
 
+	const bool had_news_actor = actor->news_actor_candidate;
 	memset(actor, 0, sizeof(*actor));
+	if (had_news_actor) {
+		observe_news_shadow();
+	}
 	if (scene[0]) {
 		log_scene_status(scene, expected);
 	}
@@ -446,7 +516,11 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 	}
 
 	observe_layer(surface, "unmap", true);
+	const bool had_news_host = observation->news_host_candidate;
 	memset(observation, 0, sizeof(*observation));
+	if (had_news_host) {
+		observe_news_shadow();
+	}
 }
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
@@ -460,5 +534,9 @@ void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 	 * destroy callback; map/unmap/commit already captured the observable
 	 * lifecycle and geometry we need.
 	 */
+	const bool had_news_host = observation->news_host_candidate;
 	memset(observation, 0, sizeof(*observation));
+	if (had_news_host) {
+		observe_news_shadow();
+	}
 }
