@@ -261,6 +261,11 @@ sway_sources = files(
 	'tree/output.c',
 )
 
+
+if get_option('sd-ci-news-scene-probe')
+	sway_sources += 'stage_director_ci_scene_probe.c'
+endif
+
 sway_deps = [
 	cairo,
 	drm,
