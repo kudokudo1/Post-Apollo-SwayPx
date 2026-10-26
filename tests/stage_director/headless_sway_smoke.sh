@@ -62,6 +62,20 @@ export WLR_RENDERER_FORCE_SOFTWARE=1
 export WLR_RENDERER_ALLOW_SOFTWARE=1
 export LIBGL_ALWAYS_SOFTWARE=1
 export EGL_PLATFORM=surfaceless
+# Nix's unwrapped compositor does not inherit the graphical vendor/driver
+# discovery paths used inside NixOS. Source both from its *pinned* nixpkgs,
+# never the GitHub runner's unrelated host /usr/lib graphics stack.
+mesa_dir="${STAGE_DIRECTOR_MESA_DIR:-}"
+if [[ -z "$mesa_dir" || "$mesa_dir" != /nix/store/* ||
+      ! -r "$mesa_dir/share/glvnd/egl_vendor.d/50_mesa.json" ||
+      ! -d "$mesa_dir/lib/dri" ||
+      ! -r "$mesa_dir/lib/libEGL_mesa.so.0" ]]; then
+  echo "BLOCKED_NIX_MESA_VENDOR: pinned EGL vendor JSON / Mesa DRI driver paths unavailable" >&2
+  exit 2
+fi
+export __EGL_VENDOR_LIBRARY_FILENAMES="$mesa_dir/share/glvnd/egl_vendor.d/50_mesa.json"
+export LIBGL_DRIVERS_PATH="$mesa_dir/lib/dri"
+export LD_LIBRARY_PATH="$mesa_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK WLR_RENDERER WLR_RENDER_DRM_DEVICE
 
 "$sway_binary" --version
