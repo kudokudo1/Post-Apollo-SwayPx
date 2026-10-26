@@ -14,6 +14,10 @@ Failed to create renderer
 
 The test originally set `WLR_RENDERER=pixman` and later added a hard DRM-node preflight. That assumed SceneFX always required a DRM render device, which turned out to be **too strong**. I independently examined the **exact SceneFX commit locked by the SwayPX flake**: `wlrfx/scenefx@26200c5d9fa947a1d3b0935d3f9237229cd3e5ba`. In `render/fx_renderer/util.c::open_preferred_drm_fd`, `WLR_RENDERER_FORCE_SOFTWARE=1` explicitly sets the DRM FD to -1 and returns success rather than enumerating DRM render nodes. The actual `fx_renderer_create` in SwayPX uses this path. Its software EGL initialization still has to succeed on the runner: no result is assumed.
 
+**Second measured result:** [GitHub Actions run #40401536000](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/40401536000) **failed**, but advanced beyond the DRM probe. Its raw logs confirmed `WLR_RENDERER_FORCE_SOFTWARE` was read, then showed `Supported EGL client extensions:` empty, `EGL_EXT_platform_base not supported`, and `Failed to create EGL context`. This demonstrates a missing EGL vendor/driver discovery path on the unwrapped Nix runner; it does not establish that the software renderer is operational.
+
+**Third diagnostic step:** The test now resolves the Mesa package from **the same pinned nixpkgs flake input**, requires its `share/glvnd/egl_vendor.d/50_mesa.json`, `lib/libEGL_mesa.so.0` and `lib/dri`, and passes `__EGL_VENDOR_LIBRARY_FILENAMES`, `LIBGL_DRIVERS_PATH`, and a temporary `LD_LIBRARY_PATH` **only to the CI child**. This matches the GLVND Mesa ICD discovery contract rather than importing arbitrary host graphics libraries. That follow-up CI result is pending.
+
 This PR updates only the disposable headless test:
 
 - Use `WLR_RENDERER_FORCE_SOFTWARE=1`, `WLR_RENDERER_ALLOW_SOFTWARE=1`, `LIBGL_ALWAYS_SOFTWARE=1`, and `EGL_PLATFORM=surfaceless` while launching the isolated compositor.
