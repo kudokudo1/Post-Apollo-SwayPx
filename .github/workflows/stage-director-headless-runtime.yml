@@ -6,12 +6,14 @@ on:
       - master
       - stage-director/isolated-full-build-v0-20261026
       - stage-director/headless-runtime-smoke-20261026
+      - stage-director/scenefx-software-headless-v0-20261026
     paths:
       - 'sway/**'
       - 'include/**'
       - 'flake.nix'
       - 'flake.lock'
       - 'tests/stage_director/headless_sway_smoke.sh'
+      - 'tests/stage_director/ci_udmabuf_smoke.sh'
       - '.github/workflows/stage-director-headless-runtime.yml'
   workflow_dispatch:
 
@@ -59,11 +61,11 @@ jobs:
           test -d "$mesa/lib/dri"
           test -f "$mesa/lib/libEGL_mesa.so.0"
           echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
-      - name: Launch and stop one headless compositor instance
+      - name: Run headless compositor with temporary user-only udmabuf access
         run: |
           set -euo pipefail
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
-          bash tests/stage_director/headless_sway_smoke.sh "$output/bin/sway"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
       - name: State smoke-test limits
         if: always()
         run: |
