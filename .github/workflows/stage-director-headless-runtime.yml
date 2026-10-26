@@ -8,6 +8,7 @@ on:
       - stage-director/headless-runtime-smoke-20261026
       - stage-director/scenefx-software-headless-v0-20261026
       - stage-director/ci-udmabuf-access-v0-20261026
+      - stage-director/news-native-actor-smoke-v0-20261026
     paths:
       - 'sway/**'
       - 'include/**'
@@ -17,6 +18,8 @@ on:
       - 'tests/stage_director/ci_udmabuf_smoke.sh'
       - 'tests/stage_director/ci_native_news_actor_smoke.sh'
       - 'tests/stage_director/assert_native_news_actor.py'
+      - 'tests/stage_director/test_ci_scene_probe_boundary.py'
+      - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
   workflow_dispatch:
 
@@ -55,6 +58,15 @@ jobs:
             | tee "$RUNNER_TEMP/swaypx-headless-store-path.txt"
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$output/bin/sway"
+      - name: Build CI-only wlroots scene probe separately from normal SwayPX
+        run: |
+          set -euo pipefail
+          python3 tests/stage_director/test_ci_scene_probe_boundary.py
+          probe="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in f.packages.x86_64-linux.swayfx-unwrapped-git.overrideAttrs (old: { mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-news-scene-probe=true" ]; })' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$probe/bin/sway"
+          echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
+          echo "STAGE_DIRECTOR_CI_SCENE_PROBE=1" >> "$GITHUB_ENV"
+          echo "Built a distinct, test-only compositor; default package remains unchanged."
       - name: Resolve Mesa EGL vendor and software drivers from the locked Nixpkgs
         run: |
           set -euo pipefail
