@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - stage-director/isolated-full-build-v0-20261026
+      - stage-director/headless-runtime-smoke-20261026
     paths:
       - 'sway/**'
       - 'include/**'
@@ -30,17 +31,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Require a DRM render node for SceneFX runtime startup
+      - name: Confirm source-pinned software EGL render branch
         run: |
           set -euo pipefail
-          for device in /dev/dri/renderD*; do
-            if [[ -c "$device" && -r "$device" && -w "$device" ]]; then
-              echo "DRM render node available: $device"
-              exit 0
-            fi
-          done
-          echo "::error title=BLOCKED_NO_DRM_RENDER_NODE::SceneFX 0.5 requires a usable DRM render node to create its GLES2 renderer. The standard GitHub runner has none. The full SwayPX build remains independently verified."
-          exit 2
+          echo "Pinned SceneFX revision 26200c5 includes WLR_RENDERER_FORCE_SOFTWARE"
+          echo "The test script selects that SceneFX software EGL branch on this disposable runner."
       - name: Install Nix on isolated runner
         uses: cachix/install-nix-action@v31
         with:
@@ -55,6 +50,15 @@ jobs:
             | tee "$RUNNER_TEMP/swaypx-headless-store-path.txt"
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$output/bin/sway"
+      - name: Resolve Mesa EGL vendor and software drivers from the locked Nixpkgs
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          echo "Pinned Mesa output: $mesa"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
       - name: Launch and stop one headless compositor instance
         run: |
           set -euo pipefail

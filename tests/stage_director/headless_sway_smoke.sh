@@ -54,22 +54,32 @@ export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
 export WLR_HEADLESS_OUTPUTS=1
 export WLR_LIBINPUT_NO_DEVICES=1
-export WLR_RENDERER=pixman
+# This exact fallback exists in pinned SceneFX 26200c5: its
+# open_preferred_drm_fd() handles WLR_RENDERER_FORCE_SOFTWARE by bypassing
+# DRM probing. WLR_RENDERER=pixman alone DOES NOT affect fx_renderer_create().
+# Keep this limited to the temporary CI test, never production SwayPX.
+export WLR_RENDERER_FORCE_SOFTWARE=1
 export WLR_RENDERER_ALLOW_SOFTWARE=1
-unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK
-
-"$sway_binary" --version
-render_available=0
-for render_node in /dev/dri/renderD*; do
-  if [[ -c "$render_node" && -r "$render_node" && -w "$render_node" ]]; then
-    render_available=1
-    break
-  fi
-done
-if [[ "$render_available" -ne 1 ]]; then
-  echo "BLOCKED_NO_DRM_RENDER_NODE: SceneFX needs a usable DRM render device for GLES2. This machine cannot perform a live compositor rendering test." >&2
+export LIBGL_ALWAYS_SOFTWARE=1
+export EGL_PLATFORM=surfaceless
+# Nix's unwrapped compositor does not inherit the graphical vendor/driver
+# discovery paths used inside NixOS. Source both from its *pinned* nixpkgs,
+# never the GitHub runner's unrelated host /usr/lib graphics stack.
+mesa_dir="${STAGE_DIRECTOR_MESA_DIR:-}"
+if [[ -z "$mesa_dir" || "$mesa_dir" != /nix/store/* ||
+      ! -r "$mesa_dir/share/glvnd/egl_vendor.d/50_mesa.json" ||
+      ! -d "$mesa_dir/lib/dri" ||
+      ! -r "$mesa_dir/lib/libEGL_mesa.so.0" ]]; then
+  echo "BLOCKED_NIX_MESA_VENDOR: pinned EGL vendor JSON / Mesa DRI driver paths unavailable" >&2
   exit 2
 fi
+export __EGL_VENDOR_LIBRARY_FILENAMES="$mesa_dir/share/glvnd/egl_vendor.d/50_mesa.json"
+export LIBGL_DRIVERS_PATH="$mesa_dir/lib/dri"
+export LD_LIBRARY_PATH="$mesa_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK WLR_RENDERER WLR_RENDER_DRM_DEVICE
+
+"$sway_binary" --version
+echo "Stage Director CI: testing pinned SceneFX software EGL path without DRM"
 "$sway_binary" -d -c "$config" > "$log" 2>&1 &
 child=$!
 
