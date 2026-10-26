@@ -94,3 +94,5 @@ jobs:
           "$test_bin"
       - name: Assert active shadow hooks remain nonactuating
         run: python3 tests/stage_director/test_news_shadow_boundary.py
+      - name: Test process lineage and restart evidence
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_evidence.c tests/stage_director/test_process_evidence.c -o /tmp/sd-process-test && /tmp/sd-process-test
