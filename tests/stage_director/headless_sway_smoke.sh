@@ -47,6 +47,9 @@ cat > "$config" <<'EOF'
 # Isolated CI config. Never read or modify a user's Sway configuration.
 font pango:monospace 10
 output * bg #000000 solid_color
+# Isolated virtual monitor can host a candidate actor wider than NEWS bay.
+output * resolution 1920x1080
+for_window [app_id="post-apollo-weather-news"] floating enable
 EOF
 
 export XDG_RUNTIME_DIR="$runtime"
@@ -114,7 +117,12 @@ if ! kill -0 "$child" 2>/dev/null; then
 fi
 
 echo "Stage Director headless compositor initialized a Wayland socket: ${socket##*/}"
-echo "This verifies startup only; no NEWS clip/input/popup rendering tested."
+echo "Headless startup alone does not prove NEWS clip/input/popup rendering."
+
+if [[ -n "${STAGE_DIRECTOR_TEST_FOOT:-}" ]]; then
+  bash tests/stage_director/ci_native_news_actor_smoke.sh \
+    "$runtime" "${socket##*/}"
+fi
 
 kill -TERM "$child"
 for _ in {1..40}; do
