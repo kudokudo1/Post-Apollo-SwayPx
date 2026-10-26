@@ -50,6 +50,15 @@ jobs:
             | tee "$RUNNER_TEMP/swaypx-headless-store-path.txt"
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$output/bin/sway"
+      - name: Resolve Mesa EGL vendor and software drivers from the locked Nixpkgs
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          echo "Pinned Mesa output: $mesa"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
       - name: Launch and stop one headless compositor instance
         run: |
           set -euo pipefail
