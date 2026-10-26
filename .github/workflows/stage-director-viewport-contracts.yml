@@ -9,6 +9,7 @@ on:
       - stage-director/weather-news-clip-backend-v1-20261024
       - stage-director/weather-news-viewer-session-v0-20261024
       - stage-director/weather-news-host-candidate-v0-20261025
+      - stage-director/weather-news-shadow-pairing-v0-20261026
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
