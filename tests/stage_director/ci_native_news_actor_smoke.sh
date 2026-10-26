@@ -151,6 +151,10 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip.ppm"
     python3 tests/stage_director/assert_news_render_pixels.py \
       "$runtime/sway.log" "$runtime/news-clip.ppm"
+    "$STAGE_DIRECTOR_TEST_GRIM" -t png "$runtime/news-clip.png"
+    test -s "$runtime/news-clip.png"
+    cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence.png"
+    echo "Stage Director CI: preserved screenshot from isolated compositor only"
   fi
 fi
 echo "No video browser, keyboard/popup guard or production scene authority activated."
