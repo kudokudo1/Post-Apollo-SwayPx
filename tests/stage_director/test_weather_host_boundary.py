@@ -32,7 +32,11 @@ assert "'stage_director_weather_host_adapter.c'" in meson
 
 # No implicit authority is acquired by observing namespace/geometry. Only
 # a future authorized compositor/launcher can bind a host and actor session.
-for code in (registry, layer_hooks, viewer):
+# SD1 now consumes native host observations through existing SD0 map/commit
+# events, but still never binds a browser or grants clipping authority.
+assert "stage_director_weather_host_observe_layer(surface)" in registry
+assert "news_host.candidate_observed" in registry
+for code in (layer_hooks, viewer):
     assert "stage_director_weather_host_observe_layer(" not in code
     assert "stage_director_weather_host_probe(" not in code
 for code in (policy, adapter):
