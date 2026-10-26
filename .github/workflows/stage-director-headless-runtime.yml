@@ -7,6 +7,7 @@ on:
       - stage-director/isolated-full-build-v0-20261026
       - stage-director/headless-runtime-smoke-20261026
       - stage-director/scenefx-software-headless-v0-20261026
+      - stage-director/ci-udmabuf-access-v0-20261026
     paths:
       - 'sway/**'
       - 'include/**'
@@ -14,6 +15,8 @@ on:
       - 'flake.lock'
       - 'tests/stage_director/headless_sway_smoke.sh'
       - 'tests/stage_director/ci_udmabuf_smoke.sh'
+      - 'tests/stage_director/ci_native_news_actor_smoke.sh'
+      - 'tests/stage_director/assert_native_news_actor.py'
       - '.github/workflows/stage-director-headless-runtime.yml'
   workflow_dispatch:
 
@@ -61,6 +64,16 @@ jobs:
           test -d "$mesa/lib/dri"
           test -f "$mesa/lib/libEGL_mesa.so.0"
           echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Prepare one native Wayland actor from pinned Nixpkgs
+        run: |
+          set -euo pipefail
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
+          test -x "$foot/bin/foot"
+          test -x "$compositor/bin/swaymsg"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "The disposable actor uses a spoofable app_id as a candidate only."
       - name: Run headless compositor with temporary user-only udmabuf access
         run: |
           set -euo pipefail
