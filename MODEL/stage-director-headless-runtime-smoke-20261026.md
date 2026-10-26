@@ -24,7 +24,17 @@ Inspect the **Stage Director isolated headless SwayPX runtime smoke** workflow a
 
 A passing smoke test verifies only that the full SwayPX binary starts on a headless wlroots backend, presents its Wayland socket and terminates promptly under the test configuration. It does not prove a Weather Station layer is mapped, NEWS bay coordinates are correct, the native clip is activated, video is visible or mouse/keyboard/popups are isolated. The Weather NEWS viewer remains in safe mode.
 
-**The result is not accepted until the exact workflow job completes successfully.** If software Pixman renderer or the CI environment is unsupported by SceneFX, preserve the failure and record that limitation rather than claiming the compositor code is defective or working.
+**Measured result // 2026-10-26:** [GitHub run #40394111134](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/40394111134) built the complete SwayPX binary successfully, but the isolated headless startup **failed before opening a Wayland display**. Actual log:
+
+```text
+[ERROR] [wlr] [render/fx_renderer/util.c:44] Failed to find any DRM render node
+[ERROR] [wlr] [render/fx_renderer/fx_renderer.c:323] Cannot create GLES2 renderer: no DRM FD available
+[ERROR] [sway/server.c:280] Failed to create renderer
+```
+
+This is a **blocked CI rendering environment**, not evidence that NEWS containment works or a demonstrated Stage Director source regression. The usual GitHub runner has no suitable DRM render device. SceneFX's SwayFX renderer path still requires one even with `WLR_RENDERER=pixman` and `WLR_RENDERER_ALLOW_SOFTWARE=1`.
+
+The workflow and smoke script now explicitly reject missing render-node capability as `BLOCKED_NO_DRM_RENDER_NODE` before an expensive Nix rebuild. The check is deliberately **not green** without real runtime evidence. It must be rerun in an authorized isolated environment with an accessible DRM render device; a compiler success alone is not acceptance.
 
 ## WATCH OUT FOR
 
@@ -41,7 +51,7 @@ A passing smoke test verifies only that the full SwayPX binary starts on a headl
 - [x] Inspect actual Sway option parsing and headless backend availability
 - [x] Add disposable, bounded Sway startup and stop test
 - [x] Add separate isolated GitHub workflow and evidence
-- [ ] Full headless startup smoke passes
+- [ ] Headless smoke BLOCKED until an isolated runner exposes an accessible DRM render node
 - [ ] Validate real test actor paint, clip, focus, input and popup boundaries under an isolated compositor
 - [ ] Operator accepts integration order and authorizes any eventual merge/deployment
 
