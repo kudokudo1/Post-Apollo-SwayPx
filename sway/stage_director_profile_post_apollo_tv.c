@@ -1,3 +1,4 @@
+#include <scenefx/types/fx/blur_data.h>
 #include <string.h>
 #include "sway/stage_director_profile.h"
 #include "sway/tree/view.h"

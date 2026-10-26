@@ -1,0 +1,69 @@
+name: Stage Director full compositor build (isolated)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/weather-news-containment-policy-v0-20261026
+    paths:
+      - 'sway/**'
+      - 'include/**'
+      - 'common/**'
+      - 'protocols/**'
+      - 'meson.build'
+      - 'meson_options.txt'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/stage-director-full-compositor-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage-director-full-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-swaypx:
+    name: Build actual SwayPX with pinned Nix flake
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact pull request source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Nix on disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Identify exact code and locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          nix --version
+          test -f flake.lock
+          test -f flake.nix
+          test -f sway/stage_director_viewport_clip.c
+          test -f sway/stage_director_news_containment.c
+      - name: Compile and link complete compositor via existing flake
+        run: |
+          set -euo pipefail
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/swaypx-store-paths.txt"
+          output="$(tail -n 1 "$RUNNER_TEMP/swaypx-store-paths.txt")"
+          test -n "$output"
+          test -x "$output/bin/sway"
+          echo "Full compositor build and link succeeded at $output"
+          echo "No compositor was started, and no host installation occurred."
+      - name: Summarize verification boundary
+        if: always()
+        run: |
+          echo "## Stage Director // Full build status" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- This job builds the actual SwayPX Meson binary using the repository's pinned Nix flake." >> "$GITHUB_STEP_SUMMARY"
+          echo "- A successful compile/link does not prove popup, input, painting, or process containment." >> "$GITHUB_STEP_SUMMARY"
+          echo "- No nested compositor, browser, or production desktop is launched." >> "$GITHUB_STEP_SUMMARY"

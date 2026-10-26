@@ -1,3 +1,4 @@
+#include <scenefx/types/fx/blur_data.h>
 #include <stdint.h>
 #include <wlr/types/wlr_scene.h>
 #include "sway/layers.h"
