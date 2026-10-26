@@ -54,22 +54,18 @@ export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
 export WLR_HEADLESS_OUTPUTS=1
 export WLR_LIBINPUT_NO_DEVICES=1
-export WLR_RENDERER=pixman
+# This exact fallback exists in pinned SceneFX 26200c5: its
+# open_preferred_drm_fd() handles WLR_RENDERER_FORCE_SOFTWARE by bypassing
+# DRM probing. WLR_RENDERER=pixman alone DOES NOT affect fx_renderer_create().
+# Keep this limited to the temporary CI test, never production SwayPX.
+export WLR_RENDERER_FORCE_SOFTWARE=1
 export WLR_RENDERER_ALLOW_SOFTWARE=1
-unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK
+export LIBGL_ALWAYS_SOFTWARE=1
+export EGL_PLATFORM=surfaceless
+unset DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET SWAYSOCK WLR_RENDERER WLR_RENDER_DRM_DEVICE
 
 "$sway_binary" --version
-render_available=0
-for render_node in /dev/dri/renderD*; do
-  if [[ -c "$render_node" && -r "$render_node" && -w "$render_node" ]]; then
-    render_available=1
-    break
-  fi
-done
-if [[ "$render_available" -ne 1 ]]; then
-  echo "BLOCKED_NO_DRM_RENDER_NODE: SceneFX needs a usable DRM render device for GLES2. This machine cannot perform a live compositor rendering test." >&2
-  exit 2
-fi
+echo "Stage Director CI: testing pinned SceneFX software EGL path without DRM"
 "$sway_binary" -d -c "$config" > "$log" 2>&1 &
 child=$!
 
