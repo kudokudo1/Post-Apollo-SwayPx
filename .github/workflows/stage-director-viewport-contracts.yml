@@ -9,6 +9,7 @@ on:
       - stage-director/weather-news-clip-backend-v1-20261024
       - stage-director/weather-news-viewer-session-v0-20261024
       - stage-director/weather-news-host-candidate-v0-20261025
+      - stage-director/weather-news-shadow-pairing-v0-20261026
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
@@ -93,3 +94,9 @@ jobs:
           "$test_bin"
       - name: Assert active shadow hooks remain nonactuating
         run: python3 tests/stage_director/test_news_shadow_boundary.py
+      - name: Test process lineage and restart evidence
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_evidence.c tests/stage_director/test_process_evidence.c -o /tmp/sd-process-test && /tmp/sd-process-test
+      - name: Test native Linux process metadata parser
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_linux.c tests/stage_director/test_process_linux.c -o /tmp/sd-proc-linux-test && /tmp/sd-proc-linux-test
+      - name: Enforce nonactuating process evidence boundary
+        run: python3 tests/stage_director/test_process_evidence_boundary.py

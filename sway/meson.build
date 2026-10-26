@@ -18,6 +18,8 @@ sway_sources = files(
 	'stage_director_weather_host.c',
 	'stage_director_weather_host_adapter.c',
 	'stage_director_news_shadow.c',
+	'stage_director_process_evidence.c',
+	'stage_director_process_linux.c',
 	'stage_director_profiles.c',
 	'stage_director_profile_post_apollo_tv.c',
 	'stage_director_profile_weather_station.c',
