@@ -96,3 +96,7 @@ jobs:
         run: python3 tests/stage_director/test_news_shadow_boundary.py
       - name: Test process lineage and restart evidence
         run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_evidence.c tests/stage_director/test_process_evidence.c -o /tmp/sd-process-test && /tmp/sd-process-test
+      - name: Test native Linux process metadata parser
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_linux.c tests/stage_director/test_process_linux.c -o /tmp/sd-proc-linux-test && /tmp/sd-proc-linux-test
+      - name: Enforce nonactuating process evidence boundary
+        run: python3 tests/stage_director/test_process_evidence_boundary.py
