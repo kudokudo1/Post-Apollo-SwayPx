@@ -122,7 +122,8 @@ static void test_depth_limit(void) {
 	f.count = 16;
 	for (int i=0; i<16; ++i) {
 		f.items[i] = (struct stage_director_process_identity) {
-			.pid=100+i, .parent_pid=101+i, .start_time_ticks=1000+i,
+			.pid=100+i, .parent_pid=101+i,
+			.start_time_ticks=(i == 0 ? 1000 : (uint64_t)(2016-i)),
 			.uid=1001
 		};
 	}
