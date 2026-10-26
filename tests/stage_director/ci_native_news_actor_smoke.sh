@@ -94,4 +94,26 @@ fi
 
 python3 tests/stage_director/assert_native_news_actor.py "$tree_json"
 echo "Stage Director real mapped actor smoke: PASS"
-echo "No scene clipping, popup filtering or seat/input interception activated."
+
+if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
+  probe_seen=0
+  for _ in {1..70}; do
+    if grep -Fq 'SD_CI_SCENE_CLIP measured=1' "$runtime/sway.log"; then
+      probe_seen=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ "$probe_seen" != 1 ]]; then
+    echo "FAIL: native scene test buffer never reached CI clip/hit-test probe" >&2
+    tail -n 100 "$runtime/sway.log" >&2
+    exit 1
+  fi
+  grep -F 'SD_CI_SCENE_CLIP measured=1' "$runtime/sway.log"
+  if ! grep -Fq 'after_inside=1 after_outside=0 normal_clip_restored=1 result=PASS' "$runtime/sway.log"; then
+    echo "FAIL: actual wlroots scene node hit-testing did not respect the temporary clip" >&2
+    exit 1
+  fi
+  echo "Stage Director actual wlroots scene hit-test clip probe: PASS"
+fi
+echo "No video browser, keyboard/popup guard or production scene authority activated."
