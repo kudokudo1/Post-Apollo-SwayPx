@@ -30,6 +30,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Require a DRM render node for SceneFX runtime startup
+        run: |
+          set -euo pipefail
+          for device in /dev/dri/renderD*; do
+            if [[ -c "$device" && -r "$device" && -w "$device" ]]; then
+              echo "DRM render node available: $device"
+              exit 0
+            fi
+          done
+          echo "::error title=BLOCKED_NO_DRM_RENDER_NODE::SceneFX 0.5 requires a usable DRM render node to create its GLES2 renderer. The standard GitHub runner has none. The full SwayPX build remains independently verified."
+          exit 2
       - name: Install Nix on isolated runner
         uses: cachix/install-nix-action@v31
         with:
