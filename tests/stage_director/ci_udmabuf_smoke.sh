@@ -8,17 +8,21 @@ sway_binary="${1:?pass exact Nix-built compositor path}"
 device=/dev/udmabuf
 uid="$(id -u)"
 acl_changed=0
+acl_snapshot=""
 
 cleanup() {
   local rc=$?
   trap - EXIT
   if [[ "$acl_changed" == 1 ]]; then
-    if sudo -n setfacl -x "u:$uid" "$device"; then
-      echo "Stage Director CI: removed temporary /dev/udmabuf user ACL"
+    if sudo -n setfacl --restore="$acl_snapshot"; then
+      echo "Stage Director CI: restored the original /dev/udmabuf ACL and mode"
     else
-      echo "::error title=UDMABUF_ACL_RESTORE_FAILED::Could not restore temporary runner device ACL" >&2
+      echo "::error title=UDMABUF_ACL_RESTORE_FAILED::Could not restore original temporary runner device ACL" >&2
       rc=3
     fi
+  fi
+  if [[ -n "$acl_snapshot" ]]; then
+    rm -f -- "$acl_snapshot"
   fi
   exit "$rc"
 }
@@ -59,11 +63,14 @@ else
     echo "BLOCKED_UDMABUF_PREEXISTING_ACL: preserving existing ACL and refusing overwrite" >&2
     exit 2
   fi
+  acl_snapshot="$(mktemp "$RUNNER_TEMP/stage-director-udmabuf-acl.XXXXXXXX")"
+  getfacl -p "$device" > "$acl_snapshot"
+  # Mark before mutation: even a partial failure triggers exact restore.
+  acl_changed=1
   if ! sudo -n setfacl -m "u:$uid:rw" "$device"; then
     echo "BLOCKED_UDMABUF_ACL_DENIED: ephemeral runner cannot grant device access" >&2
     exit 2
   fi
-  acl_changed=1
   if ! can_open_device; then
     echo "BLOCKED_UDMABUF_KERNEL_ACCESS: ACL applied but kernel still denies open" >&2
     exit 2
