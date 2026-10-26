@@ -13,6 +13,7 @@ on:
       - stage-director/weather-news-process-evidence-v0-20261026
       - stage-director/weather-news-pidfd-custody-v0-20261026
       - stage-director/weather-news-launch-plan-v0-20261026
+      - stage-director/news-supervised-helper-v0-20261026
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
@@ -157,3 +158,17 @@ jobs:
           "$output"
       - name: Verify live NEWS hooks cannot invoke test helper
         run: python3 tests/stage_director/test_news_supervisor_boundary.py
+
+      - name: Compile fractional pointer and popup boundary policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_news_containment.c \
+            tests/stage_director/test_news_containment.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Enforce NEWS containment remains disconnected from live input dispatch
+        run: python3 tests/stage_director/test_news_containment_boundary.py
