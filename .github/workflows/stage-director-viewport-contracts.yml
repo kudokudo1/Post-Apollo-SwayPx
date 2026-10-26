@@ -8,6 +8,7 @@ on:
       - stage-director/weather-viewport-v1-preflight-20261024
       - stage-director/weather-news-clip-backend-v1-20261024
       - stage-director/weather-news-viewer-session-v0-20261024
+      - stage-director/weather-news-host-candidate-v0-20261025
     paths:
       - 'include/sway/stage_director*.h'
       - 'sway/stage_director*.c'
@@ -79,3 +80,16 @@ jobs:
           "$test_bin"
       - name: Verify native layer observer does not activate a viewport
         run: python3 tests/stage_director/test_weather_host_boundary.py
+      - name: Compile and test NEWS shadow scene candidate reconciliation
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_news_shadow.c \
+            tests/stage_director/test_news_shadow.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Assert active shadow hooks remain nonactuating
+        run: python3 tests/stage_director/test_news_shadow_boundary.py
