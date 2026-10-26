@@ -43,6 +43,11 @@ static struct stage_director_process_launch_root root(void) {
 }
 static void assert_no_authority(struct stage_director_process_evidence_result r,
 		enum stage_director_process_evidence_state expected, bool match) {
+	if (r.state != expected) {
+		fprintf(stderr, "lineage test mismatch: actual=%s (%d) expected=%s (%d)\\n",
+			stage_director_process_evidence_name(r.state), (int)r.state,
+			stage_director_process_evidence_name(expected), (int)expected);
+	}
 	assert(r.state == expected);
 	assert(r.lineage_candidate == match);
 	assert(!r.owner_verified && !r.can_bind_viewer &&
