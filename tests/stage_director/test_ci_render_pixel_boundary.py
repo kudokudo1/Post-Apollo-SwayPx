@@ -16,6 +16,16 @@ pixel = read("tests/stage_director/assert_news_render_pixels.py")
 assert "option('sd-ci-news-scene-probe', type: 'boolean', value: false" in options
 assert "STAGE_DIRECTOR_CI_RENDER_PROBE" in probe
 assert "ci_render_actor" in probe
+# CI-only real XDG peer evidence must come from the native wl_client, and
+# fail if it disagrees with Sway's stored PID or the disposable actor PID.
+assert "wl_resource_get_client(view->surface->resource)" in probe
+assert "wl_client_get_credentials(client, &peer_pid, &peer_uid, &peer_gid)" in probe
+assert "stage_director_read_linux_process(" in probe
+assert "peer_pid == view->pid" in probe
+assert "SD_CI_WL_PEER pid=" in probe
+assert "SD_CI_WL_PEER_CHECK source=actual_wl_client" in actor
+assert 'expected = int(sys.argv[1])' in actor
+assert 'int(pid) == expected == int(view_pid)' in actor
 assert "ci_render_clip" in probe
 assert "stage_director_ci_scene_probe_restore(" in header
 assert "stage_director_ci_scene_probe_restore(view);" in observer
