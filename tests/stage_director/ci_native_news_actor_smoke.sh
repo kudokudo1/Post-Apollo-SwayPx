@@ -186,6 +186,34 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       cp -- "$tree_json" "$RUNNER_TEMP/stage-director-cold-$stage-tree.json"
       cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence-cold-$stage.png"
       echo "SD_CI_COLD_CAPTURE stage=$stage screenshot_saved=1"
+      if [[ "$stage" == initial &&
+            "${STAGE_DIRECTOR_CI_MOVE_PIXEL:-}" == 1 ]]; then
+        # Move the SAME still-mapped native actor on the SAME fixed output.
+        # This is only performed on the disposable GitHub-hosted compositor.
+        # No production scene authority or output mode change is involved.
+        echo "SD_CI_MOVE_START target=520,180"
+        "$swaymsg_binary" -s "$ipc_socket" -r \
+          '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] move position 520 180' \
+          >"$runtime/news-move-response.json"
+        python3 - "$runtime/news-move-response.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(data, list) or len(data) != 1 or data[0].get("success") is not True:
+    raise SystemExit("FAIL: CI native actor move command was not accepted")
+PY
+        sleep 0.45
+        "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+          >"$runtime/news-tree-moved.json"
+        "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip-moved.ppm"
+        "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+          "$RUNNER_TEMP/stage-director-render-evidence-moved.png"
+        cp -- "$runtime/news-clip-moved.ppm" \
+          "$RUNNER_TEMP/stage-director-moved.ppm"
+        cp -- "$runtime/news-tree-moved.json" \
+          "$RUNNER_TEMP/stage-director-moved-tree.json"
+        echo "SD_CI_MOVE_CAPTURE actor_still_mapped=1 screenshot_saved=1"
+      fi
     elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
       # Changing the isolated headless output size requires a newly sized
       # render buffer. This is a diagnostic, NEVER a production resize.
