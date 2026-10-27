@@ -9,6 +9,8 @@ on:
       - stage-director/scenefx-software-headless-v0-20261026
       - stage-director/ci-udmabuf-access-v0-20261026
       - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/ci-mapped-move-pixel-probe-20261027
+      - stage-director/ci-scenefx-render-pass-trace-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
@@ -26,6 +28,8 @@ on:
       - 'tests/stage_director/compare_news_moved_pixels.py'
       - 'tests/stage_director/compare_news_opacity_pixels.py'
       - 'tests/stage_director/compare_news_background_pixels.py'
+      - 'tests/stage_director/ci_scenefx_render_trace.py'
+      - 'tests/stage_director/ci_scenefx_render_trace.nix'
       - 'tests/stage_director/test_ci_render_pixel_boundary.py'
       - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
@@ -71,7 +75,11 @@ jobs:
           set -euo pipefail
           python3 tests/stage_director/test_ci_scene_probe_boundary.py
           python3 tests/stage_director/test_ci_render_pixel_boundary.py
-          probe="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in f.packages.x86_64-linux.swayfx-unwrapped-git.overrideAttrs (old: { mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-news-scene-probe=true" ]; })' --no-link --print-out-paths --show-trace | tail -n 1)"
+          # Separate pinned SceneFX derivation with CI-only scene+GLES
+          # telemetry. The ordinary compositor was already compiled above.
+          # Source contract: -Dsd-ci-news-scene-probe=true remains required
+          # inside ci_scenefx_render_trace.nix; this workflow cannot bypass it.
+          probe="$(nix build --impure --expr 'import ./tests/stage_director/ci_scenefx_render_trace.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
           test -x "$probe/bin/sway"
           echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
           echo "STAGE_DIRECTOR_CI_SCENE_PROBE=1" >> "$GITHUB_ENV"
@@ -96,6 +104,8 @@ jobs:
           test -x "$grim/bin/grim"
           echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FX_PASS_TRACE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" >> "$GITHUB_ENV"

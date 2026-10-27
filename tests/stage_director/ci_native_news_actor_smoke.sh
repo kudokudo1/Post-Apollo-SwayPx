@@ -166,6 +166,24 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     grep -F 'SD_CI_PAINT_AUDIT ' "$runtime/sway.log" || true
     grep -F 'SD_CI_DRAW_NODE ' "$runtime/sway.log" || true
     grep -F 'SD_CI_DRAW_AUDIT ' "$runtime/sway.log" || true
+    if [[ "${STAGE_DIRECTOR_CI_FX_PASS_TRACE:-}" == 1 ]]; then
+      grep -F 'SD_CI_FX_SCENE_TEX ' "$runtime/sway.log" || true
+      grep -F 'SD_CI_FX_GL_QUADS ' "$runtime/sway.log" || true
+      grep -F 'SD_CI_FRAME_DEST_PRESERVED ' "$runtime/sway.log" || true
+      if [[ "${STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE:-}" == 1 ]] &&
+          ! grep -Fq 'SD_CI_FRAME_DEST_PRESERVED dst=320x240' "$runtime/sway.log"; then
+        echo "FAIL: output repaint overwrote CI-held native destination" >&2
+        exit 1
+      fi
+      if ! grep -Eq 'SD_CI_FX_SCENE_TEX src=96,96 320x240 dst=[0-9]+,[0-9]+ 320x240 ' "$runtime/sway.log"; then
+        echo "FAIL: pinned SceneFX actual scene draw region not measured" >&2
+        exit 1
+      fi
+      if ! grep -Eq 'SD_CI_FX_GL_QUADS dst=[0-9]+,[0-9]+ 320x240 ' "$runtime/sway.log"; then
+        echo "FAIL: pinned SceneFX submitted GLES texture region not measured" >&2
+        exit 1
+      fi
+    fi
     if ! grep -Eq 'SD_CI_DRAW_AUDIT nodes=[1-9][0-9]* trees=[1-9][0-9]* buffers=[1-9][0-9]* drawable_buffers=[1-9][0-9]*' "$runtime/sway.log"; then
       echo "FAIL: CI drawable-scene node provenance absent" >&2
       exit 1
