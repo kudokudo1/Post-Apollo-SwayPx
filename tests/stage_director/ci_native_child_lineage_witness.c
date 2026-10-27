@@ -117,10 +117,27 @@ int main(int argc, char **argv) {
 	const struct stage_director_process_evidence_result unrelated =
 		stage_director_process_check(&launch_root, (int64_t)getpid(),
 			self.start_time_ticks, stage_director_read_linux_process, NULL);
+	/*
+	 * Linux runners may limit reads of *ancestors* outside the disposable
+	 * process tree. For a real unrelated PID and valid start marker,
+	 * UNRELATED is direct evidence, while READ_FAILED/UNSTABLE must stay
+	 * denied (never silently promote on incomplete ancestry). ACTOR_MISMATCH
+	 * is NOT accepted here: the witness start marker was independently read.
+	 */
+	const bool unrelated_denied =
+		unrelated.state == SD_PROCESS_EVIDENCE_UNRELATED ||
+		unrelated.state == SD_PROCESS_EVIDENCE_READ_FAILED ||
+		unrelated.state == SD_PROCESS_EVIDENCE_UNSTABLE;
+	printf("SD_CI_CHILD_DENIALS stale=%s foreign=%s wrong_actor=%s "
+		"unrelated_live=%s authority=NONE\n",
+		stage_director_process_evidence_name(stale.state),
+		stage_director_process_evidence_name(foreign_uid.state),
+		stage_director_process_evidence_name(wrong_actor_start.state),
+		stage_director_process_evidence_name(unrelated.state));
 	if (stale.state != SD_PROCESS_EVIDENCE_ROOT_MISMATCH ||
 			foreign_uid.state != SD_PROCESS_EVIDENCE_ROOT_MISMATCH ||
 			wrong_actor_start.state != SD_PROCESS_EVIDENCE_ACTOR_MISMATCH ||
-			unrelated.state != SD_PROCESS_EVIDENCE_UNRELATED ||
+			!unrelated_denied ||
 			!all_denied(stale) || !all_denied(foreign_uid) ||
 			!all_denied(wrong_actor_start) || !all_denied(unrelated)) {
 		fputs("FAIL: stale/foreign/unrelated live process identity accepted\n", stderr);
