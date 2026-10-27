@@ -171,7 +171,22 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
       exit 1
     fi
-    if [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
+    if [[ -n "${STAGE_DIRECTOR_CI_COLD_STAGE:-}" ]]; then
+      stage="$STAGE_DIRECTOR_CI_COLD_STAGE"
+      if [[ "$stage" != initial && "$stage" != fresh ||
+            "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+            -z "${RUNNER_TEMP:-}" ]]; then
+        echo "BLOCKED_INVALID_COLD_PIXEL_STAGE" >&2
+        exit 2
+      fi
+      # Preserve both independent native screenshots BEFORE acceptance.
+      # The workflow rejects either leaking frame after both boots exist.
+      cp -- "$runtime/news-clip.ppm" "$RUNNER_TEMP/stage-director-cold-$stage.ppm"
+      cp -- "$runtime/sway.log" "$RUNNER_TEMP/stage-director-cold-$stage.log"
+      cp -- "$tree_json" "$RUNNER_TEMP/stage-director-cold-$stage-tree.json"
+      cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence-cold-$stage.png"
+      echo "SD_CI_COLD_CAPTURE stage=$stage screenshot_saved=1"
+    elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
       # Changing the isolated headless output size requires a newly sized
       # render buffer. This is a diagnostic, NEVER a production resize.
       # Keep the original (possibly failing) screenshot as an independent
