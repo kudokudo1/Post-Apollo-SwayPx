@@ -267,6 +267,33 @@ PY
           cp -- "$runtime/news-tree-opacity-one.json" \
             "$RUNNER_TEMP/stage-director-opacity-one-tree.json"
           echo "SD_CI_OPACITY_CAPTURE alpha=1 actor_still_mapped=1"
+          if [[ "${STAGE_DIRECTOR_CI_BACKGROUND_REFRESH:-}" == 1 ]]; then
+            # Replace only the headless background surface twice, leaving
+            # output mode, actor geometry and actor opacity unchanged.
+            # This is a redraw/damage discriminator, NOT paint acceptance.
+            for bg in '#010101' '#000000'; do
+              "$swaymsg_binary" -s "$ipc_socket" -r \
+                "output * bg $bg solid_color" >"$runtime/news-bg-response.json"
+              python3 - "$runtime/news-bg-response.json" <<'PY'
+import json, sys
+responses = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(responses, list) or not responses or not all(
+    isinstance(i, dict) and i.get("success") is True for i in responses
+):
+    raise SystemExit("FAIL: CI-only background refresh rejected")
+PY
+              sleep 0.35
+            done
+            "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+              >"$runtime/news-tree-background-refreshed.json"
+            "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+              "$RUNNER_TEMP/stage-director-background-refreshed.ppm"
+            "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+              "$RUNNER_TEMP/stage-director-render-evidence-background-refreshed.png"
+            cp -- "$runtime/news-tree-background-refreshed.json" \
+              "$RUNNER_TEMP/stage-director-background-refreshed-tree.json"
+            echo "SD_CI_BACKGROUND_REFRESH mapped_actor=1 desktop_restored=1"
+          fi
         fi
       fi
     elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
