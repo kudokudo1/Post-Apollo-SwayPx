@@ -153,6 +153,11 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     test -s "$runtime/news-clip.png"
     cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence.png"
     echo "Stage Director CI: preserved actual compositor screenshot for auditing"
+    grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
+    if ! grep -Eq 'SD_CI_POST_LAYOUT clip_reapplied=1 origin=[0-9]+,[0-9]+ inside=1 outside=0 result=PASS' "$runtime/sway.log"; then
+      echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
+      exit 1
+    fi
     python3 tests/stage_director/assert_news_render_pixels.py \
       "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json"
   fi
