@@ -111,6 +111,88 @@ static void ci_audit_paint_buffer(struct wlr_scene_buffer *buffer,
 		buffer->buffer ? buffer->buffer->height : 0);
 }
 
+/*
+ * Inspect every draw-capable node near the actor. The previous buffer-only
+ * audit included a large NULL-buffer output handler, which is not by itself
+ * an explanation for white pixels. This traversal is read-only, bounded,
+ * and compiled only in the distinct CI probe compositor.
+ */
+struct ci_draw_audit {
+	const struct wlr_scene_node *output_handler;
+	int nodes;
+	int trees;
+	int buffers;
+	int drawable_buffers;
+	int rects;
+	int visible_rects;
+	int effects;
+};
+
+static void ci_draw_node(struct wlr_scene_node *node, int depth,
+		bool ancestor_enabled, struct ci_draw_audit *audit) {
+	if (!node || audit->nodes >= 96 || depth > 16) return;
+	audit->nodes++;
+	bool active = ancestor_enabled && node->enabled;
+	int x = 0, y = 0;
+	wlr_scene_node_coords(node, &x, &y);
+
+	switch (node->type) {
+	case WLR_SCENE_NODE_TREE:;
+		audit->trees++;
+		struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
+		struct wlr_scene_node *child;
+		wl_list_for_each(child, &tree->children, link) {
+			if (audit->nodes >= 96) break;
+			ci_draw_node(child, depth + 1, active, audit);
+		}
+		break;
+	case WLR_SCENE_NODE_RECT:;
+		audit->rects++;
+		struct wlr_scene_rect *rect = wlr_scene_rect_from_node(node);
+		if (active && rect->color[3] > 0.01f) audit->visible_rects++;
+		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=rect active=%d depth=%d "
+			"at=%d,%d size=%dx%d rgba=%.3f,%.3f,%.3f,%.3f",
+			active ? 1 : 0, depth, x, y, rect->width, rect->height,
+			rect->color[0], rect->color[1], rect->color[2], rect->color[3]);
+		break;
+	case WLR_SCENE_NODE_BUFFER:;
+		audit->buffers++;
+		struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
+		if (active && buffer->buffer && buffer->opacity > 0.01f) {
+			audit->drawable_buffers++;
+		}
+		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=buffer active=%d depth=%d "
+			"at=%d,%d dst=%dx%d native=%dx%d opaque=%d output_handler=%d",
+			active ? 1 : 0, depth, x, y,
+			buffer->dst_width, buffer->dst_height,
+			buffer->buffer ? buffer->buffer->width : 0,
+			buffer->buffer ? buffer->buffer->height : 0,
+			buffer->opacity > 0.99f ? 1 : 0,
+			node == audit->output_handler ? 1 : 0);
+		break;
+	case WLR_SCENE_NODE_SHADOW:;
+		audit->effects++;
+		struct wlr_scene_shadow *shadow = wlr_scene_shadow_from_node(node);
+		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=shadow active=%d "
+			"at=%d,%d size=%dx%d alpha=%.3f",
+			active ? 1 : 0, x, y, shadow->width, shadow->height,
+			shadow->color[3]);
+		break;
+	case WLR_SCENE_NODE_BLUR:;
+		audit->effects++;
+		struct wlr_scene_blur *blur = wlr_scene_blur_from_node(node);
+		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=blur active=%d "
+			"at=%d,%d size=%dx%d alpha=%.3f",
+			active ? 1 : 0, x, y, blur->width, blur->height, blur->alpha);
+		break;
+	case WLR_SCENE_NODE_OPTIMIZED_BLUR:
+		audit->effects++;
+		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=optimized_blur active=%d at=%d,%d",
+			active ? 1 : 0, x, y);
+		break;
+	}
+}
+
 void stage_director_ci_scene_probe_post_layout(void) {
 	struct sway_view *view = ci_render_actor;
 	if (!view || !view->surface || !view->content_tree || !view->container ||
@@ -146,6 +228,14 @@ void stage_director_ci_scene_probe_post_layout(void) {
 	wlr_log(WLR_INFO, "SD_CI_PAINT_AUDIT content=%d content_surfaces=%d "
 		"container=%d container_surfaces=%d",
 		content.count, content.surfaces, container.count, container.surfaces);
+	struct ci_draw_audit draw = {
+		.output_handler = &view->output_handler->node,
+	};
+	ci_draw_node(&view->container->scene_tree->node, 0, true, &draw);
+	wlr_log(WLR_INFO, "SD_CI_DRAW_AUDIT nodes=%d trees=%d buffers=%d "
+		"drawable_buffers=%d rects=%d visible_rects=%d effects=%d",
+		draw.nodes, draw.trees, draw.buffers, draw.drawable_buffers,
+		draw.rects, draw.visible_rects, draw.effects);
 	int x = 0, y = 0;
 	wlr_scene_node_coords(&view->content_tree->node, &x, &y);
 	double sx = 0, sy = 0;
