@@ -11,6 +11,7 @@ on:
       - stage-director/news-native-actor-smoke-v0-20261026
       - stage-director/ci-mapped-move-pixel-probe-20261027
       - stage-director/ci-scenefx-render-pass-trace-20261027
+      - stage-director/news-frame-policy-contract-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
