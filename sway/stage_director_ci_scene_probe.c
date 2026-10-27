@@ -83,6 +83,34 @@ void stage_director_ci_scene_probe_restore(struct sway_view *view) {
  * earlier CI probe. Reapply only in this test-only, last-after-arrange hook.
  * Never expose this as authenticated session or production rendering power.
  */
+/*
+ * Read-only scene provenance: distinguish a second paint-bearing buffer in
+ * the surrounding Sway container from the single cropped NEWS content buffer.
+ * This callback never changes geometry, allocation, focus or visibility.
+ */
+struct ci_paint_audit {
+	const char *scope;
+	int count;
+	int surfaces;
+};
+
+static void ci_audit_paint_buffer(struct wlr_scene_buffer *buffer,
+		int sx, int sy, void *data) {
+	struct ci_paint_audit *audit = data;
+	bool is_surface = wlr_scene_surface_try_from_buffer(buffer) != NULL;
+	audit->count++;
+	audit->surfaces += is_surface ? 1 : 0;
+	wlr_log(WLR_INFO,
+		"SD_CI_PAINT_BUFFER scope=%s index=%d at=%d,%d "
+		"surface=%d src=%.1f,%.1f %.1fx%.1f dst=%dx%d native=%dx%d",
+		audit->scope, audit->count, sx, sy, is_surface ? 1 : 0,
+		buffer->src_box.x, buffer->src_box.y,
+		buffer->src_box.width, buffer->src_box.height,
+		buffer->dst_width, buffer->dst_height,
+		buffer->buffer ? buffer->buffer->width : 0,
+		buffer->buffer ? buffer->buffer->height : 0);
+}
+
 void stage_director_ci_scene_probe_post_layout(void) {
 	struct sway_view *view = ci_render_actor;
 	if (!view || !view->surface || !view->content_tree || !view->container ||
@@ -107,6 +135,17 @@ void stage_director_ci_scene_probe_post_layout(void) {
 		wlr_log(WLR_INFO, "SD_CI_BUFFER_DEST normalized=%d",
 			ci_dest_normalized_count);
 	}
+	struct ci_paint_audit content = { .scope = "content" };
+	struct ci_paint_audit container = { .scope = "container" };
+	wlr_scene_node_for_each_buffer(&view->content_tree->node,
+		ci_audit_paint_buffer, &content);
+	if (view->container->scene_tree) {
+		wlr_scene_node_for_each_buffer(&view->container->scene_tree->node,
+			ci_audit_paint_buffer, &container);
+	}
+	wlr_log(WLR_INFO, "SD_CI_PAINT_AUDIT content=%d content_surfaces=%d "
+		"container=%d container_surfaces=%d",
+		content.count, content.surfaces, container.count, container.surfaces);
 	int x = 0, y = 0;
 	wlr_scene_node_coords(&view->content_tree->node, &x, &y);
 	double sx = 0, sy = 0;
