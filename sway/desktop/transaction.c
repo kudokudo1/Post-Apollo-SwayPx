@@ -9,6 +9,9 @@
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/desktop/idle_inhibit_v1.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
@@ -1283,6 +1286,9 @@ static void transaction_progress(void) {
 	}
 	transaction_apply(server.queued_transaction);
 	arrange_root(root);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	stage_director_ci_scene_probe_post_layout();
+#endif
 	cursor_rebase_all();
 	transaction_destroy(server.queued_transaction);
 	start_animations();

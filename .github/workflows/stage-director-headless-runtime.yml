@@ -7,6 +7,9 @@ on:
       - stage-director/isolated-full-build-v0-20261026
       - stage-director/headless-runtime-smoke-20261026
       - stage-director/scenefx-software-headless-v0-20261026
+      - stage-director/ci-udmabuf-access-v0-20261026
+      - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
       - 'include/**'
@@ -14,6 +17,12 @@ on:
       - 'flake.lock'
       - 'tests/stage_director/headless_sway_smoke.sh'
       - 'tests/stage_director/ci_udmabuf_smoke.sh'
+      - 'tests/stage_director/ci_native_news_actor_smoke.sh'
+      - 'tests/stage_director/assert_native_news_actor.py'
+      - 'tests/stage_director/test_ci_scene_probe_boundary.py'
+      - 'tests/stage_director/assert_news_render_pixels.py'
+      - 'tests/stage_director/test_ci_render_pixel_boundary.py'
+      - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
   workflow_dispatch:
 
@@ -52,6 +61,16 @@ jobs:
             | tee "$RUNNER_TEMP/swaypx-headless-store-path.txt"
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$output/bin/sway"
+      - name: Build CI-only wlroots scene probe separately from normal SwayPX
+        run: |
+          set -euo pipefail
+          python3 tests/stage_director/test_ci_scene_probe_boundary.py
+          python3 tests/stage_director/test_ci_render_pixel_boundary.py
+          probe="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); in f.packages.x86_64-linux.swayfx-unwrapped-git.overrideAttrs (old: { mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-news-scene-probe=true" ]; })' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$probe/bin/sway"
+          echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
+          echo "STAGE_DIRECTOR_CI_SCENE_PROBE=1" >> "$GITHUB_ENV"
+          echo "Built a distinct, test-only compositor; default package remains unchanged."
       - name: Resolve Mesa EGL vendor and software drivers from the locked Nixpkgs
         run: |
           set -euo pipefail
@@ -61,11 +80,35 @@ jobs:
           test -d "$mesa/lib/dri"
           test -f "$mesa/lib/libEGL_mesa.so.0"
           echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Prepare one native Wayland actor from pinned Nixpkgs
+        run: |
+          set -euo pipefail
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
+          test -x "$foot/bin/foot"
+          test -x "$compositor/bin/swaymsg"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "The disposable actor uses a spoofable app_id as a candidate only."
       - name: Run headless compositor with temporary user-only udmabuf access
         run: |
           set -euo pipefail
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+      - name: Publish isolated pixel screenshot for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-director-news-ci-pixel-screenshot
+          path: ${{ runner.temp }}/stage-director-render-evidence.png
+          retention-days: 7
+          if-no-files-found: ignore
       - name: State smoke-test limits
         if: always()
         run: |

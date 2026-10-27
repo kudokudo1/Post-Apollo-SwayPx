@@ -4,6 +4,9 @@
 #include <string.h>
 #include "log.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
 #include "sway/stage_director_news_shadow.h"
@@ -424,6 +427,9 @@ void stage_director_view_identity_changed(struct sway_view *view) {
 }
 
 void stage_director_view_unmapped(struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	stage_director_ci_scene_probe_restore(view);
+#endif
 	struct stage_director_actor *actor = find_actor(view);
 	if (!actor) {
 		return;
@@ -463,6 +469,9 @@ void stage_director_observe_container(struct sway_container *container,
 	}
 
 	classify(container->view, reason ? reason : "geometry");
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	stage_director_ci_scene_probe(container->view);
+#endif
 
 	struct stage_director_actor *actor = find_actor(container->view);
 	if (!actor) {
