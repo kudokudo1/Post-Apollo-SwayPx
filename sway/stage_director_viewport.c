@@ -155,3 +155,89 @@ const char *stage_director_viewport_result_name(
 	}
 	return "DENY_UNKNOWN";
 }
+
+
+/* This is a pure policy, never a credential issuer nor a scene setter. */
+static bool frame_same_rect(struct stage_director_rect a,
+		struct stage_director_rect b) {
+	return a.x == b.x && a.y == b.y &&
+		a.width == b.width && a.height == b.height;
+}
+
+struct stage_director_viewport_frame_decision
+stage_director_viewport_frame_policy(
+		const struct stage_director_viewport_frame_owner *owner,
+		const struct stage_director_viewport_frame_observation *frame) {
+	struct stage_director_viewport_frame_decision result = {
+		.state = SD_FRAME_DEFAULT_NO_OWNER,
+	};
+	if (!owner || !frame || owner->epoch == 0 ||
+			!owner->native_host_ref || !owner->native_actor_ref ||
+			!owner->native_output_ref || !owner->native_root_surface_ref) {
+		return result;
+	}
+	if (frame->epoch != owner->epoch ||
+			frame->native_host_ref != owner->native_host_ref ||
+			frame->native_actor_ref != owner->native_actor_ref ||
+			frame->native_output_ref != owner->native_output_ref) {
+		result.state = SD_FRAME_DEFAULT_STALE_OWNER;
+		return result;
+	}
+	if (!frame->native_root_surface ||
+			frame->native_root_surface_ref != owner->native_root_surface_ref) {
+		result.state = SD_FRAME_DEFAULT_DIFFERENT_SURFACE;
+		return result;
+	}
+	/*
+	 * Any host/output/viewport reconfiguration invalidates the old frame
+	 * lease. Actor movement is evaluated using fresh geometry every frame;
+	 * it must still contain the exact authorized viewport.
+	 */
+	if (!frame_same_rect(owner->authorized_host, frame->geometry.host) ||
+			!frame_same_rect(owner->authorized_output, frame->geometry.output) ||
+			!frame_same_rect(owner->authorized_viewport,
+				frame->geometry.viewport)) {
+		result.state = SD_FRAME_DEFAULT_STALE_GEOMETRY;
+		return result;
+	}
+	const struct stage_director_viewport_plan geometry =
+		stage_director_viewport_plan(&frame->geometry);
+	if (geometry.result != SD_VIEWPORT_GEOMETRY_ONLY ||
+			!geometry.geometry_valid) {
+		result.state = SD_FRAME_DEFAULT_STALE_GEOMETRY;
+		return result;
+	}
+	const struct stage_director_viewport_clip_plan clip =
+		stage_director_viewport_prepare_clip(&frame->geometry,
+			&owner->authority, frame->root_surface_geometry_x,
+			frame->root_surface_geometry_y);
+	if (!clip.allowed) {
+		result.state = SD_FRAME_DEFAULT_GUARDS_MISSING;
+		return result;
+	}
+	/*
+	 * Root wl_surface SOURCE crop and renderer DESTINATION must advance
+	 * together. PR #28 demonstrated that a narrow src crop alone will be
+	 * stretched by SwayPX output_configure_scene to full content geometry.
+	 * This function intentionally does not call any scene setter.
+	 */
+	result.root_surface_crop = clip.root_surface_clip;
+	result.proposed_dest_width = clip.root_surface_clip.width;
+	result.proposed_dest_height = clip.root_surface_clip.height;
+	result.proposed_override = true;
+	result.state = SD_FRAME_PLAN_DESTINATION_ONLY;
+	return result;
+}
+
+const char *stage_director_viewport_frame_state_name(
+		enum stage_director_viewport_frame_state state) {
+	switch (state) {
+	case SD_FRAME_DEFAULT_NO_OWNER: return "DEFAULT_NO_OWNER";
+	case SD_FRAME_DEFAULT_STALE_OWNER: return "DEFAULT_STALE_OWNER";
+	case SD_FRAME_DEFAULT_DIFFERENT_SURFACE: return "DEFAULT_DIFFERENT_SURFACE";
+	case SD_FRAME_DEFAULT_STALE_GEOMETRY: return "DEFAULT_STALE_GEOMETRY";
+	case SD_FRAME_DEFAULT_GUARDS_MISSING: return "DEFAULT_GUARDS_MISSING";
+	case SD_FRAME_PLAN_DESTINATION_ONLY: return "PLAN_DESTINATION_ONLY";
+	}
+	return "DEFAULT_UNKNOWN";
+}
