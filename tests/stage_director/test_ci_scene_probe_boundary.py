@@ -26,7 +26,7 @@ assert 'strcmp(ci, "true")' in probe
 assert 'strcmp(enabled, "1")' in probe
 assert 'strcmp(title, "SD1-CI-DISPOSABLE-NOT-BROWSER")' in probe
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
-assert probe.count("wlr_scene_node_at(") == 4
+assert probe.count("wlr_scene_node_at(") == 6
 assert "view_center_and_clip_surface(view);" in probe
 assert "normal_clip_restored=%d" in probe
 assert "normal_clip_restored=1" in test
