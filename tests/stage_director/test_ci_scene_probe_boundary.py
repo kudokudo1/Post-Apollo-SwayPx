@@ -26,7 +26,12 @@ assert 'strcmp(ci, "true")' in probe
 assert 'strcmp(enabled, "1")' in probe
 assert 'strcmp(title, "SD1-CI-DISPOSABLE-NOT-BROWSER")' in probe
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
-assert probe.count("wlr_scene_node_at(") == 6
+# The post-layout gate now samples both outside edges independently. Keep
+# the exact count locked so added hit tests need deliberate CI review.
+assert probe.count("wlr_scene_node_at(") == 8
+assert "outside_right = wlr_scene_node_at(" in probe
+assert "outside_bottom = wlr_scene_node_at(" in probe
+assert "outside_right ? 1 : 0, outside_bottom ? 1 : 0" in probe
 assert "view_center_and_clip_surface(view);" in probe
 assert "normal_clip_restored=%d" in probe
 assert "normal_clip_restored=1" in test
