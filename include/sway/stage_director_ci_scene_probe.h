@@ -5,4 +5,6 @@ struct sway_view;
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
+/* CI-only post-arrange hook; production Meson option stays disabled. */
+void stage_director_ci_scene_probe_post_layout(void);
 #endif
