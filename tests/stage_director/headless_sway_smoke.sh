@@ -56,17 +56,17 @@ EOF
 # Never resize a running headless output: pinned Mesa llvmpipe crashes on
 # the original mode-change experiment in this disposable CI environment.
 cold_size="${STAGE_DIRECTOR_CI_COLD_SIZE:-1920x1080}"
-if [[ "$cold_size" != 1920x1080 && "$cold_size" != 1918x1078 ]]; then
+if [[ "$cold_size" != 1920x1080 && "$cold_size" != 1888x1056 ]]; then
   echo "BLOCKED_UNSUPPORTED_CI_COLD_SIZE: $cold_size" >&2
   exit 2
 fi
-if [[ "$cold_size" == 1918x1078 ]]; then
+if [[ "$cold_size" == 1888x1056 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
     echo "BLOCKED_COLD_OUTPUT_OUTSIDE_CI" >&2
     exit 2
   fi
-  sed -i 's/output \* resolution 1920x1080/output * resolution 1918x1078/' "$config"
+  sed -i 's/output \* resolution 1920x1080/output * resolution 1888x1056/' "$config"
 fi
 echo "SD_CI_COLD_BOOT virtual_output=$cold_size"
 
