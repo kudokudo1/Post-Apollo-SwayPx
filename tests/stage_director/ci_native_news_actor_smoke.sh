@@ -157,7 +157,7 @@ if not (int(pid) == expected == int(view_pid) and
         int(uid) == int(proc_uid) and int(start) > 0 and
         native_xdg == "1" and result == "PASS"):
     raise SystemExit("FAIL: native Wayland peer does not match disposable actor/process")
-pathlib.Path(sys.argv[3]).write_text(f"{pid} {uid} {start}\\n", encoding="ascii")
+pathlib.Path(sys.argv[3]).write_text(f"{pid} {uid} {start}\n", encoding="ascii")
 print("SD_CI_WL_PEER_CHECK source=actual_wl_client actor_pid_matched=1 "
       "uid_starttime_verified=1 authority=NONE result=PASS")
 PY
