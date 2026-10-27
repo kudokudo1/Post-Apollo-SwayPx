@@ -101,13 +101,13 @@ jobs:
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
       - name: Publish isolated pixel screenshot for review
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: stage-director-news-ci-pixel-screenshot
           path: ${{ runner.temp }}/stage-director-render-evidence.png
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
       - name: State smoke-test limits
         if: always()
         run: |
