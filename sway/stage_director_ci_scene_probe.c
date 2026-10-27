@@ -1,5 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <wayland-server-core.h>
+#include "sway/stage_director_process_evidence.h"
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
@@ -366,6 +369,42 @@ void stage_director_ci_scene_probe(struct sway_view *view) {
 	if (!before_inside || !before_outside) {
 		return;
 	}
+	/*
+	 * CI-only real Wayland peer evidence. SwayPX view_map already populates
+	 * view->pid from this same wl_client, but that stored PID is not a
+	 * browser-launch authorization. Re-query kernel-supplied peer credentials
+	 * and compare with a fresh Linux /proc identity for the disposable actor.
+	 *
+	 * The check does not start a broker, bind a NEWS viewer, grant input or
+	 * alter the rendering path; evidence=FAIL only fails the test harness.
+	 */
+	pid_t peer_pid = -1;
+	uid_t peer_uid = (uid_t)-1;
+	gid_t peer_gid = (gid_t)-1;
+	struct stage_director_process_identity observed = {0};
+	const bool native_xdg =
+		view->type == SWAY_VIEW_XDG_SHELL && view->surface->resource != NULL;
+	if (native_xdg) {
+		struct wl_client *client =
+			wl_resource_get_client(view->surface->resource);
+		if (client) {
+			wl_client_get_credentials(client, &peer_pid, &peer_uid, &peer_gid);
+		}
+	}
+	const bool proc_ok = peer_pid > 0 &&
+		stage_director_read_linux_process((int64_t)peer_pid,
+			&observed, NULL);
+	const bool verified = native_xdg && proc_ok &&
+		peer_pid == view->pid && observed.pid == peer_pid &&
+		observed.start_time_ticks > 0 &&
+		observed.uid == (uint32_t)peer_uid;
+	wlr_log(verified ? WLR_INFO : WLR_ERROR,
+		"SD_CI_WL_PEER pid=%ld view_pid=%ld uid=%lu proc_uid=%lu "
+		"proc_start=%llu native_xdg=%d evidence=%s",
+		(long)peer_pid, (long)view->pid,
+		(unsigned long)peer_uid, (unsigned long)observed.uid,
+		(unsigned long long)observed.start_time_ticks,
+		native_xdg ? 1 : 0, verified ? "PASS" : "FAIL");
 	measured = true;
 	wlr_scene_subsurface_tree_set_clip(&view->content_tree->node, &local_clip);
 	struct wlr_scene_node *after_inside = wlr_scene_node_at(
