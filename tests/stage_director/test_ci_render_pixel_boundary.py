@@ -62,6 +62,16 @@ assert "stage-director-cold-$stage.ppm" in actor
 assert 'STAGE_DIRECTOR_CI_COLD_STAGE' in actor
 cold = read("tests/stage_director/compare_news_cold_pixels.py")
 assert "BOTH_COLD_OUTPUTS_LEAK" in cold
+assert "STAGE_DIRECTOR_CI_UNMAP_PIXEL=1" in workflow
+assert "compare_news_unmap_pixels.py" in workflow
+assert "--check-absent" in actor
+assert "stage-director-render-evidence-unmapped.png" in actor
+assert "SD_CI_UNMAP_CAPTURE surface_absent=1" in actor
+assert "unmap_result" in workflow and "initial_result" in workflow
+unmap = read("tests/stage_director/compare_news_unmap_pixels.py")
+assert "WHITE_PERSISTS_AFTER_UNMAP" in unmap
+assert "ACTOR_PIXELS_CLEARED_AFTER_UNMAP" in unmap
+assert "if residual:" in unmap
 assert 'first["size"] != (1920, 1080)' in cold
 assert 'fresh["size"] != (1888, 1056)' in cold
 headless = read("tests/stage_director/headless_sway_smoke.sh")
