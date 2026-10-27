@@ -16,6 +16,29 @@ pixel = read("tests/stage_director/assert_news_render_pixels.py")
 assert "option('sd-ci-news-scene-probe', type: 'boolean', value: false" in options
 assert "STAGE_DIRECTOR_CI_RENDER_PROBE" in probe
 assert "ci_render_actor" in probe
+# Distinct parent/child NEWS evidence is observed in real disposable CI,
+# never promoted to compositor-owned browser-session authorization.
+child_witness = read("tests/stage_director/ci_native_child_lineage_witness.c")
+sway_meson = read("sway/meson.build")
+assert "ci_native_child_lineage_witness.c" in workflow
+assert "STAGE_DIRECTOR_CI_CHILD_LINEAGE=1" in workflow
+assert "STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS=" in workflow
+assert "ci_native_child_lineage_witness.c" not in sway_meson
+assert "SD_CI_CHILD_WL_PEER pid=" in probe
+assert "wl_client_get_credentials(client, &peer_pid, &peer_uid, &peer_gid)" in probe
+assert "SD1-CI-LINEAGE-CHILD-NOT-BROWSER" in probe
+assert "stage_director_process_check(&launch_root" in child_witness
+assert "stage_director_read_linux_process" in child_witness
+assert "SD_CI_CHILD_LINEAGE root_pid=" in child_witness
+assert "authority=NONE result=PASS" in child_witness
+assert 'strcmp(github, "true")' in child_witness
+for unsafe in ("posix_spawn(", "fork(", "execve(", "system(",
+               "kill(", "wlr_scene_buffer_set_dest_size("):
+    assert unsafe not in child_witness, unsafe
+assert "STAGE_DIRECTOR_CI_CHILD_LINEAGE" in actor
+assert 'lineage_root=$!' in actor
+assert 'read -r peer_pid peer_uid peer_start' in actor
+assert 'SD_CI_CHILD_LIFETIME owned_launch_root_reaped=1' in actor
 # CI-only held pidfd must use exact native peer tuple and existing custody
 # API, without becoming part of the production SwayPX build.
 pidfd = read("tests/stage_director/ci_native_news_pidfd_witness.c")
