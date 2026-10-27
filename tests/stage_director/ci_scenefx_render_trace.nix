@@ -18,8 +18,9 @@ in
     # Fail if the project changes dependency ordering, rather than silently
     # replacing some unrelated dependency or losing the pinned SceneFX.
     buildInputs =
-      assert builtins.elemAt old.buildInputs (builtins.length old.buildInputs - 1)
-        == ordinarySceneFX;
+      assert
+        (builtins.toString (builtins.elemAt old.buildInputs (builtins.length old.buildInputs - 1)))
+        == (builtins.toString ordinarySceneFX);
       (pkgs.lib.init old.buildInputs) ++ [ tracedSceneFX ];
     mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-news-scene-probe=true" ];
   })
