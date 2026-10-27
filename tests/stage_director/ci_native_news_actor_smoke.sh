@@ -161,12 +161,59 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       grep -F 'SD_CI_BUFFER_DEST normalized=' "$runtime/sway.log" | tail -n 3
     fi
     grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
+    grep -F 'SD_CI_BUFFER_METRICS ' "$runtime/sway.log" || true
+    if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]] &&
+        ! grep -Eq 'SD_CI_BUFFER_METRICS .*after_dst=320x240 ' "$runtime/sway.log"; then
+      echo "FAIL: CI-only buffer destination metrics absent or not normalized" >&2
+      exit 1
+    fi
     if ! grep -Eq 'SD_CI_POST_LAYOUT clip_reapplied=1 origin=[0-9]+,[0-9]+ inside=1 outside=0 result=PASS' "$runtime/sway.log"; then
       echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
       exit 1
     fi
-    python3 tests/stage_director/assert_news_render_pixels.py \
-      "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json"
+    if [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
+      # Changing the isolated headless output size requires a newly sized
+      # render buffer. This is a diagnostic, NEVER a production resize.
+      # Keep the original (possibly failing) screenshot as an independent
+      # acceptance gate so a fresh frame cannot hide an initial leak.
+      echo "Stage Director CI: reallocate disposable output 1920x1080 -> 1918x1078"
+      "$swaymsg_binary" -s "$ipc_socket" -r \
+        'output * resolution 1918x1078' >"$runtime/news-output-change.json"
+      python3 - "$runtime/news-output-change.json" <<'PY'
+import json
+import sys
+responses = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(responses, list) or not responses or not all(
+    isinstance(item, dict) and item.get("success") is True for item in responses
+):
+    raise SystemExit("FAIL: isolated output resize rejected by SwayPX")
+PY
+      sleep 0.5
+      "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip-reallocated.ppm"
+      "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+        "$RUNNER_TEMP/stage-director-render-evidence-reallocated.png"
+      "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+        >"$runtime/news-tree-reallocated.json"
+      python3 tests/stage_director/compare_news_reallocated_pixels.py \
+        "$runtime/news-clip.ppm" "$runtime/news-clip-reallocated.ppm" \
+        "$tree_json" "$runtime/news-tree-reallocated.json"
+
+      # Preserve both failure results and the actual second screenshot.
+      original_result=0
+      fresh_result=0
+      python3 tests/stage_director/assert_news_render_pixels.py \
+        "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json" || original_result=$?
+      python3 tests/stage_director/assert_news_render_pixels.py \
+        "$runtime/sway.log" "$runtime/news-clip-reallocated.ppm" \
+        "$runtime/news-tree-reallocated.json" || fresh_result=$?
+      if [[ "$original_result" != 0 || "$fresh_result" != 0 ]]; then
+        echo "FAIL: original=$original_result fresh_output=$fresh_result; CI render gate still closed" >&2
+        exit 1
+      fi
+    else
+      python3 tests/stage_director/assert_news_render_pixels.py \
+        "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json"
+    fi
   fi
 fi
 echo "No video browser, keyboard/popup guard or production scene authority activated."

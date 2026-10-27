@@ -21,6 +21,7 @@ on:
       - 'tests/stage_director/assert_native_news_actor.py'
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
       - 'tests/stage_director/assert_news_render_pixels.py'
+      - 'tests/stage_director/compare_news_reallocated_pixels.py'
       - 'tests/stage_director/test_ci_render_pixel_boundary.py'
       - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
@@ -93,6 +94,7 @@ jobs:
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."
@@ -106,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stage-director-news-ci-pixel-screenshot
-          path: ${{ runner.temp }}/stage-director-render-evidence.png
+          path: ${{ runner.temp }}/stage-director-render-evidence*.png
           retention-days: 7
           if-no-files-found: ignore
       - name: State smoke-test limits

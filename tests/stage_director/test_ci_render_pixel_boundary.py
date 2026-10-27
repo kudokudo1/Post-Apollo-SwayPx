@@ -25,6 +25,9 @@ assert "arrange_root(root);" in transaction
 assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
+assert "SD_CI_BUFFER_METRICS at=" in probe
+assert "after_dst=%dx%d" in probe
+assert "SD_CI_BUFFER_METRICS .*after_dst=320x240" in actor
 assert "ci_restore_root_buffer" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" in workflow
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
@@ -40,6 +43,17 @@ assert "-t ppm" in actor and "assert_news_render_pixels.py" in actor
 assert "inside_luma" in pixel and "outside_luma" in pixel
 assert "max(abs(v - desktop) for v in outside_values)" in pixel
 assert "Stage Director actual compositor render PIXELS confined" in pixel
+assert "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=1" in workflow
+assert "compare_news_reallocated_pixels.py" in workflow
+assert "compare_news_reallocated_pixels.py" in actor
+assert "news-clip-reallocated.ppm" in actor
+assert "stage-director-render-evidence*.png" in workflow
+assert 'output * resolution 1918x1078' in actor
+assert 'original_result' in actor and 'fresh_result' in actor
+compare = read("tests/stage_director/compare_news_reallocated_pixels.py")
+assert 'original["size"] != (1920, 1080)' in compare
+assert 'resized["size"] != (1918, 1078)' in compare
+assert "OVERFLOW_SURVIVES_FRESH_OUTPUT" in compare
 for forbidden in ("stage_director_viewport_clip_view(",
                   "stage_director_news_custody_capture(",
                   "posix_spawn(", "fork(", "execve(",

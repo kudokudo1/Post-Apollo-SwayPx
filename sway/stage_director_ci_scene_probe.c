@@ -37,8 +37,21 @@ static void ci_normalize_root_buffer(struct wlr_scene_buffer *buffer,
 	(void)sy;
 	(void)data;
 	if (!wlr_scene_surface_try_from_buffer(buffer)) return;
+	const int previous_width = buffer->dst_width;
+	const int previous_height = buffer->dst_height;
 	wlr_scene_buffer_set_dest_size(buffer,
 		ci_render_clip.width, ci_render_clip.height);
+	/* CI-only evidence: source crop, destination size and native buffer
+	 * are distinct renderer inputs. This does not assert visible clipping. */
+	wlr_log(WLR_INFO,
+		"SD_CI_BUFFER_METRICS at=%d,%d before_dst=%dx%d after_dst=%dx%d "
+		"src=%.1f,%.1f %.1fx%.1f buffer=%dx%d",
+		sx, sy, previous_width, previous_height,
+		buffer->dst_width, buffer->dst_height,
+		buffer->src_box.x, buffer->src_box.y,
+		buffer->src_box.width, buffer->src_box.height,
+		buffer->buffer ? buffer->buffer->width : 0,
+		buffer->buffer ? buffer->buffer->height : 0);
 	ci_dest_normalized_count++;
 }
 
