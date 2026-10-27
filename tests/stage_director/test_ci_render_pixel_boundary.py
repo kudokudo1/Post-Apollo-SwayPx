@@ -26,6 +26,19 @@ assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
 assert "SD_CI_BUFFER_METRICS at=" in probe
+assert "struct ci_paint_audit" in probe
+assert "struct ci_draw_audit" in probe
+assert "SD_CI_DRAW_NODE kind=rect" in probe
+assert "SD_CI_DRAW_NODE kind=buffer" in probe
+assert "SD_CI_DRAW_AUDIT nodes=" in probe
+assert "node == audit->output_handler" in probe
+assert "SD_CI_DRAW_AUDIT nodes=[1-9]" in actor
+assert "SD_CI_PAINT_BUFFER scope=" in probe
+assert "SD_CI_PAINT_AUDIT content=" in probe
+assert 'scope = "container"' in probe
+assert 'scope = "content"' in probe
+assert "ci_audit_paint_buffer" in probe
+assert "SD_CI_PAINT_AUDIT content=[1-9]" in actor
 assert "after_dst=%dx%d" in probe
 assert "SD_CI_BUFFER_METRICS .*after_dst=320x240" in actor
 assert "ci_restore_root_buffer" in probe
@@ -62,6 +75,39 @@ assert "stage-director-cold-$stage.ppm" in actor
 assert 'STAGE_DIRECTOR_CI_COLD_STAGE' in actor
 cold = read("tests/stage_director/compare_news_cold_pixels.py")
 assert "BOTH_COLD_OUTPUTS_LEAK" in cold
+assert "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" in workflow
+assert "compare_news_moved_pixels.py" in workflow
+assert "stage-director-moved.ppm" in workflow
+assert "moved_pixel_result" in workflow
+assert "SD_CI_MOVE_START target=520,180" in actor
+assert "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" in workflow
+assert "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" in workflow
+assert "compare_news_background_pixels.py" in workflow
+assert "background_pixel_result" in workflow
+assert "SD_CI_BACKGROUND_REFRESH mapped_actor=1 desktop_restored=1" in actor
+assert "stage-director-render-evidence-background-refreshed.png" in actor
+background = read("tests/stage_director/compare_news_background_pixels.py")
+assert "LEAK_PERSISTS_AFTER_BACKGROUND_REFRESH" in background
+assert "LEAK_CLEARED_AFTER_BACKGROUND_REFRESH" in background
+assert "first_id != second_id" in background
+assert "compare_news_opacity_pixels.py" in workflow
+assert "restored_pixel_result" in workflow
+assert "SD_CI_OPACITY_START alpha=0 actor_still_mapped=1" in actor
+assert "SD_CI_OPACITY_CAPTURE alpha=0 actor_still_mapped=1" in actor
+assert "SD_CI_OPACITY_CAPTURE alpha=1 actor_still_mapped=1" in actor
+assert "stage-director-render-evidence-opacity-zero.png" in actor
+assert "stage-director-render-evidence-opacity-one.png" in actor
+opacity = read("tests/stage_director/compare_news_opacity_pixels.py")
+assert "ACTOR_PIXELS_CLEAR_ON_ALPHA_ZERO" in opacity
+assert "ACTOR_PIXELS_PERSIST_AT_ALPHA_ZERO" in opacity
+assert "len(set(ids)) != 1" in opacity
+assert "SD_CI_MOVE_CAPTURE actor_still_mapped=1" in actor
+assert "stage-director-render-evidence-moved.png" in actor
+moved = read("tests/stage_director/compare_news_moved_pixels.py")
+assert "LEAK_FOLLOWS_MAPPED_ACTOR" in moved
+assert "MOVED_LEAK_WITH_OLD_RESIDUAL" in moved
+assert "before_id != after_id" in moved
+assert "old_x + 8 >= x1" in moved
 assert 'first["size"] != (1920, 1080)' in cold
 assert 'fresh["size"] != (1888, 1056)' in cold
 headless = read("tests/stage_director/headless_sway_smoke.sh")

@@ -23,6 +23,9 @@ on:
       - 'tests/stage_director/assert_news_render_pixels.py'
       - 'tests/stage_director/compare_news_reallocated_pixels.py'
       - 'tests/stage_director/compare_news_cold_pixels.py'
+      - 'tests/stage_director/compare_news_moved_pixels.py'
+      - 'tests/stage_director/compare_news_opacity_pixels.py'
+      - 'tests/stage_director/compare_news_background_pixels.py'
       - 'tests/stage_director/test_ci_render_pixel_boundary.py'
       - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
@@ -96,6 +99,9 @@ jobs:
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."
@@ -111,8 +117,43 @@ jobs:
             bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
 
           compare_result=0
+          move_result=0
+          opacity_result=0
+          background_result=0
+          background_pixel_result=0
+          restored_pixel_result=0
+          python3 tests/stage_director/compare_news_background_pixels.py \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-background-refreshed.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" \
+            "$RUNNER_TEMP/stage-director-background-refreshed-tree.json" || background_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-background-refreshed.ppm" \
+            "$RUNNER_TEMP/stage-director-background-refreshed-tree.json" || background_pixel_result=$?
+          moved_pixel_result=0
+          python3 tests/stage_director/compare_news_opacity_pixels.py \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-zero.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" \
+            "$RUNNER_TEMP/stage-director-opacity-zero-tree.json" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" || opacity_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" || restored_pixel_result=$?
           initial_result=0
           fresh_result=0
+          python3 tests/stage_director/compare_news_moved_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" || move_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" || moved_pixel_result=$?
           python3 tests/stage_director/compare_news_cold_pixels.py \
             "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
             "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
@@ -126,8 +167,8 @@ jobs:
             "$RUNNER_TEMP/stage-director-cold-fresh.log" \
             "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
             "$RUNNER_TEMP/stage-director-cold-fresh-tree.json" || fresh_result=$?
-          if [[ "$compare_result" -ne 0 || "$initial_result" -ne 0 || "$fresh_result" -ne 0 ]]; then
-            echo "FAIL: cold_comparison=$compare_result initial_pixel=$initial_result fresh_pixel=$fresh_result" >&2
+          if [[ "$compare_result" -ne 0 || "$move_result" -ne 0 || "$opacity_result" -ne 0 || "$background_result" -ne 0 || "$moved_pixel_result" -ne 0 || "$restored_pixel_result" -ne 0 || "$background_pixel_result" -ne 0 || "$initial_result" -ne 0 || "$fresh_result" -ne 0 ]]; then
+            echo "FAIL: cold_comparison=$compare_result moved_comparison=$move_result opacity=$opacity_result background=$background_result moved_pixel=$moved_pixel_result restored_pixel=$restored_pixel_result background_pixel=$background_pixel_result initial_pixel=$initial_result fresh_pixel=$fresh_result" >&2
             exit 1
           fi
           echo "Stage Director two independent native-render pixel captures: PASS"

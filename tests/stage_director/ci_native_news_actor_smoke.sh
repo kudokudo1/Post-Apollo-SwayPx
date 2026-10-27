@@ -162,6 +162,18 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     fi
     grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
     grep -F 'SD_CI_BUFFER_METRICS ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_PAINT_BUFFER ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_PAINT_AUDIT ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_DRAW_NODE ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_DRAW_AUDIT ' "$runtime/sway.log" || true
+    if ! grep -Eq 'SD_CI_DRAW_AUDIT nodes=[1-9][0-9]* trees=[1-9][0-9]* buffers=[1-9][0-9]* drawable_buffers=[1-9][0-9]*' "$runtime/sway.log"; then
+      echo "FAIL: CI drawable-scene node provenance absent" >&2
+      exit 1
+    fi
+    if ! grep -Eq 'SD_CI_PAINT_AUDIT content=[1-9][0-9]* content_surfaces=[1-9][0-9]* container=[1-9][0-9]*' "$runtime/sway.log"; then
+      echo "FAIL: CI renderer scene buffer provenance not measured" >&2
+      exit 1
+    fi
     if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]] &&
         ! grep -Eq 'SD_CI_BUFFER_METRICS .*after_dst=320x240 ' "$runtime/sway.log"; then
       echo "FAIL: CI-only buffer destination metrics absent or not normalized" >&2
@@ -186,6 +198,104 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       cp -- "$tree_json" "$RUNNER_TEMP/stage-director-cold-$stage-tree.json"
       cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence-cold-$stage.png"
       echo "SD_CI_COLD_CAPTURE stage=$stage screenshot_saved=1"
+      if [[ "$stage" == initial &&
+            "${STAGE_DIRECTOR_CI_MOVE_PIXEL:-}" == 1 ]]; then
+        # Move the SAME still-mapped native actor on the SAME fixed output.
+        # This is only performed on the disposable GitHub-hosted compositor.
+        # No production scene authority or output mode change is involved.
+        echo "SD_CI_MOVE_START target=520,180"
+        "$swaymsg_binary" -s "$ipc_socket" -r \
+          '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] move position 520 180' \
+          >"$runtime/news-move-response.json"
+        python3 - "$runtime/news-move-response.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(data, list) or len(data) != 1 or data[0].get("success") is not True:
+    raise SystemExit("FAIL: CI native actor move command was not accepted")
+PY
+        sleep 0.45
+        "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+          >"$runtime/news-tree-moved.json"
+        "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip-moved.ppm"
+        "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+          "$RUNNER_TEMP/stage-director-render-evidence-moved.png"
+        cp -- "$runtime/news-clip-moved.ppm" \
+          "$RUNNER_TEMP/stage-director-moved.ppm"
+        cp -- "$runtime/news-tree-moved.json" \
+          "$RUNNER_TEMP/stage-director-moved-tree.json"
+        echo "SD_CI_MOVE_CAPTURE actor_still_mapped=1 screenshot_saved=1"
+        if [[ "${STAGE_DIRECTOR_CI_OPACITY_PIXEL:-}" == 1 ]]; then
+          # The same XDG native actor remains mapped. Only its Sway-native
+          # opacity is toggled to test drawing versus residual pixels.
+          echo "SD_CI_OPACITY_START alpha=0 actor_still_mapped=1"
+          "$swaymsg_binary" -s "$ipc_socket" -r \
+            '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] opacity set 0' \
+            >"$runtime/news-opacity-zero-response.json"
+          python3 - "$runtime/news-opacity-zero-response.json" <<'PY'
+import json, sys
+responses=json.load(open(sys.argv[1], encoding="utf-8"))
+if len(responses) != 1 or responses[0].get("success") is not True:
+    raise SystemExit("FAIL: CI Sway opacity-zero command rejected")
+PY
+          sleep 0.4
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/news-tree-opacity-zero.json"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+            "$RUNNER_TEMP/stage-director-opacity-zero.ppm"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+            "$RUNNER_TEMP/stage-director-render-evidence-opacity-zero.png"
+          echo "SD_CI_OPACITY_CAPTURE alpha=0 actor_still_mapped=1"
+          "$swaymsg_binary" -s "$ipc_socket" -r \
+            '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] opacity set 1' \
+            >"$runtime/news-opacity-one-response.json"
+          python3 - "$runtime/news-opacity-one-response.json" <<'PY'
+import json, sys
+responses=json.load(open(sys.argv[1], encoding="utf-8"))
+if len(responses) != 1 or responses[0].get("success") is not True:
+    raise SystemExit("FAIL: CI Sway opacity-restoration command rejected")
+PY
+          sleep 0.4
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/news-tree-opacity-one.json"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+            "$RUNNER_TEMP/stage-director-render-evidence-opacity-one.png"
+          cp -- "$runtime/news-tree-opacity-zero.json" \
+            "$RUNNER_TEMP/stage-director-opacity-zero-tree.json"
+          cp -- "$runtime/news-tree-opacity-one.json" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json"
+          echo "SD_CI_OPACITY_CAPTURE alpha=1 actor_still_mapped=1"
+          if [[ "${STAGE_DIRECTOR_CI_BACKGROUND_REFRESH:-}" == 1 ]]; then
+            # Replace only the headless background surface twice, leaving
+            # output mode, actor geometry and actor opacity unchanged.
+            # This is a redraw/damage discriminator, NOT paint acceptance.
+            for bg in '#010101' '#000000'; do
+              "$swaymsg_binary" -s "$ipc_socket" -r \
+                "output * bg $bg solid_color" >"$runtime/news-bg-response.json"
+              python3 - "$runtime/news-bg-response.json" <<'PY'
+import json, sys
+responses = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(responses, list) or not responses or not all(
+    isinstance(i, dict) and i.get("success") is True for i in responses
+):
+    raise SystemExit("FAIL: CI-only background refresh rejected")
+PY
+              sleep 0.35
+            done
+            "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+              >"$runtime/news-tree-background-refreshed.json"
+            "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+              "$RUNNER_TEMP/stage-director-background-refreshed.ppm"
+            "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+              "$RUNNER_TEMP/stage-director-render-evidence-background-refreshed.png"
+            cp -- "$runtime/news-tree-background-refreshed.json" \
+              "$RUNNER_TEMP/stage-director-background-refreshed-tree.json"
+            echo "SD_CI_BACKGROUND_REFRESH mapped_actor=1 desktop_restored=1"
+          fi
+        fi
+      fi
     elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
       # Changing the isolated headless output size requires a newly sized
       # render buffer. This is a diagnostic, NEVER a production resize.
