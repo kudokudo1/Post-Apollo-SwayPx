@@ -153,6 +153,13 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     test -s "$runtime/news-clip.png"
     cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence.png"
     echo "Stage Director CI: preserved actual compositor screenshot for auditing"
+    if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]]; then
+      if ! grep -Eq 'SD_CI_BUFFER_DEST normalized=[1-9][0-9]*' "$runtime/sway.log"; then
+        echo "FAIL: no actual native wlr_scene_surface destination was normalized" >&2
+        exit 1
+      fi
+      grep -F 'SD_CI_BUFFER_DEST normalized=' "$runtime/sway.log" | tail -n 3
+    fi
     grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
     if ! grep -Eq 'SD_CI_POST_LAYOUT clip_reapplied=1 origin=[0-9]+,[0-9]+ inside=1 outside=0 result=PASS' "$runtime/sway.log"; then
       echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
