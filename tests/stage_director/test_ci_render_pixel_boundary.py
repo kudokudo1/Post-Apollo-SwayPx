@@ -25,6 +25,9 @@ assert "arrange_root(root);" in transaction
 assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
+assert "SD_CI_BUFFER_METRICS at=" in probe
+assert "after_dst=%dx%d" in probe
+assert "SD_CI_BUFFER_METRICS .*after_dst=320x240" in actor
 assert "ci_restore_root_buffer" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" in workflow
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
