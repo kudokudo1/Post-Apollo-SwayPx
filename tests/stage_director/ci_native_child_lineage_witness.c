@@ -105,14 +105,25 @@ int main(int argc, char **argv) {
 	const struct stage_director_process_evidence_result wrong_actor_start =
 		stage_director_process_check(&launch_root, (int64_t)peer_pid,
 			peer_start + 1, stage_director_read_linux_process, NULL);
+	/* Test an actual, live process with valid kernel starttime that is
+	 * NOT descended from this launch root. A made-up starttime would merely
+	 * trigger ACTOR_MISMATCH and would not test ancestry rejection. */
+	struct stage_director_process_identity self = {0};
+	if (!stage_director_read_linux_process((int64_t)getpid(), &self, NULL) ||
+			self.start_time_ticks == 0) {
+		fputs("FAIL: missing real unrelated witness process\n", stderr);
+		return 1;
+	}
 	const struct stage_director_process_evidence_result unrelated =
 		stage_director_process_check(&launch_root, (int64_t)getpid(),
-			1, stage_director_read_linux_process, NULL);
-	if (stale.lineage_candidate || !all_denied(stale) ||
-			foreign_uid.lineage_candidate || !all_denied(foreign_uid) ||
-			wrong_actor_start.lineage_candidate || !all_denied(wrong_actor_start) ||
-			unrelated.lineage_candidate || !all_denied(unrelated)) {
-		fputs("FAIL: invalid process identity was accepted as real ancestry\n", stderr);
+			self.start_time_ticks, stage_director_read_linux_process, NULL);
+	if (stale.state != SD_PROCESS_EVIDENCE_ROOT_MISMATCH ||
+			foreign_uid.state != SD_PROCESS_EVIDENCE_ROOT_MISMATCH ||
+			wrong_actor_start.state != SD_PROCESS_EVIDENCE_ACTOR_MISMATCH ||
+			unrelated.state != SD_PROCESS_EVIDENCE_UNRELATED ||
+			!all_denied(stale) || !all_denied(foreign_uid) ||
+			!all_denied(wrong_actor_start) || !all_denied(unrelated)) {
+		fputs("FAIL: stale/foreign/unrelated live process identity accepted\n", stderr);
 		return 1;
 	}
 	printf("SD_CI_CHILD_LINEAGE root_pid=%" PRIu64 " client_pid=%" PRIu64
