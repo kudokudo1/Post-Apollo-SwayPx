@@ -32,6 +32,46 @@ void stage_director_ci_scene_probe_restore(struct sway_view *view) {
 	}
 }
 
+/*
+ * Sway transaction_progress calls arrange_root() AFTER applying container
+ * state. arrange_root() writes the ordinary wlroots clip, overwriting an
+ * earlier CI probe. Reapply only in this test-only, last-after-arrange hook.
+ * Never expose this as authenticated session or production rendering power.
+ */
+void stage_director_ci_scene_probe_post_layout(void) {
+	struct sway_view *view = ci_render_actor;
+	if (!view || !view->surface || !view->content_tree || !view->container ||
+			view->container->node.destroying) {
+		return;
+	}
+	if (view->geometry.x != ci_render_geometry.x ||
+			view->geometry.y != ci_render_geometry.y ||
+			view->geometry.width != ci_render_geometry.width ||
+			view->geometry.height != ci_render_geometry.height) {
+		stage_director_ci_scene_probe_restore(view);
+		wlr_log(WLR_ERROR, "SD_CI_POST_LAYOUT stale_geometry=1 result=FAIL");
+		return;
+	}
+	wlr_scene_subsurface_tree_set_clip(
+		&view->content_tree->node, &ci_render_clip);
+	int x = 0, y = 0;
+	wlr_scene_node_coords(&view->content_tree->node, &x, &y);
+	double sx = 0, sy = 0;
+	struct wlr_scene_node *inside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 160,
+		(double)y + view->geometry.y + 160, &sx, &sy);
+	struct wlr_scene_node *outside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 24,
+		(double)y + view->geometry.y + 24, &sx, &sy);
+	wlr_log(WLR_INFO,
+		"SD_CI_POST_LAYOUT clip_reapplied=1 origin=%d,%d "
+		"inside=%d outside=%d result=%s", x, y,
+		inside ? 1 : 0, outside ? 1 : 0,
+		inside && !outside ? "PASS" : "FAIL");
+}
+
 void stage_director_ci_scene_probe(struct sway_view *view) {
 	static bool measured = false;
 	if (!view || !view->surface || !view->content_tree ||
