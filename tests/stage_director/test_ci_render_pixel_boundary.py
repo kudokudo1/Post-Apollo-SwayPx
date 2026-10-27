@@ -26,6 +26,19 @@ assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
 assert "SD_CI_BUFFER_METRICS at=" in probe
+output_source = read("sway/desktop/output.c")
+probe_header = read("include/sway/stage_director_ci_scene_probe.h")
+assert "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" in workflow
+assert "SD_CI_FRAME_DEST_PRESERVED dst=320x240" in actor
+assert "stage_director_ci_scene_probe_preserve_dest(" in output_source
+assert "stage_director_ci_scene_probe_preserve_dest(" in probe
+assert "stage_director_ci_scene_probe_preserve_dest(" in probe_header
+assert "if (!stage_director_ci_scene_probe_preserve_dest(buffer))" in output_source
+assert output_source.count("#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE") >= 2
+assert 'strcmp(ci, "true")' in probe
+assert 'strcmp(enabled, "1")' in probe
+assert 'probe.found || ci_render_clip.width != 320' in probe
+assert "ci_render_actor->content_tree" in probe
 # Renderer telemetry is produced only by a separate, pinned CI derivation.
 trace_nix = read("tests/stage_director/ci_scenefx_render_trace.nix")
 trace_patch = read("tests/stage_director/ci_scenefx_render_trace.py")
@@ -69,6 +82,10 @@ assert "[colors-dark]" in actor and "background=ffffff" in actor
 assert "-t ppm" in actor and "assert_news_render_pixels.py" in actor
 assert "inside_luma" in pixel and "outside_luma" in pixel
 assert "max(abs(v - desktop) for v in outside_values)" in pixel
+# Four-sided real screenshot regression proof; no simple top-left-only proxy.
+for edge in ("(x + 24, y + 160)", "(x + 160, y + 24)",
+             "(x + 450, y + 150)", "(x + 160, y + 370)"):
+    assert edge in pixel, edge
 assert "Stage Director actual compositor render PIXELS confined" in pixel
 assert "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" in workflow
 assert "compare_news_reallocated_pixels.py" in workflow

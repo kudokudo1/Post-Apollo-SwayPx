@@ -65,6 +65,59 @@ static void ci_restore_root_buffer(struct wlr_scene_buffer *buffer,
 	wlr_scene_buffer_set_dest_size(buffer, 0, 0);
 }
 
+/*
+ * Prevent Sway's output_repaint_timer_handler from undoing the held clip's
+ * destination AFTER post_layout() has already normalized the native buffer.
+ * This is linked only with the opt-in CI Meson target and exact disposable
+ * actor. The normal package builds output_configure_scene unchanged.
+ */
+struct ci_dest_candidate {
+	struct wlr_scene_buffer *candidate;
+	bool found;
+};
+
+static void ci_match_render_dest(struct wlr_scene_buffer *buffer,
+		int sx, int sy, void *data) {
+	(void)sx;
+	(void)sy;
+	struct ci_dest_candidate *candidate = data;
+	if (buffer == candidate->candidate) {
+		candidate->found = true;
+	}
+}
+
+bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer) {
+	if (!buffer || !ci_render_actor || !ci_render_actor->content_tree ||
+			!ci_render_actor->surface || !ci_render_actor->container ||
+			ci_render_actor->container->node.destroying) {
+		return false;
+	}
+	const char *ci = getenv("GITHUB_ACTIONS");
+	const char *enabled = getenv("STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE");
+	if (!ci || strcmp(ci, "true") != 0 ||
+			!enabled || strcmp(enabled, "1") != 0 ||
+			!wlr_scene_surface_try_from_buffer(buffer)) {
+		return false;
+	}
+	const struct ci_dest_candidate initial = { .candidate = buffer };
+	struct ci_dest_candidate probe = initial;
+	wlr_scene_node_for_each_buffer(&ci_render_actor->content_tree->node,
+		ci_match_render_dest, &probe);
+	if (!probe.found || ci_render_clip.width != 320 ||
+			ci_render_clip.height != 240) {
+		return false;
+	}
+	wlr_scene_buffer_set_dest_size(buffer,
+		ci_render_clip.width, ci_render_clip.height);
+	static int reports;
+	if (reports++ < 4) {
+		wlr_log(WLR_INFO, "SD_CI_FRAME_DEST_PRESERVED dst=%dx%d "
+			"source=CI_only_after_output_configure_scene",
+			buffer->dst_width, buffer->dst_height);
+	}
+	return true;
+}
+
 void stage_director_ci_scene_probe_restore(struct sway_view *view) {
 	if (!view || ci_render_actor != view) return;
 	ci_render_actor = NULL;

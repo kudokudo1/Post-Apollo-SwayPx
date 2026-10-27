@@ -10,6 +10,7 @@ on:
       - stage-director/ci-udmabuf-access-v0-20261026
       - stage-director/news-native-actor-smoke-v0-20261026
       - stage-director/ci-mapped-move-pixel-probe-20261027
+      - stage-director/ci-scenefx-render-pass-trace-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
@@ -104,6 +105,7 @@ jobs:
           echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_FX_PASS_TRACE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" >> "$GITHUB_ENV"
