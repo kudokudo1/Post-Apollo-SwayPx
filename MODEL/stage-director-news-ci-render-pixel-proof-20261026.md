@@ -21,6 +21,10 @@ Prior CI already compiled full SwayPX, started a headless wlroots/SceneFX compos
 
 **Correction under test:** Use the native Sway IPC `get_tree` rectangle **after the actor is mapped** as the screenshot coordinate origin. Check two inside and two outside sample patches plus a separate desktop reference. Capture/preserve the PNG screenshot before evaluation, including when assertions fail, to permit independent diagnosis. This change does not alter production compositor rendering or scene policy.
 
+**Second measured result:** [CI run #40423982356](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/40423982356) successfully built both compositor variants, mapped the 1402×847 native Wayland test actor at **(259,117)**, and captured the real screenshot. Its samples were `inside_luma=[255,255]`, `outside_luma=[255,255]`, `desktop_luma=0`. **Visual containment FAIL** was correctly reported and the [screenshot artifact](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/40423982356/artifacts/12699476653) preserved. This result must not be described as successful rendering containment.
+
+**Root cause under examination:** SwayFX's `transaction_progress()` calls `arrange_root(root)` **after** `transaction_apply()`. Normal Sway view arrangements invoke `wlr_scene_subsurface_tree_set_clip()` with the full view content rectangle, overwriting the earlier temporary crop. The first native clip/hit-test probe ran before that final arrangement, so its positive result was not a promise about the painted frame. The follow-up adds an **explicit CI-compile-only** post-`arrange_root` hook that reapplies the temporary crop and measures native hits again; pixel verification still must independently pass. Normal production builds exclude the hook entirely.
+
 ## HOW TO USE
 
 Inspect the new draft PR's **Stage Director isolated headless SwayPX runtime smoke**, source output and (only on success) GitHub artifact `stage-director-news-ci-pixel-screenshot`. Nothing is installed or modified on the operator's desktop.
