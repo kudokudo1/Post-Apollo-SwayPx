@@ -1,0 +1,75 @@
+name: Stage Director NEWS synthetic session-correlation gate
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/news-frame-policy-contract-20261027
+    paths:
+      - 'tests/stage_director/ci_news_session_correlation.*'
+      - 'tests/stage_director/test_ci_news_session_correlation.c'
+      - 'include/sway/stage_director_viewer_session.h'
+      - 'sway/stage_director_viewer_session.c'
+      - 'include/sway/stage_director_process_evidence.h'
+      - 'sway/stage_director_process_evidence.c'
+      - 'include/sway/stage_director_weather_host.h'
+      - 'sway/stage_director_weather_host.c'
+      - 'include/sway/stage_director_viewport.h'
+      - 'sway/stage_director_viewport.c'
+      - '.github/workflows/stage-director-news-candidate-join.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no broker activation or production call
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in (
+              'sway/stage_director.c',
+              'sway/desktop/output.c',
+              'sway/desktop/xdg_shell.c',
+              'sway/commands.c',
+              'sway/ipc-server.c',
+              'sway/meson.build',
+          ):
+              source = Path(name).read_text(encoding='utf-8')
+              assert 'sd_ci_news_correlate(' not in source, name
+              assert 'ci_news_session_correlation.c' not in source, name
+          root = Path('tests/stage_director')
+          header = (root / 'ci_news_session_correlation.h').read_text(encoding='utf-8')
+          source = (root / 'ci_news_session_correlation.c').read_text(encoding='utf-8')
+          assert 'SD_CI_NEWS_CORRELATED_CANDIDATE_ONLY' in header
+          assert 'owner_verified = false' in source
+          for denied in ('can_launch', 'can_bind_viewer', 'can_render',
+                         'can_accept_input', 'can_show_popup'):
+              assert denied + ' = false' in source, denied
+          for unsafe in ('posix_spawn(', 'fork(', 'execve(', 'system(',
+                         'wlr_scene_buffer_set_dest_size(', 'kill('):
+              assert unsafe not in source, unsafe
+          print('SD_CI_NEWS_JOIN: isolated evidence only; no launch, render, IPC or input authority: PASS')
+          PY
+      - name: Compile and execute parent-child candidate mismatch matrix
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+             -Itests/stage_director \
+             sway/stage_director_viewport.c \
+             sway/stage_director_viewer_session.c \
+             sway/stage_director_weather_host.c \
+             sway/stage_director_process_evidence.c \
+             tests/stage_director/ci_news_session_correlation.c \
+             tests/stage_director/test_ci_news_session_correlation.c \
+             -o "$RUNNER_TEMP/sd1-ci-news-join"
+          "$RUNNER_TEMP/sd1-ci-news-join"
