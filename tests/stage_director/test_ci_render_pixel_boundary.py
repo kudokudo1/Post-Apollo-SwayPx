@@ -81,6 +81,15 @@ assert "stage-director-moved.ppm" in workflow
 assert "moved_pixel_result" in workflow
 assert "SD_CI_MOVE_START target=520,180" in actor
 assert "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" in workflow
+assert "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" in workflow
+assert "compare_news_background_pixels.py" in workflow
+assert "background_pixel_result" in workflow
+assert "SD_CI_BACKGROUND_REFRESH mapped_actor=1 desktop_restored=1" in actor
+assert "stage-director-render-evidence-background-refreshed.png" in actor
+background = read("tests/stage_director/compare_news_background_pixels.py")
+assert "LEAK_PERSISTS_AFTER_BACKGROUND_REFRESH" in background
+assert "LEAK_CLEARED_AFTER_BACKGROUND_REFRESH" in background
+assert "first_id != second_id" in background
 assert "compare_news_opacity_pixels.py" in workflow
 assert "restored_pixel_result" in workflow
 assert "SD_CI_OPACITY_START alpha=0 actor_still_mapped=1" in actor
