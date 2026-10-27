@@ -26,6 +26,13 @@ assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
 assert "SD_CI_BUFFER_METRICS at=" in probe
+assert "struct ci_paint_audit" in probe
+assert "SD_CI_PAINT_BUFFER scope=" in probe
+assert "SD_CI_PAINT_AUDIT content=" in probe
+assert 'scope = "container"' in probe
+assert 'scope = "content"' in probe
+assert "ci_audit_paint_buffer" in probe
+assert "SD_CI_PAINT_AUDIT content=[1-9]" in actor
 assert "after_dst=%dx%d" in probe
 assert "SD_CI_BUFFER_METRICS .*after_dst=320x240" in actor
 assert "ci_restore_root_buffer" in probe
