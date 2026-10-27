@@ -56,7 +56,7 @@ assert 'resized["size"] != (1918, 1078)' in compare
 assert "OVERFLOW_SURVIVES_FRESH_OUTPUT" in compare
 assert "STAGE_DIRECTOR_CI_COLD_STAGE=initial" in workflow
 assert "STAGE_DIRECTOR_CI_COLD_STAGE=fresh" in workflow
-assert "STAGE_DIRECTOR_CI_COLD_SIZE=1918x1078" in workflow
+assert "STAGE_DIRECTOR_CI_COLD_SIZE=1888x1056" in workflow
 assert "compare_news_cold_pixels.py" in workflow
 assert "stage-director-cold-$stage.ppm" in actor
 assert 'STAGE_DIRECTOR_CI_COLD_STAGE' in actor
