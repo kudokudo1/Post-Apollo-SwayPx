@@ -52,6 +52,24 @@ output * resolution 1920x1080
 for_window [app_id="post-apollo-weather-news"] floating enable
 EOF
 
+# Two independent compositor boots use different virtual output sizes.
+# Never resize a running headless output: pinned Mesa llvmpipe crashes on
+# the original mode-change experiment in this disposable CI environment.
+cold_size="${STAGE_DIRECTOR_CI_COLD_SIZE:-1920x1080}"
+if [[ "$cold_size" != 1920x1080 && "$cold_size" != 1918x1078 ]]; then
+  echo "BLOCKED_UNSUPPORTED_CI_COLD_SIZE: $cold_size" >&2
+  exit 2
+fi
+if [[ "$cold_size" == 1918x1078 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_COLD_OUTPUT_OUTSIDE_CI" >&2
+    exit 2
+  fi
+  sed -i 's/output \* resolution 1920x1080/output * resolution 1918x1078/' "$config"
+fi
+echo "SD_CI_COLD_BOOT virtual_output=$cold_size"
+
 export XDG_RUNTIME_DIR="$runtime"
 export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
