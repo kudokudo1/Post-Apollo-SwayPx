@@ -50,7 +50,8 @@ static void ci_normalize_root_buffer(struct wlr_scene_buffer *buffer,
 		buffer->dst_width, buffer->dst_height,
 		buffer->src_box.x, buffer->src_box.y,
 		buffer->src_box.width, buffer->src_box.height,
-		buffer->buffer_width, buffer->buffer_height);
+		buffer->buffer ? buffer->buffer->width : 0,
+		buffer->buffer ? buffer->buffer->height : 0);
 	ci_dest_normalized_count++;
 }
 
