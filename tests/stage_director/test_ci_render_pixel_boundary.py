@@ -82,6 +82,10 @@ assert "[colors-dark]" in actor and "background=ffffff" in actor
 assert "-t ppm" in actor and "assert_news_render_pixels.py" in actor
 assert "inside_luma" in pixel and "outside_luma" in pixel
 assert "max(abs(v - desktop) for v in outside_values)" in pixel
+# Four-sided real screenshot regression proof; no simple top-left-only proxy.
+for edge in ("(x + 24, y + 160)", "(x + 160, y + 24)",
+             "(x + 450, y + 150)", "(x + 160, y + 370)"):
+    assert edge in pixel, edge
 assert "Stage Director actual compositor render PIXELS confined" in pixel
 assert "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" in workflow
 assert "compare_news_reallocated_pixels.py" in workflow
