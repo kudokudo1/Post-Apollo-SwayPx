@@ -8,6 +8,7 @@ wayland_socket="${2:?Wayland display socket basename}"
 foot_binary="${STAGE_DIRECTOR_TEST_FOOT:-}"
 swaymsg_binary="${STAGE_DIRECTOR_TEST_SWAYMSG:-}"
 actor=""
+pidfd_witness=""
 actor_log="$runtime/news-actor.log"
 tree_json="$runtime/news-tree.json"
 
@@ -24,6 +25,12 @@ cleanup_actor() {
       fi
     fi
     wait "$actor" 2>/dev/null || true
+  fi
+  if [[ -n "$pidfd_witness" ]]; then
+    if kill -0 "$pidfd_witness" 2>/dev/null; then
+      kill -TERM "$pidfd_witness" 2>/dev/null || true
+    fi
+    wait "$pidfd_witness" 2>/dev/null || true
   fi
 }
 trap cleanup_actor EXIT
@@ -134,7 +141,7 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
   # against a fresh procfs identity in the CI compositor. No launching,
   # IPC authorization, focus or browser binding is performed here.
   grep -F 'SD_CI_WL_PEER ' "$runtime/sway.log" || true
-  python3 - "$actor" "$runtime/sway.log" <<'PY'
+  python3 - "$actor" "$runtime/sway.log" "$runtime/ci-native-peer.txt" <<'PY'
 import pathlib, re, sys
 expected = int(sys.argv[1])
 log = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
@@ -150,9 +157,38 @@ if not (int(pid) == expected == int(view_pid) and
         int(uid) == int(proc_uid) and int(start) > 0 and
         native_xdg == "1" and result == "PASS"):
     raise SystemExit("FAIL: native Wayland peer does not match disposable actor/process")
+pathlib.Path(sys.argv[3]).write_text(f"{pid} {uid} {start}\\n", encoding="ascii")
 print("SD_CI_WL_PEER_CHECK source=actual_wl_client actor_pid_matched=1 "
       "uid_starttime_verified=1 authority=NONE result=PASS")
 PY
+  if [[ "${STAGE_DIRECTOR_CI_PIDFD_WITNESS:-}" == 1 ]]; then
+    if [[ -z "${STAGE_DIRECTOR_TEST_PIDFD_WITNESS:-}" ||
+          ! -x "${STAGE_DIRECTOR_TEST_PIDFD_WITNESS:-}" ]]; then
+      echo "FAIL: no independently compiled CI-only pidfd witness" >&2
+      exit 1
+    fi
+    read -r peer_pid peer_uid peer_start < "$runtime/ci-native-peer.txt"
+    "$STAGE_DIRECTOR_TEST_PIDFD_WITNESS" \
+      "$peer_pid" "$peer_uid" "$peer_start" \
+      "$runtime/sd1-pidfd.ready" >"$runtime/sd1-pidfd.log" 2>&1 &
+    pidfd_witness=$!
+    ready=0
+    for _ in {1..100}; do
+      if [[ -f "$runtime/sd1-pidfd.ready" ]] &&
+          grep -Fxq READY "$runtime/sd1-pidfd.ready"; then
+        ready=1
+        break
+      fi
+      if ! kill -0 "$pidfd_witness" 2>/dev/null; then break; fi
+      sleep 0.1
+    done
+    if [[ "$ready" != 1 ]]; then
+      echo "FAIL: pidfd never held the mapped native peer" >&2
+      cat "$runtime/sd1-pidfd.log" >&2 || true
+      exit 1
+    fi
+    grep -F 'SD_CI_PIDFD_HELD ' "$runtime/sd1-pidfd.log"
+  fi
   if [[ "${STAGE_DIRECTOR_CI_PIXEL_TEST:-}" == 1 ]]; then
     expected="after_inside=1 after_outside=0 normal_clip_restored=0 result=PASS"
   else
@@ -381,6 +417,30 @@ PY
       python3 tests/stage_director/assert_news_render_pixels.py \
         "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json"
     fi
+  fi
+fi
+if [[ "${STAGE_DIRECTOR_CI_PIDFD_WITNESS:-}" == 1 ]]; then
+  # All compositor screen captures finished. Close only our disposable foot.
+  # The separate witness has held its pidfd since the mapped state and must
+  # observe a kernel process exit before we accept release and replay gates.
+  if [[ -z "$pidfd_witness" || -z "$actor" ]]; then
+    echo "FAIL: missing actor or pidfd lifetime witness" >&2
+    exit 1
+  fi
+  kill -TERM "$actor"
+  wait "$actor" 2>/dev/null || true
+  actor=""
+  if ! wait "$pidfd_witness"; then
+    cat "$runtime/sd1-pidfd.log" >&2 || true
+    echo "FAIL: native pidfd did not observe actor exit" >&2
+    exit 1
+  fi
+  pidfd_witness=""
+  cat "$runtime/sd1-pidfd.log"
+  if ! grep -Fq 'SD_CI_PIDFD_RELEASE process_exit_observed=1 pidfd_closed=1 epoch_replay_rejected=1 authority=NONE result=PASS' \
+      "$runtime/sd1-pidfd.log"; then
+    echo "FAIL: native pidfd release and replay gate missing" >&2
+    exit 1
   fi
 fi
 echo "No video browser, keyboard/popup guard or production scene authority activated."
