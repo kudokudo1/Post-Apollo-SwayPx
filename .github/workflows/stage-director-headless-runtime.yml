@@ -90,6 +90,10 @@ jobs:
           test -x "$compositor/bin/swaymsg"
           grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
           test -x "$grim/bin/grim"
+          gdb="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.gdb' --no-link --print-out-paths | tail -n 1)"
+          test -x "$gdb/bin/gdb"
+          echo "STAGE_DIRECTOR_TEST_GDB=$gdb/bin/gdb" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_GDB_TRACE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
@@ -111,6 +115,14 @@ jobs:
           path: ${{ runner.temp }}/stage-director-render-evidence*.png
           retention-days: 7
           if-no-files-found: ignore
+      - name: Publish isolated resize-crash debugger trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-director-ci-resize-backtrace
+          path: ${{ runner.temp }}/stage-director-resize-crash-backtrace.log
+          retention-days: 7
+          if-no-files-found: error
       - name: State smoke-test limits
         if: always()
         run: |

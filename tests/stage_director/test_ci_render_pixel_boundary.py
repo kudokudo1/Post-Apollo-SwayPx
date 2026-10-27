@@ -44,6 +44,18 @@ assert "inside_luma" in pixel and "outside_luma" in pixel
 assert "max(abs(v - desktop) for v in outside_values)" in pixel
 assert "Stage Director actual compositor render PIXELS confined" in pixel
 assert "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=1" in workflow
+# Crash capture is opt-in and restricted to an ephemeral GitHub runner.
+assert "STAGE_DIRECTOR_CI_GDB_TRACE=1" in workflow
+assert "STAGE_DIRECTOR_TEST_GDB=" in workflow
+assert "stage-director-ci-resize-backtrace" in workflow
+headless = read("tests/stage_director/headless_sway_smoke.sh")
+assert 'if [[ "${STAGE_DIRECTOR_CI_GDB_TRACE:-}" == 1 ]]' in headless
+assert '"${GITHUB_ACTIONS:-}" != true' in headless
+assert '"$runtime" != "$RUNNER_TEMP"/*' in headless
+assert 'set disable-randomization off' in headless
+assert 'thread apply all bt 16' in headless
+assert 'stop_ci_child' in headless
+assert 'stage-director-resize-crash-backtrace.log' in headless
 assert "compare_news_reallocated_pixels.py" in workflow
 assert "compare_news_reallocated_pixels.py" in actor
 assert "news-clip-reallocated.ppm" in actor
