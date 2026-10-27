@@ -90,7 +90,15 @@ def main():
         raise SystemExit("Actual Sway IPC actor rect invalid or too small")
     width, height, pixels = parse_ppm(sys.argv[2])
     inside_points = [(x + 160, y + 160), (x + 240, y + 220)]
-    outside_points = [(x + 24, y + 24), (x + 450, y + 150)]
+    # Sample ALL FOUR sides independently. Border/title decorations are
+    # outside these points; each is in the expected black content margin.
+    outside_points = [
+        (x + 24, y + 160),   # left of the intentional 320x240 viewport
+        (x + 160, y + 24),   # above
+        (x + 450, y + 150),  # right
+        (x + 160, y + 370),  # below
+        (x + 24, y + 24),    # top-left corner regression
+    ]
     inside_values = [patch_average(pixels, width, height, px, py)
                      for px, py in inside_points]
     outside_values = [patch_average(pixels, width, height, px, py)
