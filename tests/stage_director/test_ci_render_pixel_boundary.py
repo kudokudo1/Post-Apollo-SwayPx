@@ -80,6 +80,18 @@ assert "compare_news_moved_pixels.py" in workflow
 assert "stage-director-moved.ppm" in workflow
 assert "moved_pixel_result" in workflow
 assert "SD_CI_MOVE_START target=520,180" in actor
+assert "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" in workflow
+assert "compare_news_opacity_pixels.py" in workflow
+assert "restored_pixel_result" in workflow
+assert "SD_CI_OPACITY_START alpha=0 actor_still_mapped=1" in actor
+assert "SD_CI_OPACITY_CAPTURE alpha=0 actor_still_mapped=1" in actor
+assert "SD_CI_OPACITY_CAPTURE alpha=1 actor_still_mapped=1" in actor
+assert "stage-director-render-evidence-opacity-zero.png" in actor
+assert "stage-director-render-evidence-opacity-one.png" in actor
+opacity = read("tests/stage_director/compare_news_opacity_pixels.py")
+assert "ACTOR_PIXELS_CLEAR_ON_ALPHA_ZERO" in opacity
+assert "ACTOR_PIXELS_PERSIST_AT_ALPHA_ZERO" in opacity
+assert "len(set(ids)) != 1" in opacity
 assert "SD_CI_MOVE_CAPTURE actor_still_mapped=1" in actor
 assert "stage-director-render-evidence-moved.png" in actor
 moved = read("tests/stage_director/compare_news_moved_pixels.py")
