@@ -22,12 +22,44 @@ static struct sway_view *ci_render_actor;
 static struct wlr_box ci_render_clip;
 static struct wlr_box ci_render_geometry;
 
+/*
+ * Diagnostic: wlroots' subsurface clip narrows the SOURCE rectangle, while
+ * scene buffer DESTINATION dimensions are independently specified.
+ * The CI-only foot root buffer originally retained full-window destination
+ * size, so a narrow source rectangle could still paint far beyond the crop.
+ * Test one native root scene surface with an explicit 1:1 cropped destination.
+ */
+static int ci_dest_normalized_count;
+
+static void ci_normalize_root_buffer(struct wlr_scene_buffer *buffer,
+		int sx, int sy, void *data) {
+	(void)sx;
+	(void)sy;
+	(void)data;
+	if (!wlr_scene_surface_try_from_buffer(buffer)) return;
+	wlr_scene_buffer_set_dest_size(buffer,
+		ci_render_clip.width, ci_render_clip.height);
+	ci_dest_normalized_count++;
+}
+
+static void ci_restore_root_buffer(struct wlr_scene_buffer *buffer,
+		int sx, int sy, void *data) {
+	(void)sx;
+	(void)sy;
+	(void)data;
+	if (!wlr_scene_surface_try_from_buffer(buffer)) return;
+	/* The fixed CI foot actor had no previous destination-size override. */
+	wlr_scene_buffer_set_dest_size(buffer, 0, 0);
+}
+
 void stage_director_ci_scene_probe_restore(struct sway_view *view) {
 	if (!view || ci_render_actor != view) return;
 	ci_render_actor = NULL;
 	if (view->surface && view->content_tree && view->container &&
 			!view->container->node.destroying) {
 		view_center_and_clip_surface(view);
+		wlr_scene_node_for_each_buffer(&view->content_tree->node,
+			ci_restore_root_buffer, NULL);
 		wlr_log(WLR_INFO, "SD_CI_RENDER_PIXEL clip_restored_on_unmap=1");
 	}
 }
@@ -54,6 +86,14 @@ void stage_director_ci_scene_probe_post_layout(void) {
 	}
 	wlr_scene_subsurface_tree_set_clip(
 		&view->content_tree->node, &ci_render_clip);
+	ci_dest_normalized_count = 0;
+	const char *normalize = getenv("STAGE_DIRECTOR_CI_RENDER_NORMALIZE");
+	if (normalize && strcmp(normalize, "1") == 0) {
+		wlr_scene_node_for_each_buffer(&view->content_tree->node,
+			ci_normalize_root_buffer, NULL);
+		wlr_log(WLR_INFO, "SD_CI_BUFFER_DEST normalized=%d",
+			ci_dest_normalized_count);
+	}
 	int x = 0, y = 0;
 	wlr_scene_node_coords(&view->content_tree->node, &x, &y);
 	double sx = 0, sy = 0;
