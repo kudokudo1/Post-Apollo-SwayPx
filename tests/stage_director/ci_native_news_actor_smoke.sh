@@ -139,8 +139,8 @@ import pathlib, re, sys
 expected = int(sys.argv[1])
 log = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
 rows = re.findall(
-    r"SD_CI_WL_PEER pid=(\\d+) view_pid=(\\d+) uid=(\\d+) "
-    r"proc_uid=(\\d+) proc_start=(\\d+) native_xdg=(\\d+) evidence=(PASS|FAIL)",
+    r"SD_CI_WL_PEER pid=(\d+) view_pid=(\d+) uid=(\d+) "
+    r"proc_uid=(\d+) proc_start=(\d+) native_xdg=(\d+) evidence=(PASS|FAIL)",
     log,
 )
 if len(rows) != 1:
