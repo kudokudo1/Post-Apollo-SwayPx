@@ -62,6 +62,18 @@ assert "stage-director-cold-$stage.ppm" in actor
 assert 'STAGE_DIRECTOR_CI_COLD_STAGE' in actor
 cold = read("tests/stage_director/compare_news_cold_pixels.py")
 assert "BOTH_COLD_OUTPUTS_LEAK" in cold
+assert "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" in workflow
+assert "compare_news_moved_pixels.py" in workflow
+assert "stage-director-moved.ppm" in workflow
+assert "moved_pixel_result" in workflow
+assert "SD_CI_MOVE_START target=520,180" in actor
+assert "SD_CI_MOVE_CAPTURE actor_still_mapped=1" in actor
+assert "stage-director-render-evidence-moved.png" in actor
+moved = read("tests/stage_director/compare_news_moved_pixels.py")
+assert "LEAK_FOLLOWS_MAPPED_ACTOR" in moved
+assert "MOVED_LEAK_WITH_OLD_RESIDUAL" in moved
+assert "before_id != after_id" in moved
+assert "old_x + 8 >= x1" in moved
 assert 'first["size"] != (1920, 1080)' in cold
 assert 'fresh["size"] != (1888, 1056)' in cold
 headless = read("tests/stage_director/headless_sway_smoke.sh")
