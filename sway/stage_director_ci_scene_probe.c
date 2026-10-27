@@ -65,11 +65,23 @@ void stage_director_ci_scene_probe_post_layout(void) {
 		&view->content_tree->node,
 		(double)x + view->geometry.x + 24,
 		(double)y + view->geometry.y + 24, &sx, &sy);
+	/* The old probe only exercised top-left; the real screenshot leaks to
+	 * the right and below. Measure those edges in the SAME post-layout state. */
+	struct wlr_scene_node *outside_right = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 450,
+		(double)y + view->geometry.y + 150, &sx, &sy);
+	struct wlr_scene_node *outside_bottom = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 160,
+		(double)y + view->geometry.y + 370, &sx, &sy);
 	wlr_log(WLR_INFO,
 		"SD_CI_POST_LAYOUT clip_reapplied=1 origin=%d,%d "
-		"inside=%d outside=%d result=%s", x, y,
-		inside ? 1 : 0, outside ? 1 : 0,
-		inside && !outside ? "PASS" : "FAIL");
+		"inside=%d outside=%d result=%s outside_right=%d outside_bottom=%d",
+		x, y, inside ? 1 : 0, outside ? 1 : 0,
+		inside && !outside && !outside_right && !outside_bottom
+			? "PASS" : "FAIL",
+		outside_right ? 1 : 0, outside_bottom ? 1 : 0);
 }
 
 void stage_director_ci_scene_probe(struct sway_view *view) {
