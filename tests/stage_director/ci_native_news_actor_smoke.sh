@@ -169,6 +169,12 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     if [[ "${STAGE_DIRECTOR_CI_FX_PASS_TRACE:-}" == 1 ]]; then
       grep -F 'SD_CI_FX_SCENE_TEX ' "$runtime/sway.log" || true
       grep -F 'SD_CI_FX_GL_QUADS ' "$runtime/sway.log" || true
+      grep -F 'SD_CI_FRAME_DEST_PRESERVED ' "$runtime/sway.log" || true
+      if [[ "${STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE:-}" == 1 ]] &&
+          ! grep -Fq 'SD_CI_FRAME_DEST_PRESERVED dst=320x240' "$runtime/sway.log"; then
+        echo "FAIL: output repaint overwrote CI-held native destination" >&2
+        exit 1
+      fi
       if ! grep -Eq 'SD_CI_FX_SCENE_TEX src=96,96 320x240 dst=[0-9]+,[0-9]+ 320x240 ' "$runtime/sway.log"; then
         echo "FAIL: pinned SceneFX actual scene draw region not measured" >&2
         exit 1
