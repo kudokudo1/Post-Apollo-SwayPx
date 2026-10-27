@@ -26,6 +26,20 @@ assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
 assert "SD_CI_BUFFER_METRICS at=" in probe
+# Renderer telemetry is produced only by a separate, pinned CI derivation.
+trace_nix = read("tests/stage_director/ci_scenefx_render_trace.nix")
+trace_patch = read("tests/stage_director/ci_scenefx_render_trace.py")
+assert "ci_scenefx_render_trace.nix" in workflow
+assert "STAGE_DIRECTOR_CI_FX_PASS_TRACE=1" in workflow
+assert "SD_CI_FX_SCENE_TEX" in trace_patch
+assert "SD_CI_FX_GL_QUADS" in trace_patch
+assert "scene_anchor" in trace_patch and "pass_anchor" in trace_patch
+assert "pinned SceneFX render hook changed" in trace_patch
+assert "ordinarySceneFX.overrideAttrs" in trace_nix
+assert "postPatch" in trace_nix and "ci_scenefx_render_trace.py" in trace_nix
+assert "STAGE_DIRECTOR_CI_FX_PASS_TRACE" in actor
+assert "FAIL: pinned SceneFX actual scene draw region not measured" in actor
+assert "FAIL: pinned SceneFX submitted GLES texture region not measured" in actor
 assert "struct ci_paint_audit" in probe
 assert "struct ci_draw_audit" in probe
 assert "SD_CI_DRAW_NODE kind=rect" in probe
