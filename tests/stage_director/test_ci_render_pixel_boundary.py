@@ -23,6 +23,10 @@ assert "stage_director_ci_scene_probe_post_layout(" in header
 assert "stage_director_ci_scene_probe_post_layout();" in transaction
 assert "arrange_root(root);" in transaction
 assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
+assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
+assert "wlr_scene_buffer_set_dest_size(" in probe
+assert "ci_restore_root_buffer" in probe
+assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" in workflow
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
 assert "view_center_and_clip_surface(view);" in probe
 assert 'strcmp(ci, "true")' in probe
