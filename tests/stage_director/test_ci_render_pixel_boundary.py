@@ -29,7 +29,7 @@ assert "actions/upload-artifact@v4" in workflow
 assert "[colors-dark]" in actor and "background=ffffff" in actor
 assert "-t ppm" in actor and "assert_news_render_pixels.py" in actor
 assert "inside_luma" in pixel and "outside_luma" in pixel
-assert "abs(outside - desktop)" in pixel
+assert "max(abs(v - desktop) for v in outside_values)" in pixel
 assert "Stage Director actual compositor render PIXELS confined" in pixel
 for forbidden in ("stage_director_viewport_clip_view(",
                   "stage_director_news_custody_capture(",
