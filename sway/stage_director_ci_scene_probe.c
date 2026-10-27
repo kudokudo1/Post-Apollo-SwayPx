@@ -170,25 +170,14 @@ static void ci_draw_node(struct wlr_scene_node *node, int depth,
 			buffer->opacity > 0.99f ? 1 : 0,
 			node == audit->output_handler ? 1 : 0);
 		break;
-	case WLR_SCENE_NODE_SHADOW:;
+	default:
+		/* The compilation API exposes TREE/RECT/BUFFER here; future
+		 * SceneFX-private effects remain distinct unknown node types.
+		 * Do not guess private struct fields or their draw behavior. */
 		audit->effects++;
-		struct wlr_scene_shadow *shadow = wlr_scene_shadow_from_node(node);
-		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=shadow active=%d "
-			"at=%d,%d size=%dx%d alpha=%.3f",
-			active ? 1 : 0, x, y, shadow->width, shadow->height,
-			shadow->color[3]);
-		break;
-	case WLR_SCENE_NODE_BLUR:;
-		audit->effects++;
-		struct wlr_scene_blur *blur = wlr_scene_blur_from_node(node);
-		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=blur active=%d "
-			"at=%d,%d size=%dx%d alpha=%.3f",
-			active ? 1 : 0, x, y, blur->width, blur->height, blur->alpha);
-		break;
-	case WLR_SCENE_NODE_OPTIMIZED_BLUR:
-		audit->effects++;
-		wlr_log(WLR_INFO, "SD_CI_DRAW_NODE kind=optimized_blur active=%d at=%d,%d",
-			active ? 1 : 0, x, y);
+		wlr_log(WLR_INFO,
+			"SD_CI_DRAW_NODE kind=other type=%d active=%d at=%d,%d",
+			(int)node->type, active ? 1 : 0, x, y);
 		break;
 	}
 }
