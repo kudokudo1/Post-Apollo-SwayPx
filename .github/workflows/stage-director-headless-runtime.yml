@@ -107,7 +107,7 @@ jobs:
           # Do not issue the live-mode-change command that faults Mesa llvmpipe.
           STAGE_DIRECTOR_CI_COLD_STAGE=initial STAGE_DIRECTOR_CI_COLD_SIZE=1920x1080 \
             bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
-          STAGE_DIRECTOR_CI_COLD_STAGE=fresh STAGE_DIRECTOR_CI_COLD_SIZE=1918x1078 \
+          STAGE_DIRECTOR_CI_COLD_STAGE=fresh STAGE_DIRECTOR_CI_COLD_SIZE=1888x1056 \
             bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
 
           compare_result=0
