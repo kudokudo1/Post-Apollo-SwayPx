@@ -225,6 +225,49 @@ PY
         cp -- "$runtime/news-tree-moved.json" \
           "$RUNNER_TEMP/stage-director-moved-tree.json"
         echo "SD_CI_MOVE_CAPTURE actor_still_mapped=1 screenshot_saved=1"
+        if [[ "${STAGE_DIRECTOR_CI_OPACITY_PIXEL:-}" == 1 ]]; then
+          # The same XDG native actor remains mapped. Only its Sway-native
+          # opacity is toggled to test drawing versus residual pixels.
+          echo "SD_CI_OPACITY_START alpha=0 actor_still_mapped=1"
+          "$swaymsg_binary" -s "$ipc_socket" -r \
+            '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] opacity set 0' \
+            >"$runtime/news-opacity-zero-response.json"
+          python3 - "$runtime/news-opacity-zero-response.json" <<'PY'
+import json, sys
+responses=json.load(open(sys.argv[1], encoding="utf-8"))
+if len(responses) != 1 or responses[0].get("success") is not True:
+    raise SystemExit("FAIL: CI Sway opacity-zero command rejected")
+PY
+          sleep 0.4
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/news-tree-opacity-zero.json"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+            "$RUNNER_TEMP/stage-director-opacity-zero.ppm"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+            "$RUNNER_TEMP/stage-director-render-evidence-opacity-zero.png"
+          echo "SD_CI_OPACITY_CAPTURE alpha=0 actor_still_mapped=1"
+          "$swaymsg_binary" -s "$ipc_socket" -r \
+            '[app_id="post-apollo-weather-news" title="SD1-CI-DISPOSABLE-NOT-BROWSER"] opacity set 1' \
+            >"$runtime/news-opacity-one-response.json"
+          python3 - "$runtime/news-opacity-one-response.json" <<'PY'
+import json, sys
+responses=json.load(open(sys.argv[1], encoding="utf-8"))
+if len(responses) != 1 or responses[0].get("success") is not True:
+    raise SystemExit("FAIL: CI Sway opacity-restoration command rejected")
+PY
+          sleep 0.4
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/news-tree-opacity-one.json"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t ppm \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm"
+          "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+            "$RUNNER_TEMP/stage-director-render-evidence-opacity-one.png"
+          cp -- "$runtime/news-tree-opacity-zero.json" \
+            "$RUNNER_TEMP/stage-director-opacity-zero-tree.json"
+          cp -- "$runtime/news-tree-opacity-one.json" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json"
+          echo "SD_CI_OPACITY_CAPTURE alpha=1 actor_still_mapped=1"
+        fi
       fi
     elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
       # Changing the isolated headless output size requires a newly sized
