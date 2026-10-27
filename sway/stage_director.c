@@ -427,6 +427,9 @@ void stage_director_view_identity_changed(struct sway_view *view) {
 }
 
 void stage_director_view_unmapped(struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	stage_director_ci_scene_probe_restore(view);
+#endif
 	struct stage_director_actor *actor = find_actor(view);
 	if (!actor) {
 		return;
