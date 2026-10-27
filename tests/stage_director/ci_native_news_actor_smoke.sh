@@ -162,6 +162,12 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     fi
     grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
     grep -F 'SD_CI_BUFFER_METRICS ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_PAINT_BUFFER ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_PAINT_AUDIT ' "$runtime/sway.log" || true
+    if ! grep -Eq 'SD_CI_PAINT_AUDIT content=[1-9][0-9]* content_surfaces=[1-9][0-9]* container=[1-9][0-9]*' "$runtime/sway.log"; then
+      echo "FAIL: CI renderer scene buffer provenance not measured" >&2
+      exit 1
+    fi
     if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]] &&
         ! grep -Eq 'SD_CI_BUFFER_METRICS .*after_dst=320x240 ' "$runtime/sway.log"; then
       echo "FAIL: CI-only buffer destination metrics absent or not normalized" >&2
