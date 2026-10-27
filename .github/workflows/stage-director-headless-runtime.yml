@@ -9,6 +9,7 @@ on:
       - stage-director/scenefx-software-headless-v0-20261026
       - stage-director/ci-udmabuf-access-v0-20261026
       - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/ci-mapped-move-pixel-probe-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
