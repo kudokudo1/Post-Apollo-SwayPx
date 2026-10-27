@@ -22,6 +22,7 @@ on:
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
       - 'tests/stage_director/assert_news_render_pixels.py'
       - 'tests/stage_director/compare_news_reallocated_pixels.py'
+      - 'tests/stage_director/compare_news_cold_pixels.py'
       - 'tests/stage_director/test_ci_render_pixel_boundary.py'
       - 'meson_options.txt'
       - '.github/workflows/stage-director-headless-runtime.yml'
@@ -94,15 +95,42 @@ jobs:
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
-          echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."
-      - name: Run headless compositor with temporary user-only udmabuf access
+      - name: Compare two independently started CI compositors with fail-closed pixels
         run: |
           set -euo pipefail
           output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
-          bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+          # Separate compositor processes and separate graphics/output allocations.
+          # Do not issue the live-mode-change command that faults Mesa llvmpipe.
+          STAGE_DIRECTOR_CI_COLD_STAGE=initial STAGE_DIRECTOR_CI_COLD_SIZE=1920x1080 \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+          STAGE_DIRECTOR_CI_COLD_STAGE=fresh STAGE_DIRECTOR_CI_COLD_SIZE=1918x1078 \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+
+          compare_result=0
+          initial_result=0
+          fresh_result=0
+          python3 tests/stage_director/compare_news_cold_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" \
+            "$RUNNER_TEMP/stage-director-cold-fresh-tree.json" || compare_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" || initial_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-fresh.log" \
+            "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-fresh-tree.json" || fresh_result=$?
+          if [[ "$compare_result" -ne 0 || "$initial_result" -ne 0 || "$fresh_result" -ne 0 ]]; then
+            echo "FAIL: cold_comparison=$compare_result initial_pixel=$initial_result fresh_pixel=$fresh_result" >&2
+            exit 1
+          fi
+          echo "Stage Director two independent native-render pixel captures: PASS"
       - name: Publish isolated pixel screenshot for review
         if: always()
         uses: actions/upload-artifact@v4
