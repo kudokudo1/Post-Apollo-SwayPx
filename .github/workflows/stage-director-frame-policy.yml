@@ -1,0 +1,58 @@
+name: Stage Director NEWS per-frame policy contract
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/ci-mapped-move-pixel-probe-20261027
+      - stage-director/ci-scenefx-render-pass-trace-20261027
+    paths:
+      - 'include/sway/stage_director_viewport.h'
+      - 'sway/stage_director_viewport.c'
+      - 'tests/stage_director/test_viewport_frame_policy.c'
+      - '.github/workflows/stage-director-frame-policy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm policy is not wired to untrusted runtime hooks
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in (
+              'sway/stage_director.c',
+              'sway/desktop/output.c',
+              'sway/desktop/xdg_shell.c',
+              'sway/desktop/transaction.c',
+              'sway/commands.c',
+              'sway/ipc-server.c',
+          ):
+              text = Path(name).read_text(encoding='utf-8')
+              assert 'stage_director_viewport_frame_policy(' not in text, name
+          contract = Path('sway/stage_director_viewport.c').read_text(encoding='utf-8')
+          assert 'stage_director_viewport_prepare_clip(' in contract
+          assert 'stage_director_viewport_frame_policy(' in contract
+          assert 'wlr_scene_buffer_set_dest_size(' not in contract
+          assert 'posix_spawn(' not in contract
+          print('Frame policy: NO production actuation, public IPC or process launch path: PASS')
+          PY
+      - name: Compile and execute negative-case frame policy tests
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            tests/stage_director/test_viewport_frame_policy.c \
+            -o "$RUNNER_TEMP/sd1-frame-policy-contract"
+          "$RUNNER_TEMP/sd1-frame-policy-contract"
