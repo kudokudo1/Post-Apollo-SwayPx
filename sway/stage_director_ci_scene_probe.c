@@ -313,9 +313,47 @@ void stage_director_ci_scene_probe_post_layout(void) {
 
 void stage_director_ci_scene_probe(struct sway_view *view) {
 	static bool measured = false;
+	static bool child_reported = false;
 	if (!view || !view->surface || !view->content_tree ||
 			!view->container || view->container->node.destroying) {
 		return;
+	}
+	/*
+	 * A SECOND, independent CI Wayland window is spawned as the child of a
+	 * fixed bash launch root. It has no NEWS clip and no privileges. Observe
+	 * its actual wl_client credentials once so the isolated lineage witness
+	 * can check the real kernel process tree. This is never used as a scene
+	 * selector, launch ticket, IPC credential or browser session authority.
+	 */
+	const char *ci_child = getenv("GITHUB_ACTIONS");
+	const char *child_gate = getenv("STAGE_DIRECTOR_CI_CHILD_LINEAGE");
+	const char *child_title = view_get_title(view);
+	const char *child_app = view_get_app_id(view);
+	if (!child_reported && ci_child && strcmp(ci_child, "true") == 0 &&
+			child_gate && strcmp(child_gate, "1") == 0 &&
+			child_title && strcmp(child_title, "SD1-CI-LINEAGE-CHILD-NOT-BROWSER") == 0 &&
+			child_app && strcmp(child_app, "post-apollo-weather-news-child") == 0 &&
+			view->type == SWAY_VIEW_XDG_SHELL && view->surface->resource) {
+		child_reported = true;
+		struct wl_client *client = wl_resource_get_client(view->surface->resource);
+		pid_t peer_pid = -1;
+		uid_t peer_uid = (uid_t)-1;
+		gid_t peer_gid = (gid_t)-1;
+		if (client) {
+			wl_client_get_credentials(client, &peer_pid, &peer_uid, &peer_gid);
+		}
+		struct stage_director_process_identity observed = {0};
+		const bool peer_ok = peer_pid > 0 &&
+			stage_director_read_linux_process((int64_t)peer_pid, &observed, NULL) &&
+			observed.pid == peer_pid && observed.uid == (uint32_t)peer_uid &&
+			observed.start_time_ticks > 0 && view->pid == peer_pid;
+		wlr_log(peer_ok ? WLR_INFO : WLR_ERROR,
+			"SD_CI_CHILD_WL_PEER pid=%ld view_pid=%ld uid=%lu "
+			"proc_uid=%lu proc_start=%llu evidence=%s authority=NONE",
+			(long)peer_pid, (long)view->pid,
+			(unsigned long)peer_uid, (unsigned long)observed.uid,
+			(unsigned long long)observed.start_time_ticks,
+			peer_ok ? "PASS" : "FAIL");
 	}
 	const char *pixel = getenv("STAGE_DIRECTOR_CI_RENDER_PROBE");
 	const bool pixel_mode = pixel && strcmp(pixel, "1") == 0;
