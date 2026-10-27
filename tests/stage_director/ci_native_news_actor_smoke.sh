@@ -164,6 +164,12 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     grep -F 'SD_CI_BUFFER_METRICS ' "$runtime/sway.log" || true
     grep -F 'SD_CI_PAINT_BUFFER ' "$runtime/sway.log" || true
     grep -F 'SD_CI_PAINT_AUDIT ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_DRAW_NODE ' "$runtime/sway.log" || true
+    grep -F 'SD_CI_DRAW_AUDIT ' "$runtime/sway.log" || true
+    if ! grep -Eq 'SD_CI_DRAW_AUDIT nodes=[1-9][0-9]* trees=[1-9][0-9]* buffers=[1-9][0-9]* drawable_buffers=[1-9][0-9]*' "$runtime/sway.log"; then
+      echo "FAIL: CI drawable-scene node provenance absent" >&2
+      exit 1
+    fi
     if ! grep -Eq 'SD_CI_PAINT_AUDIT content=[1-9][0-9]* content_surfaces=[1-9][0-9]* container=[1-9][0-9]*' "$runtime/sway.log"; then
       echo "FAIL: CI renderer scene buffer provenance not measured" >&2
       exit 1
