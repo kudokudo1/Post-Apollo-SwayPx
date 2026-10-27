@@ -129,6 +129,30 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
     exit 1
   fi
   grep -F 'SD_CI_SCENE_CLIP measured=1' "$runtime/sway.log"
+  # The existing native SwayPX view_map grabs wl_client credentials.
+  # Validate the SAME disposable foot PID (not a title/app-id trust claim)
+  # against a fresh procfs identity in the CI compositor. No launching,
+  # IPC authorization, focus or browser binding is performed here.
+  grep -F 'SD_CI_WL_PEER ' "$runtime/sway.log" || true
+  python3 - "$actor" "$runtime/sway.log" <<'PY'
+import pathlib, re, sys
+expected = int(sys.argv[1])
+log = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
+rows = re.findall(
+    r"SD_CI_WL_PEER pid=(\d+) view_pid=(\d+) uid=(\d+) "
+    r"proc_uid=(\d+) proc_start=(\d+) native_xdg=(\d+) evidence=(PASS|FAIL)",
+    log,
+)
+if len(rows) != 1:
+    raise SystemExit(f"FAIL: expected one real Wayland client credential record; got {len(rows)}")
+pid, view_pid, uid, proc_uid, start, native_xdg, result = rows[0]
+if not (int(pid) == expected == int(view_pid) and
+        int(uid) == int(proc_uid) and int(start) > 0 and
+        native_xdg == "1" and result == "PASS"):
+    raise SystemExit("FAIL: native Wayland peer does not match disposable actor/process")
+print("SD_CI_WL_PEER_CHECK source=actual_wl_client actor_pid_matched=1 "
+      "uid_starttime_verified=1 authority=NONE result=PASS")
+PY
   if [[ "${STAGE_DIRECTOR_CI_PIXEL_TEST:-}" == 1 ]]; then
     expected="after_inside=1 after_outside=0 normal_clip_restored=0 result=PASS"
   else
