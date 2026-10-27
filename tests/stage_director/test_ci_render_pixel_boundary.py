@@ -16,6 +16,30 @@ pixel = read("tests/stage_director/assert_news_render_pixels.py")
 assert "option('sd-ci-news-scene-probe', type: 'boolean', value: false" in options
 assert "STAGE_DIRECTOR_CI_RENDER_PROBE" in probe
 assert "ci_render_actor" in probe
+# CI-only held pidfd must use exact native peer tuple and existing custody
+# API, without becoming part of the production SwayPX build.
+pidfd = read("tests/stage_director/ci_native_news_pidfd_witness.c")
+sway_meson = read("sway/meson.build")
+assert "ci_native_news_pidfd_witness.c" in workflow
+assert 'sway/stage_director_news_custody.c' in workflow
+assert "STAGE_DIRECTOR_CI_PIDFD_WITNESS=1" in workflow
+assert "STAGE_DIRECTOR_TEST_PIDFD_WITNESS=" in workflow
+assert "ci_native_news_pidfd_witness.c" not in sway_meson
+assert "stage_director_news_custody_reserve(" in pidfd
+assert "stage_director_news_custody_capture(" in pidfd
+assert "stage_director_news_custody_inspect(" in pidfd
+assert "stage_director_news_custody_release(" in pidfd
+assert "SD_CI_PIDFD_RELEASE process_exit_observed=1" in pidfd
+assert "authority=NONE" in pidfd
+assert 'strcmp(github, "true")' in pidfd
+assert "if (!exited ||" in pidfd
+for unsafe in ("posix_spawn(", "fork(", "execve(", "system(", "kill(",
+               "wlr_scene_buffer_set_dest_size("):
+    assert unsafe not in pidfd, unsafe
+assert 'STAGE_DIRECTOR_CI_PIDFD_WITNESS' in actor
+assert 'read -r peer_pid peer_uid peer_start' in actor
+assert 'kill -TERM "$actor"' in actor
+assert 'wait "$pidfd_witness"' in actor
 # CI-only real XDG peer evidence must come from the native wl_client, and
 # fail if it disagrees with Sway's stored PID or the disposable actor PID.
 assert "wl_resource_get_client(view->surface->resource)" in probe
