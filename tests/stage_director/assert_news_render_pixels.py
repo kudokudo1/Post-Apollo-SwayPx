@@ -5,6 +5,7 @@ One white native Wayland terminal is held behind a CI-only wlroots clip.
 The desktop outside the content is black. Sample independent inside/outside
 and desktop points on the same real grim P6 screenshot. Reject leaks.
 """
+import json
 import re
 import statistics
 import sys
@@ -56,8 +57,8 @@ def patch_average(image, width, height, x, y):
 
 
 def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: assert_news_render_pixels.py sway.log clip.ppm")
+    if len(sys.argv) != 4:
+        raise SystemExit("usage: assert_news_render_pixels.py sway.log clip.ppm sway_get_tree.json")
     log = Path(sys.argv[1]).read_text(encoding="utf-8")
     lines = [line for line in log.splitlines()
              if "SD_CI_RENDER_PIXEL inside=" in line and "clip_held=1" in line]
@@ -65,25 +66,50 @@ def main():
         raise SystemExit(f"expected one verified held native clip, got {len(lines)}")
     m = re.search(r"inside=(\d+),(\d+) outside=(\d+),(\d+)", lines[0])
     if not m:
-        raise SystemExit("Native clip log omitted actual global pixel coordinates")
-    ix, iy, ox, oy = map(int, m.groups())
-    if not (abs(ix-ox) > 50 and abs(iy-oy) > 50):
-        raise SystemExit("Pixel controls are not independent scene locations")
+        raise SystemExit("Native clip log omitted original scene hit-test coordinates")
+    # The initial native clip probe can run before Sway's transaction has
+    # placed the content tree at its final on-screen location. The settled
+    # Sway IPC tree is the authoritative compositor-observed actor position.
+    tree = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+
+    def nodes(node):
+        yield node
+        for key in ("nodes", "floating_nodes"):
+            for child in node.get(key, []):
+                yield from nodes(child)
+
+    actors = [n for n in nodes(tree)
+              if n.get("app_id") == "post-apollo-weather-news"
+              and n.get("name") == "SD1-CI-DISPOSABLE-NOT-BROWSER"
+              and n.get("shell") == "xdg_shell"]
+    if len(actors) != 1:
+        raise SystemExit("Missing or ambiguous native actor in actual Sway IPC tree")
+    rect = actors[0].get("rect") or {}
+    x, y, w, h = (rect.get(k) for k in ("x", "y", "width", "height"))
+    if not all(isinstance(v, int) for v in (x, y, w, h)) or w < 600 or h < 440:
+        raise SystemExit("Actual Sway IPC actor rect invalid or too small")
     width, height, pixels = parse_ppm(sys.argv[2])
-    inside = patch_average(pixels, width, height, ix, iy)
-    outside = patch_average(pixels, width, height, ox, oy)
+    inside_points = [(x + 160, y + 160), (x + 240, y + 220)]
+    outside_points = [(x + 24, y + 24), (x + 450, y + 150)]
+    inside_values = [patch_average(pixels, width, height, px, py)
+                     for px, py in inside_points]
+    outside_values = [patch_average(pixels, width, height, px, py)
+                      for px, py in outside_points]
+    inside = min(inside_values)
+    outside = max(outside_values)
     desktop = patch_average(pixels, width, height, 10, 10)
     print(
-        f"NEWS real compositor pixels: dimensions={width}x{height}, "
-        f"inside_luma={inside:.1f}, outside_luma={outside:.1f}, "
+        f"NEWS real compositor pixels: image={width}x{height} "
+        f"actual_actor={x},{y} {w}x{h} "
+        f"inside_luma={[round(v, 1) for v in inside_values]} "
+        f"outside_luma={[round(v, 1) for v in outside_values]} "
         f"desktop_luma={desktop:.1f}"
     )
-    # Foot has opaque white background; the isolated Sway desktop is black.
-    # At most 45 luma outside accommodates tiny compositor AA/shadow artifacts.
+    # Foot's native buffer is opaque white; Sway's headless wallpaper black.
     if inside < 180 or outside > 45 or desktop > 45 or inside - outside < 130:
-        raise SystemExit("FAIL: real screenshot does not demonstrate white-inside / black-outside clip")
-    if abs(outside - desktop) > 25:
-        raise SystemExit("FAIL: outside clip differs from the known black background")
+        raise SystemExit("FAIL: screenshot lacks white-inside / black-outside crop")
+    if max(abs(v - desktop) for v in outside_values) > 25:
+        raise SystemExit("FAIL: outside crop contains visible content or decorations")
     print("Stage Director actual compositor render PIXELS confined by wlroots clip: PASS")
     print("Does not establish real pointer, keyboard, popup or WATCH session containment.")
 
