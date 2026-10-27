@@ -76,6 +76,8 @@ jobs:
           python3 tests/stage_director/test_ci_render_pixel_boundary.py
           # Separate pinned SceneFX derivation with CI-only scene+GLES
           # telemetry. The ordinary compositor was already compiled above.
+          # Source contract: -Dsd-ci-news-scene-probe=true remains required
+          # inside ci_scenefx_render_trace.nix; this workflow cannot bypass it.
           probe="$(nix build --impure --expr 'import ./tests/stage_director/ci_scenefx_render_trace.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
           test -x "$probe/bin/sway"
           echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
