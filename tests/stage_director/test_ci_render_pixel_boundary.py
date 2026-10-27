@@ -62,8 +62,8 @@ assert "stage-director-cold-$stage.ppm" in actor
 assert 'STAGE_DIRECTOR_CI_COLD_STAGE' in actor
 cold = read("tests/stage_director/compare_news_cold_pixels.py")
 assert "BOTH_COLD_OUTPUTS_LEAK" in cold
-assert "first[\\\"size\\\"] != (1920, 1080)" in cold
-assert "fresh[\\\"size\\\"] != (1918, 1078)" in cold
+assert 'first["size"] != (1920, 1080)' in cold
+assert 'fresh["size"] != (1918, 1078)' in cold
 headless = read("tests/stage_director/headless_sway_smoke.sh")
 assert 'SD_CI_COLD_BOOT virtual_output=' in headless
 assert 'BLOCKED_COLD_OUTPUT_OUTSIDE_CI' in headless
