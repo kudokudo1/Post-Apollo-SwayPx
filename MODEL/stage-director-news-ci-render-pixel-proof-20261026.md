@@ -17,6 +17,10 @@ Prior CI already compiled full SwayPX, started a headless wlroots/SceneFX compos
 - Capture a PNG screenshot from the same isolated compositor and publish it as a short-lived GitHub Actions artifact (7 days) for independent review, not as user desktop media.
 - Normal software rendering, exact actor PID/rect observation, CI allocator access and automatic original ACL restoration remain unchanged.
 
+**First measured result:** [CI run #40423078584](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/40423078584) compiled both binaries and passed real native hit-testing (`before_inside=1 before_outside=1 after_inside=1 after_outside=0`), but **the first pixel assertion failed**. Its logged inside/outside positions `(160,160)` and `(24,24)` were from the scene subtree **before** Sway's first transaction placed the actor at actual IPC position `(259,117)`. Both sampled pixels were black desktop pixels, not an observed rendering leak. The test correctly failed without declaring pixel containment.
+
+**Correction under test:** Use the native Sway IPC `get_tree` rectangle **after the actor is mapped** as the screenshot coordinate origin. Check two inside and two outside sample patches plus a separate desktop reference. Capture/preserve the PNG screenshot before evaluation, including when assertions fail, to permit independent diagnosis. This change does not alter production compositor rendering or scene policy.
+
 ## HOW TO USE
 
 Inspect the new draft PR's **Stage Director isolated headless SwayPX runtime smoke**, source output and (only on success) GitHub artifact `stage-director-news-ci-pixel-screenshot`. Nothing is installed or modified on the operator's desktop.
