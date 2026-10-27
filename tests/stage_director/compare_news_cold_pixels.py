@@ -16,7 +16,7 @@ def main():
         )
     first = screenshot(sys.argv[1], sys.argv[3])
     fresh = screenshot(sys.argv[2], sys.argv[4])
-    if first["size"] != (1920, 1080) or fresh["size"] != (1918, 1078):
+    if first["size"] != (1920, 1080) or fresh["size"] != (1888, 1056):
         raise SystemExit(
             "FAIL: independent virtual output sizes not proven: "
             f"first={first['size']} fresh={fresh['size']}"
