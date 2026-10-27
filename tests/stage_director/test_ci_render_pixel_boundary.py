@@ -9,6 +9,7 @@ options = read("meson_options.txt")
 probe = read("sway/stage_director_ci_scene_probe.c")
 header = read("include/sway/stage_director_ci_scene_probe.h")
 observer = read("sway/stage_director.c")
+transaction = read("sway/desktop/transaction.c")
 workflow = read(".github/workflows/stage-director-headless-runtime.yml")
 actor = read("tests/stage_director/ci_native_news_actor_smoke.sh")
 pixel = read("tests/stage_director/assert_news_render_pixels.py")
@@ -18,6 +19,10 @@ assert "ci_render_actor" in probe
 assert "ci_render_clip" in probe
 assert "stage_director_ci_scene_probe_restore(" in header
 assert "stage_director_ci_scene_probe_restore(view);" in observer
+assert "stage_director_ci_scene_probe_post_layout(" in header
+assert "stage_director_ci_scene_probe_post_layout();" in transaction
+assert "arrange_root(root);" in transaction
+assert "SD_CI_POST_LAYOUT clip_reapplied=1" in probe
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
 assert "view_center_and_clip_surface(view);" in probe
 assert 'strcmp(ci, "true")' in probe
