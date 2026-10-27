@@ -27,6 +27,12 @@ assert "STAGE_DIRECTOR_CI_RENDER_NORMALIZE" in probe
 assert "wlr_scene_buffer_set_dest_size(" in probe
 assert "SD_CI_BUFFER_METRICS at=" in probe
 assert "struct ci_paint_audit" in probe
+assert "struct ci_draw_audit" in probe
+assert "SD_CI_DRAW_NODE kind=rect" in probe
+assert "SD_CI_DRAW_NODE kind=buffer" in probe
+assert "SD_CI_DRAW_AUDIT nodes=" in probe
+assert "node == audit->output_handler" in probe
+assert "SD_CI_DRAW_AUDIT nodes=[1-9]" in actor
 assert "SD_CI_PAINT_BUFFER scope=" in probe
 assert "SD_CI_PAINT_AUDIT content=" in probe
 assert 'scope = "container"' in probe
