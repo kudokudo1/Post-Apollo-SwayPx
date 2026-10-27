@@ -161,6 +161,12 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       grep -F 'SD_CI_BUFFER_DEST normalized=' "$runtime/sway.log" | tail -n 3
     fi
     grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
+    grep -F 'SD_CI_BUFFER_METRICS ' "$runtime/sway.log" || true
+    if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]] &&
+        ! grep -Eq 'SD_CI_BUFFER_METRICS .*after_dst=320x240 ' "$runtime/sway.log"; then
+      echo "FAIL: CI-only buffer destination metrics absent or not normalized" >&2
+      exit 1
+    fi
     if ! grep -Eq 'SD_CI_POST_LAYOUT clip_reapplied=1 origin=[0-9]+,[0-9]+ inside=1 outside=0 result=PASS' "$runtime/sway.log"; then
       echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
       exit 1
