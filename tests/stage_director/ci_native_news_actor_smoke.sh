@@ -61,6 +61,25 @@ export WAYLAND_DISPLAY="$wayland_socket"
 export SWAYSOCK="$ipc_socket"
 unset DISPLAY
 
+if [[ "${STAGE_DIRECTOR_CI_PIXEL_TEST:-}" == 1 ]]; then
+  if [[ -z "${STAGE_DIRECTOR_TEST_GRIM:-}" ||
+        ! -x "${STAGE_DIRECTOR_TEST_GRIM:-}" ]]; then
+    echo "FAIL: missing pinned grim screenshot executable in CI pixel mode" >&2
+    exit 2
+  fi
+  mkdir -p "$XDG_CONFIG_HOME/foot"
+  cat > "$XDG_CONFIG_HOME/foot/foot.ini" <<'EOF'
+[colors-dark]
+background=ffffff
+foreground=000000
+alpha=1.0
+[colors-light]
+background=ffffff
+foreground=000000
+alpha=1.0
+EOF
+fi
+
 # App-id imitation intentionally tests classification as CANDIDATE ONLY.
 # It is a native xdg_toplevel terminal running a fixed sleep test command,
 # NOT a browser, not a URL, and not a trusted WEATHER WATCH child.
@@ -94,4 +113,60 @@ fi
 
 python3 tests/stage_director/assert_native_news_actor.py "$tree_json"
 echo "Stage Director real mapped actor smoke: PASS"
-echo "No scene clipping, popup filtering or seat/input interception activated."
+
+if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
+  probe_seen=0
+  for _ in {1..70}; do
+    if grep -Fq 'SD_CI_SCENE_CLIP measured=1' "$runtime/sway.log"; then
+      probe_seen=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ "$probe_seen" != 1 ]]; then
+    echo "FAIL: native scene test buffer never reached CI clip/hit-test probe" >&2
+    tail -n 100 "$runtime/sway.log" >&2
+    exit 1
+  fi
+  grep -F 'SD_CI_SCENE_CLIP measured=1' "$runtime/sway.log"
+  if [[ "${STAGE_DIRECTOR_CI_PIXEL_TEST:-}" == 1 ]]; then
+    expected="after_inside=1 after_outside=0 normal_clip_restored=0 result=PASS"
+  else
+    expected="after_inside=1 after_outside=0 normal_clip_restored=1 result=PASS"
+  fi
+  if ! grep -Fq "$expected" "$runtime/sway.log"; then
+    echo "FAIL: actual native clip/hit-test behavior did not match the active CI mode" >&2
+    exit 1
+  fi
+  echo "Stage Director actual wlroots scene hit-test clip probe: PASS"
+
+  if [[ "${STAGE_DIRECTOR_CI_PIXEL_TEST:-}" == 1 ]]; then
+    if ! grep -Fq 'SD_CI_RENDER_PIXEL inside=' "$runtime/sway.log"; then
+      echo "FAIL: real compositor never reported held pixel-test clip" >&2
+      exit 1
+    fi
+    # Complete compositor screenshot uses real wlr-screencopy protocol; no
+    # simulation, offscreen PNG generation or source-level guess.
+    sleep 0.35
+    "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip.ppm"
+    "$STAGE_DIRECTOR_TEST_GRIM" -t png "$runtime/news-clip.png"
+    test -s "$runtime/news-clip.png"
+    cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence.png"
+    echo "Stage Director CI: preserved actual compositor screenshot for auditing"
+    if [[ "${STAGE_DIRECTOR_CI_RENDER_NORMALIZE:-}" == 1 ]]; then
+      if ! grep -Eq 'SD_CI_BUFFER_DEST normalized=[1-9][0-9]*' "$runtime/sway.log"; then
+        echo "FAIL: no actual native wlr_scene_surface destination was normalized" >&2
+        exit 1
+      fi
+      grep -F 'SD_CI_BUFFER_DEST normalized=' "$runtime/sway.log" | tail -n 3
+    fi
+    grep -F 'SD_CI_POST_LAYOUT clip_reapplied=1' "$runtime/sway.log" || true
+    if ! grep -Eq 'SD_CI_POST_LAYOUT clip_reapplied=1 origin=[0-9]+,[0-9]+ inside=1 outside=0 result=PASS' "$runtime/sway.log"; then
+      echo "FAIL: native clip not verified AFTER Sway arrange_root transaction" >&2
+      exit 1
+    fi
+    python3 tests/stage_director/assert_news_render_pixels.py \
+      "$runtime/sway.log" "$runtime/news-clip.ppm" "$tree_json"
+  fi
+fi
+echo "No video browser, keyboard/popup guard or production scene authority activated."
