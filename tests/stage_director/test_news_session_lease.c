@@ -136,6 +136,9 @@ int main(void) {
 	CHECK_BAD_OBSERVATION(o.native_actor_ref = 0);
 	CHECK_BAD_OBSERVATION(o.native_actor_ref = o.native_host_ref);
 	CHECK_BAD_OBSERVATION(o.native_actor_client_ref = 0);
+	/* A browser must be a separate Wayland client from the Weather host.
+	 * A shell-owned popup/subsurface may never become an actor here. */
+	CHECK_BAD_OBSERVATION(o.native_actor_client_ref = o.native_host_client_ref);
 	CHECK_BAD_OBSERVATION(o.native_root_surface_ref = 0);
 	CHECK_BAD_OBSERVATION(o.native_root_surface_ref = o.native_actor_ref);
 	CHECK_BAD_OBSERVATION(o.native_root_surface_ref = o.native_host_ref);
