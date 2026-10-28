@@ -76,6 +76,7 @@ static bool same_native(const struct stage_director_news_session_lease *lease,
 		o->native_actor_ref != 0 &&
 		o->native_actor_ref != o->native_host_ref &&
 		o->native_actor_client_ref != 0 &&
+		o->native_actor_client_ref != o->native_host_client_ref &&
 		o->native_root_surface_ref != 0 &&
 		o->native_root_surface_ref != o->native_actor_ref &&
 		o->native_root_surface_ref != o->native_host_ref &&
