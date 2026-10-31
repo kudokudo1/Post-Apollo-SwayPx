@@ -21,8 +21,18 @@ static struct {
 	struct sway_seat *swallow_seat;
 	struct wlr_input_device *swallow_device;
 	uint32_t swallow_button;
+	uint32_t swallow_at;
 	bool swallow_release;
 } pairing;
+
+static void expire_swallowed_release(uint32_t now) {
+	if (pairing.swallow_release &&
+			(uint32_t)(now - pairing.swallow_at) > PAIR_WINDOW_MSEC) {
+		pairing.swallow_release = false;
+		pairing.swallow_seat = NULL;
+		pairing.swallow_device = NULL;
+	}
+}
 
 static bool enabled(void) {
 	const char *value = getenv("POST_APOLLO_STAGE_DIRECTOR_PAIRING");
@@ -42,9 +52,12 @@ static bool libinput_device(struct wlr_input_device *device,
 
 bool stage_director_news_pairing_key_press(struct sway_seat *seat,
 		struct wlr_input_device *device, bool session_locked,
+		bool shortcuts_inhibited,
 		const xkb_keysym_t *raw_keysyms, size_t keysyms_len,
 		uint32_t raw_modifiers, uint32_t time_msec) {
-	if (!enabled() || session_locked || !seat ||
+	expire_swallowed_release(time_msec);
+	if (!time_msec || !enabled() || session_locked ||
+			shortcuts_inhibited || !seat ||
 			!libinput_device(device, WLR_INPUT_DEVICE_KEYBOARD) ||
 			raw_modifiers != PAIR_MODIFIERS ||
 			!raw_keysyms || keysyms_len != 1 ||
@@ -65,8 +78,10 @@ bool stage_director_news_pairing_key_press(struct sway_seat *seat,
 
 bool stage_director_news_pairing_pointer_button(struct sway_seat *seat,
 		struct wlr_input_device *device, uint32_t time_msec,
-		uint32_t button, enum wl_pointer_button_state state,
+		bool session_locked, uint32_t button,
+		enum wl_pointer_button_state state,
 		double lx, double ly) {
+	expire_swallowed_release(time_msec);
 	/* A swallowed press also swallows exactly its matching release. */
 	if (state == WL_POINTER_BUTTON_STATE_RELEASED &&
 			pairing.swallow_release && pairing.swallow_seat == seat &&
@@ -86,7 +101,8 @@ bool stage_director_news_pairing_pointer_button(struct sway_seat *seat,
 	/* One pointer press, successful or not, consumes the ceremony. */
 	pairing.armed = false;
 	pairing.armed_seat = NULL;
-	if (!fresh || !same_seat || !enabled() ||
+	if (session_locked || !time_msec || !fresh || !same_seat ||
+			!enabled() ||
 			!libinput_device(device, WLR_INPUT_DEVICE_POINTER)) {
 		sway_log(SWAY_DEBUG, "[stage-director][SD1][PAIR] denied: "
 				"expired, seat mismatch or non-libinput pointer");
@@ -100,6 +116,7 @@ bool stage_director_news_pairing_pointer_button(struct sway_seat *seat,
 	pairing.swallow_seat = seat;
 	pairing.swallow_device = device;
 	pairing.swallow_button = button;
+	pairing.swallow_at = time_msec;
 	sway_log(SWAY_INFO, "[stage-director][SD1][PAIR] physical click "
 			"selection %s; WATCH and all compositor actuation denied",
 			selected ? "native-candidate" : "denied");
