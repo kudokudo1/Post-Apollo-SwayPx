@@ -212,6 +212,10 @@ int main(int argc, char **argv) {
 		post_apollo_weather_watch_v1_watch(s.watch, "bbc");
 		if (wl_display_roundtrip(s.display) < 0 || s.results[1] != 1)
 			return 1;
+		post_apollo_weather_watch_v1_watch(s.watch, "cspan");
+		if (wl_display_roundtrip(s.display) < 0 || s.results[0] != 1 ||
+				s.results[1] != 1)
+			return 1;
 		post_apollo_weather_watch_v1_watch(s.watch,
 			"https://example.invalid/anything");
 		if (wl_display_roundtrip(s.display) < 0 || s.results[2] != 1)
@@ -220,11 +224,11 @@ int main(int argc, char **argv) {
 		if (wl_display_roundtrip(s.display) < 0 || s.results[3] != 1)
 			return 1;
 		post_apollo_weather_watch_v1_watch(s.watch, "bbc");
-		if (wl_display_roundtrip(s.display) < 0 || s.results[0] != 1)
+		if (wl_display_roundtrip(s.display) < 0 || s.results[0] != 2)
 			return 1;
 		printf("SD_CI_REAL_WATCH_END_TO_END selected=1 "
 			"known_source_candidate=1 invalid_url_refused=1 "
-			"close_revoked=1 stale_watch_denied=1 authority=NONE PASS\n");
+			"duplicate_watch_denied=1 close_revoked=1 stale_watch_denied=1 authority=NONE PASS\n");
 		fflush(stdout);
 	} else {
 		/* Keep the unpaired client alive across another real layer's

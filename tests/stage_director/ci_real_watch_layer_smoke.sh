@@ -83,6 +83,15 @@ if [[ "$test_result" != 1 ]]; then
   tail -n 130 "$runtime/sway.log" >&2 || true
   exit 1
 fi
+if ! grep -Fq '[stage-director][SD1][WATCH_LEDGER] reserved epoch=' "$runtime/sway.log" ||
+   ! grep -Fq 'process=NONE browser=OFF authority=NONE' "$runtime/sway.log" ||
+   ! grep -Fq '[stage-director][SD1][WATCH_LEDGER] closed epoch=' "$runtime/sway.log"; then
+  echo "FAIL: production WATCH ledger did not reserve and revoke candidate" >&2
+  grep -F '[WATCH_LEDGER]' "$runtime/sway.log" >&2 || true
+  cat "$runtime/watch-weather.log" >&2 || true
+  exit 1
+fi
+
 if ! grep -Fq 'SD_CI_REAL_WATCH_SCENE selection=1 actual_mapped_layer=1 hit_test=1 authority=NONE' \
     "$runtime/sway.log"; then
   echo "FAIL: no actual compositor scene-hit selection evidence" >&2
@@ -123,6 +132,8 @@ fi
 grep -F 'SD_CI_REAL_WATCH_UNPAIRED role=spoof discovered=0 same_namespace_spoof=1 PASS' "$runtime/watch-spoof.log"
 grep -F 'SD_CI_REAL_WATCH_UNPAIRED role=other discovered=0 same_namespace_spoof=0 PASS' "$runtime/watch-other.log"
 grep -F 'SD_CI_REAL_WATCH_SCENE selection=1' "$runtime/sway.log" | tail -n 1
+grep -F '[stage-director][SD1][WATCH_LEDGER] reserved epoch=' "$runtime/sway.log" | tail -n 1
+grep -F '[stage-director][SD1][WATCH_LEDGER] closed epoch=' "$runtime/sway.log" | tail -n 1
 if [[ -n "$qt_bin" ]]; then
   echo 'SD_CI_QT_WATCH_FULL_COMPOSITOR qt6_native_connection=1 actual_mapped_layer=1 duplicate_namespace_rejected=1 candidate_only=1 close_revoked=1 browser=OFF input_auth=UNTESTED result=PASS'
 else

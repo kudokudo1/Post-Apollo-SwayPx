@@ -221,6 +221,13 @@ int main(int argc, char **argv) {
 		fputs("FAIL: Qt-owned display WATCH candidate request\n",stderr);
 		return 1;
 	}
+	/* A second valid WATCH on the same paired resource must be denied:
+	 * only one compositor-owned candidate can be reserved per epoch. */
+	post_apollo_weather_watch_v1_watch(s.watch,"cspan");
+	if (!dispatch(&s) || s.status[0] != 1 || s.status[1] != 1) {
+		fputs("FAIL: duplicate live WATCH candidate was accepted\n",stderr);
+		return 1;
+	}
 	post_apollo_weather_watch_v1_watch(s.watch,"https://invalid.example/");
 	if (!dispatch(&s) || s.status[2] != 1) {
 		fputs("FAIL: Qt-owned display accepted URL instead of catalog ID\n",stderr);
@@ -232,14 +239,14 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 	post_apollo_weather_watch_v1_watch(s.watch,"bbc");
-	if (!dispatch(&s) || s.status[0] != 1 || s.status[1] != 1) {
+	if (!dispatch(&s) || s.status[0] != 2 || s.status[1] != 1) {
 		fputs("FAIL: Qt-owned display accepted stale WATCH after CLOSE\n",stderr);
 		return 1;
 	}
 	puts("SD_CI_QT_NATIVE_WATCH_BRIDGE Qt6_QGuiApplication=1 "
 		"QWaylandApplication_display=1 same_wl_display=1 "
 		"actual_mapped_layer=1 candidate=1 invalid_url_refused=1 "
-		"close_revoked=1 stale_watch_denied=1 browser=OFF "
+		"duplicate_watch_denied=1 close_revoked=1 stale_watch_denied=1 browser=OFF "
 		"input_auth=UNTESTED authority=NONE PASS");
 	fflush(stdout);
 	/* Display and Qt platform compositor proxy remain Qt-owned.

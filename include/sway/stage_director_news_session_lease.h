@@ -8,8 +8,10 @@
 /*
  * SD1 // compositor-local NEWS session candidate ledger.
  *
- * This is a PRODUCTION-BUILT, INERT CORE for a future authorized broker.
- * No live SwayPX callback currently creates or consumes this ledger.
+ * This is a PRODUCTION-BUILT, CANDIDATE-ONLY ledger for a future broker.
+ * The verified paired-WATCH Wayland handler now reserves one host candidate.
+ * CLOSE, unmap and wl_client destruction clear that candidate again.
+ * No live callback records a browser, binds an actor or grants authority.
  * The words "candidate" and "record" are deliberate: caller-supplied
  * native references are NOT a trusted WATCH gesture, browser launch proof
  * or an unforgeable Wayland resource binding.
