@@ -209,7 +209,15 @@ static void observe_layer(struct sway_layer_surface *surface,
 	 */
 	const struct stage_director_weather_host_result news_host =
 		stage_director_weather_host_observe_layer(surface);
-	if (observation->news_host_candidate != news_host.candidate_observed) {
+	/*
+	 * wlroots surface.map can precede Sway's cached surface->mapped
+	 * transition. On the next commit, host classification changes even
+	 * though live layer dimensions/mapped bits are unchanged. Treat this as
+	 * a material event so the first real native host peer is observed once.
+	 */
+	const bool news_host_candidate_changed =
+		observation->news_host_candidate != news_host.candidate_observed;
+	if (news_host_candidate_changed) {
 		observation->news_host_candidate = news_host.candidate_observed;
 		observe_news_shadow();
 	}
@@ -223,7 +231,8 @@ static void observe_layer(struct sway_layer_surface *surface,
 		observation->last_anchor != anchor ||
 		observation->last_exclusive_zone != exclusive_zone ||
 		observation->last_keyboard_interactive != keyboard_interactive ||
-		observation->last_mapped != mapped;
+		observation->last_mapped != mapped ||
+		news_host_candidate_changed;
 
 	if (!force && !changed) {
 		return;
