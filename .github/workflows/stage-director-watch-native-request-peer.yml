@@ -1,0 +1,60 @@
+name: Stage Director WATCH native request peer (non-authorizing)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/news-watch-auth-origin-rfc-20261031
+    paths:
+      - 'include/sway/stage_director_news_request_peer.h'
+      - 'sway/stage_director_news_request_peer.c'
+      - 'tests/stage_director/test_news_request_peer.c'
+      - '.github/workflows/stage-director-watch-native-request-peer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-request-peer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install system Wayland server headers for real resource tests
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev pkg-config
+      - name: Verify native request peer is still unconnected to production authority
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          src = Path("sway")
+          for path in src.rglob("*.c"):
+              if path.name == "stage_director_news_request_peer.c":
+                  continue
+              assert "stage_director_news_request_peer_probe(" not in path.read_text(), path
+          assert "'stage_director_news_request_peer.c'," not in (
+              src / "meson.build").read_text()
+          assert "wl_resource_get_client(" in (
+              src / "stage_director_news_request_peer.c").read_text()
+          PY
+      - name: Compile and run same-process two-real-Wayland-client test
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude $(pkg-config --cflags wayland-server) \
+            sway/stage_director_news_request_peer.c \
+            tests/stage_director/test_news_request_peer.c \
+            -o "$RUNNER_TEMP/stage-director-watch-request-peer" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/stage-director-watch-request-peer"
+      - name: State evidence boundary
+        run: |
+          echo "Native wl_resource ownership checked with real Wayland server connections." >> "$GITHUB_STEP_SUMMARY"
+          echo "This is candidate evidence only; it does not authenticate WATCH, launch a browser, register a protocol or mutate the compositor." >> "$GITHUB_STEP_SUMMARY"
