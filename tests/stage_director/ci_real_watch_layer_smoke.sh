@@ -77,11 +77,28 @@ if ! grep -Fq 'SD_CI_REAL_WATCH_SCENE selection=1 actual_mapped_layer=1 hit_test
   exit 1
 fi
 
-wait "$weather_pid"
+# Preserve concrete logs and process exit status on client failures.
+# This distinguishes real protocol/registry failure from shell cleanup.
+if ! wait "$weather_pid"; then
+  echo "FAIL: selected mapped Weather WATCH client exited unsuccessfully" >&2
+  cat "$runtime/watch-weather.log" >&2 || true
+  grep -E 'SD_CI_REAL_WATCH_SCENE|NEWS_HOST_PEER|post.apollo' "$runtime/sway.log" >&2 || true
+  exit 1
+fi
 weather_pid=""
-wait "$spoof_pid"
+if ! wait "$spoof_pid"; then
+  echo "FAIL: same-namespace unpaired layer client exited unsuccessfully" >&2
+  cat "$runtime/watch-spoof.log" >&2 || true
+  grep -E 'SD_CI_REAL_WATCH_SCENE|NEWS_HOST_PEER|post.apollo' "$runtime/sway.log" >&2 || true
+  exit 1
+fi
 spoof_pid=""
-wait "$foreign_pid"
+if ! wait "$foreign_pid"; then
+  echo "FAIL: other-namespace unpaired layer client exited unsuccessfully" >&2
+  cat "$runtime/watch-other.log" >&2 || true
+  grep -E 'SD_CI_REAL_WATCH_SCENE|NEWS_HOST_PEER|post.apollo' "$runtime/sway.log" >&2 || true
+  exit 1
+fi
 foreign_pid=""
 
 grep -F 'SD_CI_REAL_WATCH_END_TO_END' "$runtime/watch-weather.log"
