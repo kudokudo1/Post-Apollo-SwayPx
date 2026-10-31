@@ -1,0 +1,73 @@
+name: Stage Director real WATCH wire request isolation (CI only)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/watch-request-native-peer-v0-20261031
+    paths:
+      - 'tests/stage_director/ci_watch_request_v1.xml'
+      - 'tests/stage_director/ci_real_watch_request_smoke.c'
+      - '.github/workflows/stage-director-ci-real-watch-request.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-wire-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact isolated source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Wayland server, client and code generator
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev libwayland-bin pkg-config
+      - name: Verify CI-only scope and zero production protocol registration
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          xml = Path("tests/stage_director/ci_watch_request_v1.xml")
+          smoke = Path("tests/stage_director/ci_real_watch_request_smoke.c")
+          prod = Path("sway")
+          assert xml.exists() and smoke.exists()
+          assert "stage_director_ci_watch_v1" in xml.read_text()
+          assert "wl_global_create(" in smoke.read_text()
+          assert "stage_director_news_request_peer_probe(" in smoke.read_text()
+          for path in prod.rglob("*.c"):
+              data = path.read_text()
+              assert "stage_director_ci_watch_v1" not in data, path
+              assert "ci_real_watch_request_smoke" not in data, path
+          assert "ci_real_watch_request_smoke" not in (
+              prod / "meson.build").read_text()
+          PY
+      - name: Generate native Wayland protocol and compile test
+        run: |
+          set -euo pipefail
+          proto="tests/stage_director/ci_watch_request_v1.xml"
+          wayland-scanner server-header "$proto" "$RUNNER_TEMP/ci-watch-server.h"
+          wayland-scanner client-header "$proto" "$RUNNER_TEMP/ci-watch-client.h"
+          wayland-scanner private-code "$proto" "$RUNNER_TEMP/ci-watch-protocol.c"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -pthread \
+            -Iinclude -I"$RUNNER_TEMP" \
+            $(pkg-config --cflags wayland-client wayland-server) \
+            sway/stage_director_news_request_peer.c \
+            tests/stage_director/ci_real_watch_request_smoke.c \
+            "$RUNNER_TEMP/ci-watch-protocol.c" \
+            -o "$RUNNER_TEMP/stage-director-ci-watch" \
+            $(pkg-config --libs wayland-client wayland-server)
+      - name: Run real two-client WATCH and CLOSE requests
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/stage-director-ci-watch"
+      - name: State the security evidence boundary
+        if: always()
+        run: |
+          echo "This test sends real generated-protocol WATCH/CLOSE messages to a CI-only Wayland server." >> "$GITHUB_STEP_SUMMARY"
+          echo "Both test clients use identical namespace labels, but only the fixture-selected client can produce a same-native-client candidate. No operator pairing or browser/UI/display authority is created." >> "$GITHUB_STEP_SUMMARY"
