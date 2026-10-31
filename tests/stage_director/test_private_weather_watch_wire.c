@@ -21,19 +21,24 @@
 #include "post-apollo-weather-watch-v1-client-protocol.h"
 
 static struct wl_client *paired_client;
-static bool paired;
+static atomic_bool paired;
+static atomic_uint_fast64_t pairing_epoch;
 static struct wl_display *server;
 static atomic_bool running;
 
 bool stage_director_news_watch_selected_client(struct wl_client *client) {
-	return paired && client && client == paired_client;
+	return atomic_load(&paired) && client && client == paired_client;
 }
 bool stage_director_news_watch_probe_request(struct wl_resource *resource) {
 	return resource && stage_director_news_watch_selected_client(
 		wl_resource_get_client(resource));
 }
+uint64_t stage_director_news_watch_current_epoch(struct wl_client *client) {
+	return stage_director_news_watch_selected_client(client)
+		? atomic_load(&pairing_epoch) : 0;
+}
 void stage_director_news_pairing_clear_host(void) {
-	paired = false;
+	atomic_store(&paired, false);
 	stage_director_weather_watch_protocol_revoke();
 }
 
@@ -137,7 +142,8 @@ int main(void) {
 	paired_client = add_client(&chosen_fd);
 	struct wl_client *foreign = add_client(&foreign_fd);
 	assert(foreign != paired_client);
-	paired = true;
+	atomic_init(&paired, true);
+	atomic_init(&pairing_epoch, 1);
 	stage_director_weather_watch_protocol_init(server);
 	assert(stage_director_weather_watch_protocol_publish());
 	atomic_init(&running, true);
@@ -173,12 +179,22 @@ int main(void) {
 	post_apollo_weather_watch_v1_close(chosen.watch);
 	sync_client(&chosen);
 	assert(chosen.count[3] == 1);
-	assert(!paired);
+	assert(!atomic_load(&paired));
 	/* Existing bound resources can no longer ask for a WATCH candidate. */
 	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
 	sync_client(&chosen);
 	assert(chosen.count[0] == 1);
 	assert(chosen.count[1] == 2);
+
+	/* A new operator pairing on the SAME Wayland socket must not give a
+	 * previously bound protocol object permission from the old epoch. */
+	atomic_store(&pairing_epoch, 2);
+	atomic_store(&paired, true);
+	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
+	sync_client(&chosen);
+	assert(chosen.count[0] == 2);
+	assert(chosen.count[1] == 2);
+	atomic_store(&paired, false);
 
 	close_client(&chosen);
 	/* Spoof was already rejected; free locally without another request. */
