@@ -3,6 +3,7 @@
 set -euo pipefail
 runtime="${1:?isolated XDG_RUNTIME_DIR}"
 bin="${STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT:-}"
+qt_bin="${STAGE_DIRECTOR_TEST_QT_WATCH_BRIDGE:-}"
 spoof_pid=""
 foreign_pid=""
 weather_pid=""
@@ -25,6 +26,7 @@ if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
       "${XDG_RUNTIME_DIR:-}" != "$runtime" ||
       "${STAGE_DIRECTOR_CI_REAL_WATCH_LAYER:-}" != 1 ||
       ! -x "$bin" || "$bin" != /nix/store/* ||
+  ( -n "$qt_bin" && ( ! -x "$qt_bin" || "$qt_bin" != /nix/store/* ) ) ||
       "${WAYLAND_DISPLAY:-}" != wayland-* ]]; then
   echo "BLOCKED_NONISOLATED_REAL_WATCH_LAYER" >&2
   exit 2
@@ -54,12 +56,24 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
-"$bin" weather-watch >"$runtime/watch-weather.log" 2>&1 &
+if [[ -n "$qt_bin" ]]; then
+  # Qt creates its own Wayland QPA display; all layer and WATCH traffic
+  # must borrow that exact display. Do not execute the C weather client.
+  "$qt_bin" >"$runtime/watch-weather.log" 2>&1 &
+else
+  "$bin" weather-watch >"$runtime/watch-weather.log" 2>&1 &
+fi
 weather_pid=$!
 test_result=0
 for _ in {1..120}; do
-  if grep -Fq 'SD_CI_REAL_WATCH_END_TO_END selected=1' \
-       "$runtime/watch-weather.log"; then test_result=1; break; fi
+  if [[ -n "$qt_bin" ]]; then
+    marker='SD_CI_QT_NATIVE_WATCH_BRIDGE Qt6_QGuiApplication=1'
+  else
+    marker='SD_CI_REAL_WATCH_END_TO_END selected=1'
+  fi
+  if grep -Fq "$marker" "$runtime/watch-weather.log"; then
+    test_result=1; break
+  fi
   if ! kill -0 "$weather_pid" 2>/dev/null; then break; fi
   sleep 0.05
 done
@@ -101,8 +115,16 @@ if ! wait "$foreign_pid"; then
 fi
 foreign_pid=""
 
-grep -F 'SD_CI_REAL_WATCH_END_TO_END' "$runtime/watch-weather.log"
+if [[ -n "$qt_bin" ]]; then
+  grep -F 'SD_CI_QT_NATIVE_WATCH_BRIDGE' "$runtime/watch-weather.log"
+else
+  grep -F 'SD_CI_REAL_WATCH_END_TO_END' "$runtime/watch-weather.log"
+fi
 grep -F 'SD_CI_REAL_WATCH_UNPAIRED role=spoof discovered=0 same_namespace_spoof=1 PASS' "$runtime/watch-spoof.log"
 grep -F 'SD_CI_REAL_WATCH_UNPAIRED role=other discovered=0 same_namespace_spoof=0 PASS' "$runtime/watch-other.log"
 grep -F 'SD_CI_REAL_WATCH_SCENE selection=1' "$runtime/sway.log" | tail -n 1
-echo 'SD_CI_REAL_WATCH_FULL_COMPOSITOR actual_mapped_layer=1 exact_native_client=1 duplicate_namespace_rejected=1 known_watch=1 close_revoked=1 browser=OFF input_auth=UNTESTED result=PASS'
+if [[ -n "$qt_bin" ]]; then
+  echo 'SD_CI_QT_WATCH_FULL_COMPOSITOR qt6_native_connection=1 actual_mapped_layer=1 duplicate_namespace_rejected=1 candidate_only=1 close_revoked=1 browser=OFF input_auth=UNTESTED result=PASS'
+else
+  echo 'SD_CI_REAL_WATCH_FULL_COMPOSITOR actual_mapped_layer=1 exact_native_client=1 duplicate_namespace_rejected=1 known_watch=1 close_revoked=1 browser=OFF input_auth=UNTESTED result=PASS'
+fi

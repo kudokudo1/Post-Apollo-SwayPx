@@ -1,0 +1,105 @@
+name: Stage Director Qt6 same-Wayland-connection WATCH bridge (CI)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/headless-real-watch-layer-20261031
+    paths:
+      - 'tests/stage_director/ci_qt_native_watch_bridge.cpp'
+      - 'tests/stage_director/ci_qt_native_watch_bridge.nix'
+      - 'tests/stage_director/ci_real_watch_layer_smoke.sh'
+      - '.github/workflows/stage-director-qt-native-watch-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qt-bridge-source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Qt-owned connection and no browser/QML or extra socket
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p = Path("tests/stage_director/ci_qt_native_watch_bridge.cpp").read_text()
+          nix = Path("tests/stage_director/ci_qt_native_watch_bridge.nix").read_text()
+          harness = Path("tests/stage_director/ci_real_watch_layer_smoke.sh").read_text()
+          for expected in (
+              "QGuiApplication app(argc,argv)",
+              "nativeInterface<QNativeInterface::QWaylandApplication>()",
+              "s.display = qt->display()",
+              "s.compositor = qt->compositor()",
+              "wl_display_create_queue(s.display)",
+              "wl_proxy_set_queue(",
+              "wl_display_roundtrip_queue(s->display,s->queue)",
+              "wl_compositor_create_surface(s.compositor)",
+              "zwlr_layer_shell_v1_get_layer_surface(s.layer_shell,",
+              "post_apollo_weather_watch_v1_watch(s.watch,\"bbc\")",
+              "post_apollo_weather_watch_v1_close(s.watch)",
+              "wl_event_queue_destroy(s.queue)",
+              "SD_CI_QT_NATIVE_WATCH_BRIDGE",
+              "BLOCKED_NOT_DISPOSABLE_QT_WAYLAND_BRIDGE",
+          ):
+              assert expected in p, expected
+          assert "wl_display_connect(" not in p
+          assert "wl_display_connect_to_fd(" not in p
+          assert "wl_display_disconnect(s.display)" not in p
+          for banned in ("QWebEngine", "QProcess", "QQuickWindow",
+                         "system(", "fork(", "execvp(", "posix_spawn("):
+              assert banned not in p, banned
+          assert "pkgs.qt6.qtbase" in nix and "pkgs.qt6.qtwayland" in nix
+          assert "pkgs.qt6.wrapQtAppsHook" in nix
+          assert 'STAGE_DIRECTOR_TEST_QT_WATCH_BRIDGE' in harness
+          print("SD_CI_QT_BRIDGE_BOUNDARY: Qt6 borrowed Wayland connection, "
+                "separate event queue, real mapped layer and real WATCH, "
+                "no new display/socket/QML/browser authority PASS")
+          PY
+
+  qt-headless-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile isolated CI compositor + C spoof clients + Qt6 bridge
+        run: |
+          set -euo pipefail
+          ci_compositor="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_compositor.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          c_client="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_layer_client.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          qt_client="$(nix build --impure --expr 'import ./tests/stage_director/ci_qt_native_watch_bridge.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$ci_compositor/bin/sway"
+          test -x "$c_client/bin/sd-ci-real-watch-layer"
+          test -x "$qt_client/bin/sd-ci-qt-native-watch-bridge"
+          grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$ci_compositor/bin/sway"
+          echo "CI_COMPOSITOR=$ci_compositor" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT=$c_client/bin/sd-ci-real-watch-layer" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_QT_WATCH_BRIDGE=$qt_client/bin/sd-ci-qt-native-watch-bridge" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1" >> "$GITHUB_ENV"
+          echo "QT_QPA_PLATFORM=wayland" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Boot disposable SwayPX and test exact Qt connection, duplicated Weather layer, WATCH and CLOSE
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Preserve evidence scope
+        if: always()
+        run: |
+          echo "This verifies Qt6 QGuiApplication + QWaylandApplication native display in a disposable native test client." >> "$GITHUB_STEP_SUMMARY"
+          echo "It does not prove an installed Quickshell plugin, QWidget/QML integration, actual physical input, browser playback or scene/input/popup containment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Only the headless CI compositor has an automatic scene hit-test selection callback; normal SwayPX does not." >> "$GITHUB_STEP_SUMMARY"
