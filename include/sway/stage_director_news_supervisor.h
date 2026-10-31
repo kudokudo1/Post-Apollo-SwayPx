@@ -27,6 +27,9 @@ struct stage_director_news_supervisor {
 	uint64_t epoch;
 	uintptr_t host_ref;
 	pid_t child_pid;
+	pid_t owned_pgid; /* 0 unless directly spawned as its own group leader */
+	bool group_stop_sent; /* cannot finish a tree unless stop issued */
+	uint32_t child_uid;
 	uint64_t child_start_ticks;
 	int pidfd;
 	int wait_status;
@@ -59,6 +62,18 @@ bool stage_director_news_supervisor_poll(
 /* Close pidfd and allow a newer epoch ONLY after child has been reaped. */
 bool stage_director_news_supervisor_finish(
 		struct stage_director_news_supervisor *supervisor, uint64_t epoch);
+
+/*
+ * CI-only fixture for a browser-like multi-process tree. This is NOT a
+ * production browser launcher. Actor binary is compile-time fixed, no QML,
+ * IPC, URLs or caller-provided executable. Its own group is created by
+ * posix_spawn, then verified against held native process identity.
+ */
+#ifdef SD_STAGE_DIRECTOR_TEST_TREE
+bool stage_director_news_supervisor_start_test_tree(
+	struct stage_director_news_supervisor *supervisor,
+	uint64_t epoch, uintptr_t host_ref);
+#endif
 
 #ifdef SD_STAGE_DIRECTOR_TEST_HELPER
 /* TEST-ONLY: spawn fixed /usr/bin/sleep 30, no browser or arbitrary argv. */
