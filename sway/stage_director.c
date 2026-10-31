@@ -45,11 +45,6 @@ struct stage_director_layer_observation {
 	int last_exclusive_zone;
 	int last_keyboard_interactive;
 	bool last_mapped;
-	/* Only a native wl_client observation, never a WATCH authorization. */
-	bool last_native_peer_candidate;
-	uintptr_t last_native_client_ref;
-	int64_t last_native_peer_pid;
-	uint64_t last_native_peer_start;
 };
 
 static struct stage_director_actor actors[STAGE_DIRECTOR_MAX_ACTORS];
@@ -212,10 +207,8 @@ static void observe_layer(struct sway_layer_surface *surface,
 	 * the native Weather host adapter. Only count observation candidates.
 	 * A namespace is not a trusted launch/session identity.
 	 */
-	const struct stage_director_weather_host_native_peer native_host =
-		stage_director_weather_host_observe_native_peer(surface);
 	const struct stage_director_weather_host_result news_host =
-		native_host.host;
+		stage_director_weather_host_observe_layer(surface);
 	if (observation->news_host_candidate != news_host.candidate_observed) {
 		observation->news_host_candidate = news_host.candidate_observed;
 		observe_news_shadow();
@@ -230,12 +223,7 @@ static void observe_layer(struct sway_layer_surface *surface,
 		observation->last_anchor != anchor ||
 		observation->last_exclusive_zone != exclusive_zone ||
 		observation->last_keyboard_interactive != keyboard_interactive ||
-		observation->last_mapped != mapped ||
-		observation->last_native_peer_candidate !=
-			native_host.native_peer_candidate ||
-		observation->last_native_client_ref != native_host.native_client_ref ||
-		observation->last_native_peer_pid != native_host.client_pid ||
-		observation->last_native_peer_start != native_host.client_start_time_ticks;
+		observation->last_mapped != mapped;
 
 	if (!force && !changed) {
 		return;
@@ -251,10 +239,6 @@ static void observe_layer(struct sway_layer_surface *surface,
 	observation->last_exclusive_zone = exclusive_zone;
 	observation->last_keyboard_interactive = keyboard_interactive;
 	observation->last_mapped = mapped;
-	observation->last_native_peer_candidate = native_host.native_peer_candidate;
-	observation->last_native_client_ref = native_host.native_client_ref;
-	observation->last_native_peer_pid = native_host.client_pid;
-	observation->last_native_peer_start = native_host.client_start_time_ticks;
 
 	const char *output_name = "-";
 	if (surface->output && surface->output->wlr_output &&
@@ -278,6 +262,11 @@ static void observe_layer(struct sway_layer_surface *surface,
 		keyboard_interactive);
 	shadow_write(line);
 	if (news_host.candidate_observed) {
+		/* Read /proc only on map or meaningful layer state/geometry changes.
+		 * Ordinary high-frequency QML frame commits must not pay this cost.
+		 * A future authenticated WATCH admission rechecks live resources. */
+		const struct stage_director_weather_host_native_peer native_host =
+			stage_director_weather_host_observe_native_peer(surface);
 		snprintf(line, sizeof(line),
 			"[stage-director][SD1][NEWS_HOST_PEER] reason=%s "
 			"namespace_candidate=yes native_peer=%s "
