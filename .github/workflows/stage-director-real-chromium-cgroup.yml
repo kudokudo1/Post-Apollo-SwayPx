@@ -81,6 +81,12 @@ jobs:
           PY
 
   chromium-cgroup-v2:
+    # Docker's default namespace/seccomp rejected Chromium with exit=134.
+    # Keep this NEGATIVE experiment runnable manually; do not make an
+    # unsupported Docker environment a release requirement or weaken it.
+    # The independently proven restricted systemd cgroup lane below is
+    # the required real-browser PR test.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -132,4 +138,5 @@ jobs:
         run: |
           echo "Independent fallback experiment: GitHub runner's installed Google Chrome (Chromium family) uses its installed AppArmor policy and a transient systemd service cgroup, not Docker's blocked user namespace." >> "$GITHUB_STEP_SUMMARY"
           echo "Requires PrivateNetwork, nonroot User, RuntimeDirectory, ProtectSystem, ProtectHome, NoNewPrivileges and KillMode=control-group. No unconfined seccomp or browser sandbox bypass." >> "$GITHUB_STEP_SUMMARY"
+          echo "Docker's namespace-blocked CI run (exit 134, EPERM) remains documented and can be intentionally reproduced via workflow_dispatch; the PR-required test is the restricted transient systemd cgroup lane." >> "$GITHUB_STEP_SUMMARY"
           echo "A green service test does not hide a red Docker test, prove Chromium internal sandbox status, or enable browser/viewport/Quickshell production integration." >> "$GITHUB_STEP_SUMMARY"
