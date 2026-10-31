@@ -26,7 +26,8 @@ in pkgs.stdenv.mkDerivation {
     # The C-generated header uses the legal C parameter name 'namespace',
     # which is a reserved keyword in C++. Rename the generated parameter
     # ONLY in this CI build; wire types/protocol XML remain unchanged.
-    sed -i 's/\\<namespace\\>/namespace_name/g' wlr-layer-shell-unstable-v1-client-protocol.h
+    sed -i 's/namespace/namespace_name/g' wlr-layer-shell-unstable-v1-client-protocol.h
+    grep -Fq 'const char *namespace_name)' wlr-layer-shell-unstable-v1-client-protocol.h
     wayland-scanner private-code ${../../protocols/wlr-layer-shell-unstable-v1.xml} layer-protocol.c
     wayland-scanner private-code ${pkgs.wayland-protocols}/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
     wayland-scanner client-header ${../../protocols/post-apollo-weather-watch-v1.xml} post-apollo-weather-watch-v1-client-protocol.h
