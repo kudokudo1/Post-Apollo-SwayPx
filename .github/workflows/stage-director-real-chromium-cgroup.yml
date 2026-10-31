@@ -8,6 +8,7 @@ on:
     paths:
       - 'tests/stage_director/ci_chromium_cgroup.Dockerfile'
       - 'tests/stage_director/ci_real_chromium_cgroup.py'
+      - 'tests/stage_director/ci_real_chrome_systemd_scope.py'
       - '.github/workflows/stage-director-real-chromium-cgroup.yml'
       - 'docs/stage-director-real-chromium-cgroup-20261031.md'
   workflow_dispatch:
@@ -27,10 +28,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile tests/stage_director/ci_real_chromium_cgroup.py
+          python3 -m py_compile tests/stage_director/ci_real_chrome_systemd_scope.py
           python3 -B - <<'PY'
           from pathlib import Path
           dockerfile=Path("tests/stage_director/ci_chromium_cgroup.Dockerfile").read_text()
           test=Path("tests/stage_director/ci_real_chromium_cgroup.py").read_text()
+          systemd=Path("tests/stage_director/ci_real_chrome_systemd_scope.py").read_text()
+          assert '"/opt/google/chrome/chrome"' in systemd
+          assert '"--property=PrivateNetwork=yes"' in systemd
+          assert '"--property=KillMode=control-group"' in systemd
+          assert '"--property=ProtectSystem=strict"' in systemd
+          assert '"--property=NoNewPrivileges=yes"' in systemd
+          assert '"--property=RuntimeDirectory=" + runtime_name' in systemd
+          assert '"about:blank"' in systemd
+          assert 'matching_survivors=0' in systemd
+          assert '"--no-sandbox"' not in systemd
+          assert '"--disable-setuid-sandbox"' not in systemd
+          assert 'env.get("GITHUB_ACTIONS") != "true"' in systemd
+
           assert "FROM debian:bookworm-slim" in dockerfile
           assert "USER 10001:10001" in dockerfile
           assert 'ENTRYPOINT ["/usr/bin/chromium"]' in dockerfile
@@ -90,3 +105,31 @@ jobs:
           echo "No explicit Chromium --no-sandbox, container privilege elevation, seccomp-unconfined or production browser launch occurs." >> "$GITHUB_STEP_SUMMARY"
           echo "A passing cgroup teardown check proves no observed original process identities/cgroup members remain, but it does not prove Chromium's internal sandbox is active or a compositor viewport/focus/input/popup containment." >> "$GITHUB_STEP_SUMMARY"
           echo "If the runner cannot support both Chrome sandbox and container confinement, this job must FAIL CLOSED: no --no-sandbox workaround." >> "$GITHUB_STEP_SUMMARY"
+
+
+  chrome-sandboxed-systemd-cgroup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify ephemeral GitHub Ubuntu Chrome/AppArmor and host systemd
+        run: |
+          set -euo pipefail
+          test -d /run/systemd/system
+          test -x /opt/google/chrome/chrome
+          test -r /sys/fs/cgroup/cgroup.controllers
+          systemctl --version | head -n 2
+          /opt/google/chrome/chrome --version
+          command -v sudo
+      - name: Launch actual sandboxed Chrome in restricted systemd service and prove full cgroup stop
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_real_chrome_systemd_scope.py
+      - name: Preserve Docker-specific failure and service evidence boundary
+        if: always()
+        run: |
+          echo "Independent fallback experiment: GitHub runner's installed Google Chrome (Chromium family) uses its installed AppArmor policy and a transient systemd service cgroup, not Docker's blocked user namespace." >> "$GITHUB_STEP_SUMMARY"
+          echo "Requires PrivateNetwork, nonroot User, RuntimeDirectory, ProtectSystem, ProtectHome, NoNewPrivileges and KillMode=control-group. No unconfined seccomp or browser sandbox bypass." >> "$GITHUB_STEP_SUMMARY"
+          echo "A green service test does not hide a red Docker test, prove Chromium internal sandbox status, or enable browser/viewport/Quickshell production integration." >> "$GITHUB_STEP_SUMMARY"
