@@ -45,6 +45,9 @@ struct stage_director_news_host_session {
 	uint64_t last_epoch;
 	bool initialized;
 	bool candidate;
+	/* Called after native refs have been invalidated, including disconnect. */
+	void (*on_revoked)(void *data);
+	void *on_revoked_data;
 	struct wl_listener client_destroy;
 	struct wl_listener role_destroy;
 	struct wl_listener surface_destroy;
@@ -52,6 +55,10 @@ struct stage_director_news_host_session {
 
 void stage_director_news_host_session_init(
 	struct stage_director_news_host_session *session);
+
+void stage_director_news_host_session_on_revoked(
+	struct stage_director_news_host_session *session,
+	void (*callback)(void *data), void *data);
 
 /* Native resource candidate, NOT a trusted operator pairing. No production
  * caller until the separately reviewed input provenance path exists. */
