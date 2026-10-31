@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "log.h"
 #include "sway/stage_director.h"
@@ -16,6 +17,7 @@
 #include "sway/layers.h"
 #include "sway/input/cursor.h"
 #include "sway/input/seat.h"
+#include "sway/input/input-manager.h"
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_compositor.h>
 #include <stdint.h>
@@ -698,9 +700,62 @@ void stage_director_observe_container(struct sway_container *container,
 	shadow_write(line);
 }
 
+/*
+ * Disposable headless-CI-only harness: same production compositor scene
+ * hit-test as a physical click, but WITHOUT claiming a real operator gesture.
+ * Compiled out entirely from ordinary production SwayPX builds.
+ *
+ * Output geometry is fixed by isolated CI: 1920x1080; Weather layer is
+ * 320x240 at top-left, and spoof layer is top-right. We intentionally do
+ * NOT use namespace as the selection decision or synthesize input events.
+ */
+#ifdef SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER
+static bool ci_real_watch_pair_attempted;
+
+static void ci_real_watch_probe_mapped_host(struct sway_layer_surface *surface) {
+	if (ci_real_watch_pair_attempted || !surface ||
+			!surface->layer_surface || !surface->mapped ||
+			!surface->layer_surface->surface ||
+			!surface->layer_surface->surface->mapped) {
+		return;
+	}
+	const char *ci = getenv("CI");
+	const char *gha = getenv("GITHUB_ACTIONS");
+	const char *enable = getenv("STAGE_DIRECTOR_CI_REAL_WATCH_LAYER");
+	if (!ci || strcmp(ci, "true") || !gha || strcmp(gha, "true") ||
+			!enable || strcmp(enable, "1")) {
+		return;
+	}
+	/* Do not select a different namespace or the Weather spoof occupying
+	 * the opposite edge of the test output. This checks actual mapped scene
+	 * coordinates and native client, not an app_id or window title. */
+	const char *ns = surface->layer_surface->namespace;
+	if (!ns || strcmp(ns, STAGE_DIRECTOR_WEATHER_NAMESPACE)) {
+		return;
+	}
+	int x = 0, y = 0;
+	wlr_scene_node_coords(&surface->scene->tree->node, &x, &y);
+	if (x != 0 || y != 0 ||
+			surface->layer_surface->surface->current.width != 320 ||
+			surface->layer_surface->surface->current.height != 240) {
+		return;
+	}
+	struct sway_seat *seat = input_manager_get_default_seat();
+	/* Fixed point is inside the actual painted buffer, not transparent. */
+	if (stage_director_news_pairing_select_at(seat, 160, 120)) {
+		ci_real_watch_pair_attempted = true;
+		sway_log(SWAY_INFO, "SD_CI_REAL_WATCH_SCENE selection=1 "
+			"actual_mapped_layer=1 hit_test=1 authority=NONE");
+	}
+}
+#endif
+
 void stage_director_layer_mapped(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
 	observe_layer(surface, "map", true);
+#ifdef SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER
+	ci_real_watch_probe_mapped_host(surface);
+#endif
 }
 
 void stage_director_layer_committed(struct sway_layer_surface *surface) {
@@ -720,6 +775,9 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 		}
 	}
 	observe_layer(surface, "commit", false);
+#ifdef SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER
+	ci_real_watch_probe_mapped_host(surface);
+#endif
 }
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
