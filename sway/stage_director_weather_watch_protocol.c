@@ -1,7 +1,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <wayland-server-core.h>
-#include "log.h"
 #include "sway/stage_director.h"
 #include "sway/stage_director_weather_watch_protocol.h"
 #include "post-apollo-weather-watch-v1-protocol.h"
@@ -105,8 +104,6 @@ bool stage_director_weather_watch_protocol_publish(void) {
 	if (!watch_global) {
 		return false;
 	}
-	sway_log(SWAY_INFO, "[stage-director][SD1][WATCH] private paired "
-		"global published; all playback/scene/input authority denied");
 	return true;
 }
 
