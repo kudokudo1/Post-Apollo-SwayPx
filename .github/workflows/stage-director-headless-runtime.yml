@@ -14,6 +14,7 @@ on:
       - stage-director/news-frame-policy-contract-20261027
       - stage-director/ci-native-wayland-client-credentials-20261027
       - stage-director/ci-native-news-pidfd-lifetime-20261027
+      - stage-director/ci-native-child-lineage-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
