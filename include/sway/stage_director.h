@@ -52,4 +52,13 @@ bool stage_director_news_watch_probe_request(struct wl_resource *resource);
 /* Prevent stale protocol objects from replaying after a new pairing epoch. */
 uint64_t stage_director_news_watch_current_epoch(struct wl_client *client);
 
+/* Production compositor-side WATCH candidate bookkeeping.
+ * Called only after actual paired-client + request-epoch checks in native
+ * protocol handler. First accepted WATCH reserves one native candidate.
+ * No browser launch, scene, focus, input or popup authority is granted.
+ */
+bool stage_director_news_watch_record_candidate(
+	struct wl_resource *request_resource, const char *source_id);
+
+
 #endif
