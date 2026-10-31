@@ -37,6 +37,17 @@ uint64_t stage_director_news_watch_current_epoch(struct wl_client *client) {
 	return stage_director_news_watch_selected_client(client)
 		? atomic_load(&pairing_epoch) : 0;
 }
+static bool candidate_recorded;
+bool stage_director_news_watch_record_candidate(
+		struct wl_resource *resource, const char *source_id) {
+	(void)source_id;
+	if (!stage_director_news_watch_probe_request(resource) ||
+			candidate_recorded) {
+		return false;
+	}
+	candidate_recorded = true;
+	return true;
+}
 void stage_director_news_pairing_clear_host(void) {
 	atomic_store(&paired, false);
 	stage_director_weather_watch_protocol_revoke();
@@ -165,7 +176,8 @@ int main(void) {
 	assert(chosen.count[2] == 1);
 	post_apollo_weather_watch_v1_watch(chosen.watch, "cspan");
 	sync_client(&chosen);
-	assert(chosen.count[1] == 2);
+	assert(chosen.count[0] == 1);
+	assert(chosen.count[1] == 1);
 
 	/* Spoof tries a guessed global name despite not seeing the global.
 	 * Either protocol-level rejection or bind-level rejection disconnects it.
@@ -183,8 +195,8 @@ int main(void) {
 	/* Existing bound resources can no longer ask for a WATCH candidate. */
 	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
 	sync_client(&chosen);
-	assert(chosen.count[0] == 1);
-	assert(chosen.count[1] == 2);
+	assert(chosen.count[0] == 2);
+	assert(chosen.count[1] == 1);
 
 	/* A new operator pairing on the SAME Wayland socket must not give a
 	 * previously bound protocol object permission from the old epoch. */
@@ -192,8 +204,8 @@ int main(void) {
 	atomic_store(&paired, true);
 	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
 	sync_client(&chosen);
-	assert(chosen.count[0] == 2);
-	assert(chosen.count[1] == 2);
+	assert(chosen.count[0] == 3);
+	assert(chosen.count[1] == 1);
 	atomic_store(&paired, false);
 
 	close_client(&chosen);
