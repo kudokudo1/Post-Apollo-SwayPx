@@ -127,16 +127,29 @@ spoof_pid=""
 other_pid=""
 removed=0
 for _ in {1..100}; do
-  if grep -Eq '\[stage-director\]\[SD1\]\[NEWS\].*hosts=0 actors=0' \
-      "$runtime/sway.log"; then
+  if python3 - "$runtime/sway.log" >/dev/null 2>&1 <<'PY'
+import pathlib,re,sys
+log=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+double=list(re.finditer(
+    r"\[stage-director\]\[SD1\]\[NEWS\][^\n]*hosts=2 actors=0",log))
+cleared=list(re.finditer(
+    r"\[stage-director\]\[SD1\]\[NEWS\][^\n]*hosts=0 actors=0",log))
+if not double or not any(z.start()>double[-1].start() for z in cleared):
+    raise SystemExit("FAIL: no zero-host registry state after the duplicate host state")
+if len(re.findall(
+    r"\[stage-director\]\[SD0\] layer reason=unmap "
+    r"namespace=post-apollo-weather-station",log))<2:
+    raise SystemExit("FAIL: both live Weather layer hosts were not unmapped")
+PY
+  then
     removed=1
     break
   fi
   sleep 0.1
 done
 if [[ "$removed" != 1 ]]; then
-  echo "FAIL: native duplicate Weather host candidates were not removed" >&2
-  grep -E "NEWS_HOST_PEER|\[SD1\]\[NEWS\]" "$runtime/sway.log" >&2 || true
+  echo "FAIL: both native Weather layer hosts must unmap AFTER simultaneous duplication" >&2
+  grep -E "NEWS_HOST_PEER|\[SD1\]\[NEWS\]|layer reason=unmap" "$runtime/sway.log" >&2 || true
   exit 1
 fi
 echo "SD_CI_LAYER_HOST_UNMAP both_namespace_candidates_cleared=1 unrelated_layer_closed=1 authority=NONE result=PASS"
