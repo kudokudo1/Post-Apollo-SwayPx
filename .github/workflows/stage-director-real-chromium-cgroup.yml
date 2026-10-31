@@ -1,0 +1,92 @@
+name: Stage Director real Chromium cgroup custody (no activation)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/browser-tree-custody-20261031
+    paths:
+      - 'tests/stage_director/ci_chromium_cgroup.Dockerfile'
+      - 'tests/stage_director/ci_real_chromium_cgroup.py'
+      - '.github/workflows/stage-director-real-chromium-cgroup.yml'
+      - 'docs/stage-director-real-chromium-cgroup-20261031.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-isolation-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check no production browser issuer, unsafe Docker flags or arbitrary URLs
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tests/stage_director/ci_real_chromium_cgroup.py
+          python3 -B - <<'PY'
+          from pathlib import Path
+          dockerfile=Path("tests/stage_director/ci_chromium_cgroup.Dockerfile").read_text()
+          test=Path("tests/stage_director/ci_real_chromium_cgroup.py").read_text()
+          assert "FROM debian:bookworm-slim" in dockerfile
+          assert "USER 10001:10001" in dockerfile
+          assert 'ENTRYPOINT ["/usr/bin/chromium"]' in dockerfile
+          assert '"about:blank"' in dockerfile
+          assert '"--no-sandbox",' not in dockerfile
+          assert '"--no-sandbox"' not in dockerfile
+          assert "--disable-setuid-sandbox" not in dockerfile
+          assert '"--network", "none"' in test
+          assert '"--cap-drop", "ALL"' in test
+          assert '"--security-opt", "no-new-privileges"' in test
+          assert '"--read-only"' in test
+          assert '"--pids-limit", "128"' in test
+          assert '"--memory", "1536m"' in test
+          assert '"--user", "10001:10001"' in test
+          assert "cgroup.controllers" in test
+          assert 'Path(f"/proc/{pid}/cgroup")' in test
+          assert 'cid[:12] not in relative' in test
+          assert "matching_survivors=0" in test
+          assert 'command("docker", "stop", "--time", "3", cid' in test
+          for bad in ("--privileged", "seccomp=unconfined", "--pid=host",
+                      "hostNetwork", "http://", "https://"):
+              # No use of dangerous flags or external targets in executable args
+              # (comments can mention some forbidden options).
+              if bad in test and bad not in ("--privileged",):
+                  raise AssertionError(bad)
+          for path in ("sway/stage_director.c",
+                       "sway/stage_director_weather_watch_protocol.c",
+                       "sway/ipc-server.c"):
+              prod=Path(path).read_text()
+              assert "ci_real_chromium_cgroup" not in prod
+          print("SD_REAL_CHROMIUM_SOURCE: separate Docker-only real browser "
+                "test, no production WATCH issuer, nonroot and no network PASS")
+          PY
+
+  chromium-cgroup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Docker cgroup v2 available before build
+        run: |
+          set -euo pipefail
+          docker version
+          docker info --format 'Docker cgroup={{.CgroupVersion}} driver={{.CgroupDriver}}'
+          test -r /sys/fs/cgroup/cgroup.controllers
+          test "$(docker info --format '{{.CgroupVersion}}')" = "2"
+      - name: Build and run real sandboxed headless Chromium, stop whole container cgroup
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_real_chromium_cgroup.py
+      - name: Explain evidence boundary
+        if: always()
+        run: |
+          echo "Real nonroot Chromium (about:blank only) runs with Docker network=none, read-only root and isolated ephemeral profile under its own v2 cgroup." >> "$GITHUB_STEP_SUMMARY"
+          echo "No explicit Chromium --no-sandbox, container privilege elevation, seccomp-unconfined or production browser launch occurs." >> "$GITHUB_STEP_SUMMARY"
+          echo "A passing cgroup teardown check proves no observed original process identities/cgroup members remain, but it does not prove Chromium's internal sandbox is active or a compositor viewport/focus/input/popup containment." >> "$GITHUB_STEP_SUMMARY"
+          echo "If the runner cannot support both Chrome sandbox and container confinement, this job must FAIL CLOSED: no --no-sandbox workaround." >> "$GITHUB_STEP_SUMMARY"
