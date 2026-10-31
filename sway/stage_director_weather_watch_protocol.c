@@ -1,4 +1,6 @@
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
 #include "sway/stage_director.h"
@@ -13,6 +15,22 @@
  */
 static struct wl_display *watch_display;
 static struct wl_global *watch_global;
+
+struct watch_binding {
+	uint64_t pairing_epoch;
+};
+
+static bool request_epoch_current(struct wl_client *client,
+		struct wl_resource *resource) {
+	struct watch_binding *binding = wl_resource_get_user_data(resource);
+	return binding && binding->pairing_epoch &&
+		binding->pairing_epoch ==
+			stage_director_news_watch_current_epoch(client);
+}
+
+static void destroy_binding(struct wl_resource *resource) {
+	free(wl_resource_get_user_data(resource));
+}
 
 bool stage_director_weather_watch_protocol_is_global(
 		const struct wl_global *global) {
@@ -29,6 +47,7 @@ static bool known_source(const char *id) {
 static void handle_watch(struct wl_client *client,
 		struct wl_resource *resource, const char *source_id) {
 	if (client != wl_resource_get_client(resource) ||
+			!request_epoch_current(client, resource) ||
 			!stage_director_news_watch_probe_request(resource)) {
 		post_apollo_weather_watch_v1_send_result(
 			resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_DENIED);
@@ -47,6 +66,7 @@ static void handle_watch(struct wl_client *client,
 static void handle_close(struct wl_client *client,
 		struct wl_resource *resource) {
 	if (client != wl_resource_get_client(resource) ||
+			!request_epoch_current(client, resource) ||
 			!stage_director_news_watch_probe_request(resource)) {
 		post_apollo_weather_watch_v1_send_result(
 			resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_DENIED);
@@ -85,7 +105,23 @@ static void bind_watch(struct wl_client *client, void *data,
 		wl_client_post_no_memory(client);
 		return;
 	}
-	wl_resource_set_implementation(resource, &watch_impl, NULL, NULL);
+	struct watch_binding *binding = calloc(1, sizeof(*binding));
+	if (!binding) {
+		wl_resource_destroy(resource);
+		wl_client_post_no_memory(client);
+		return;
+	}
+	binding->pairing_epoch =
+		stage_director_news_watch_current_epoch(client);
+	if (!binding->pairing_epoch) {
+		free(binding);
+		wl_resource_destroy(resource);
+		wl_client_post_implementation_error(client,
+			"Stage Director WATCH pairing expired during bind");
+		return;
+	}
+	wl_resource_set_implementation(
+		resource, &watch_impl, binding, destroy_binding);
 }
 
 void stage_director_weather_watch_protocol_init(struct wl_display *display) {
