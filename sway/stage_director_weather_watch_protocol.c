@@ -67,7 +67,15 @@ static void handle_watch(struct wl_client *client,
 			resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_INVALID_SOURCE);
 		return;
 	}
-	/* Intentionally no browser supervisor, lease, scene or seat call. */
+	/* The first valid WATCH records one compositor-owned native candidate.
+	 * A second WATCH (even on the same wl_client) is denied until CLOSE
+	 * and a fresh trusted pairing epoch. The ledger never launches browser
+	 * or grants scene, input, focus, popup or supervisor authority. */
+	if (!stage_director_news_watch_record_candidate(resource, source_id)) {
+		post_apollo_weather_watch_v1_send_result(
+			resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_DENIED);
+		return;
+	}
 	post_apollo_weather_watch_v1_send_result(
 		resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_CANDIDATE_ONLY);
 }
