@@ -560,4 +560,9 @@ PY
   lineage_child=""
   echo "SD_CI_CHILD_LIFETIME owned_launch_root_reaped=1 authority=NONE result=PASS"
 fi
+if [[ "${STAGE_DIRECTOR_CI_REAL_LAYER_HOST:-0}" == 1 ]]; then
+  # All existing screenshots/pidfd/native-XDG tests have completed. Only
+  # disposable CI actors are launched by this separate shell harness.
+  bash tests/stage_director/ci_real_layer_host_smoke.sh "$runtime"
+fi
 echo "No video browser, keyboard/popup guard or production scene authority activated."

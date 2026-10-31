@@ -15,6 +15,7 @@ on:
       - stage-director/ci-native-wayland-client-credentials-20261027
       - stage-director/ci-native-news-pidfd-lifetime-20261027
       - stage-director/ci-native-child-lineage-20261027
+      - stage-director/weather-native-host-wayland-peer-20261031
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
@@ -26,6 +27,9 @@ on:
       - 'tests/stage_director/ci_native_news_actor_smoke.sh'
       - 'tests/stage_director/ci_native_news_pidfd_witness.c'
       - 'tests/stage_director/ci_native_child_lineage_witness.c'
+      - 'tests/stage_director/ci_real_layer_host.c'
+      - 'tests/stage_director/ci_real_layer_host.nix'
+      - 'tests/stage_director/ci_real_layer_host_smoke.sh'
       - 'tests/stage_director/assert_native_news_actor.py'
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
       - 'tests/stage_director/assert_news_render_pixels.py'
@@ -106,6 +110,13 @@ jobs:
           compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$foot/bin/foot"
           test -x "$compositor/bin/swaymsg"
+          # Guard against running an unexpectedly stale binary whose
+          # source-level observer was present only in the checkout.
+          if ! grep -aFq '[stage-director][SD1][NEWS_HOST_PEER]' "$compositor/bin/sway"; then
+            echo "FAIL: CI compositor binary lacks compiled native host peer observer" >&2
+            exit 1
+          fi
+          echo "SD_CI_LAYER_HOST_BINARY peer_observer_linked=1 authority=NONE"
           grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
           test -x "$grim/bin/grim"
           # Standalone CI-only program: a held kernel pidfd for the exact
@@ -136,6 +147,13 @@ jobs:
           echo "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" >> "$GITHUB_ENV"
+          # Build the real minimal wlr-layer-shell client using the pinned
+          # protocol XML and the same locked Nixpkgs as the test compositor.
+          # It maps three disposable SHM surfaces, no Qt/GTK/NEWS browser.
+          layer="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_layer_host.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$layer/bin/sd-ci-real-layer-host"
+          echo "STAGE_DIRECTOR_TEST_LAYER_HOST=$layer/bin/sd-ci-real-layer-host" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_LAYER_HOST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."

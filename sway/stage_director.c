@@ -209,7 +209,15 @@ static void observe_layer(struct sway_layer_surface *surface,
 	 */
 	const struct stage_director_weather_host_result news_host =
 		stage_director_weather_host_observe_layer(surface);
-	if (observation->news_host_candidate != news_host.candidate_observed) {
+	/*
+	 * wlroots surface.map can precede Sway's cached surface->mapped
+	 * transition. On the next commit, host classification changes even
+	 * though live layer dimensions/mapped bits are unchanged. Treat this as
+	 * a material event so the first real native host peer is observed once.
+	 */
+	const bool news_host_candidate_changed =
+		observation->news_host_candidate != news_host.candidate_observed;
+	if (news_host_candidate_changed) {
 		observation->news_host_candidate = news_host.candidate_observed;
 		observe_news_shadow();
 	}
@@ -223,7 +231,8 @@ static void observe_layer(struct sway_layer_surface *surface,
 		observation->last_anchor != anchor ||
 		observation->last_exclusive_zone != exclusive_zone ||
 		observation->last_keyboard_interactive != keyboard_interactive ||
-		observation->last_mapped != mapped;
+		observation->last_mapped != mapped ||
+		news_host_candidate_changed;
 
 	if (!force && !changed) {
 		return;
@@ -261,7 +270,11 @@ static void observe_layer(struct sway_layer_surface *surface,
 		exclusive_zone,
 		keyboard_interactive);
 	shadow_write(line);
-	if (news_host.candidate_observed) {
+	if (layer_surface->namespace &&
+			strcmp(layer_surface->namespace,
+				STAGE_DIRECTOR_WEATHER_NAMESPACE) == 0) {
+		/* Read /proc only on Weather-namespace map or material changes.
+		 * Log both candidate and unavailable native peer observations. */
 		/* Read /proc only on map or meaningful layer state/geometry changes.
 		 * Ordinary high-frequency QML frame commits must not pay this cost.
 		 * A future authenticated WATCH admission rechecks live resources. */
@@ -269,12 +282,13 @@ static void observe_layer(struct sway_layer_surface *surface,
 			stage_director_weather_host_observe_native_peer(surface);
 		snprintf(line, sizeof(line),
 			"[stage-director][SD1][NEWS_HOST_PEER] reason=%s "
-			"namespace_candidate=yes native_peer=%s "
+			"namespace_candidate=%s native_peer=%s "
 			"pid=%" PRId64 " uid=%" PRIu32 " start=%" PRIu64 " "
 			"source=actual_layer_and_wl_surface_resources "
 			"operator_authenticated=no can_launch=no "
 			"can_bind_viewer=no can_clip=no can_accept_input=no",
 			reason ? reason : "unknown",
+			news_host.candidate_observed ? "yes" : "no",
 			native_host.native_peer_candidate ? "candidate" : "unavailable",
 			native_host.client_pid, native_host.client_uid,
 			native_host.client_start_time_ticks);
