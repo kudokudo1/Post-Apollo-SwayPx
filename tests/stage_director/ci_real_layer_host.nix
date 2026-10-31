@@ -8,7 +8,7 @@ in pkgs.stdenv.mkDerivation {
   version = "1";
   dontUnpack = true;
   strictDeps = true;
-  nativeBuildInputs = [ pkgs.pkg-config pkgs.wayland ];
+  nativeBuildInputs = [ pkgs.pkg-config pkgs.wayland-scanner ];
   buildInputs = [ pkgs.wayland ];
   buildPhase = ''
     runHook preBuild
