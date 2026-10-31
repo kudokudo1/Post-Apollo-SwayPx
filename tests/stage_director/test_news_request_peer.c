@@ -34,9 +34,10 @@ static struct wl_client *make_client(struct wl_display *display,
 	*client_fd = pair[1];
 	return client;
 }
-static struct wl_resource *make_resource(struct wl_client *client, int id) {
+static struct wl_resource *make_resource(struct wl_client *client) {
+	/* ID zero asks libwayland-server to allocate an available object ID. */
 	struct wl_resource *resource =
-		wl_resource_create(client, &wl_surface_interface, 1, id);
+		wl_resource_create(client, &wl_surface_interface, 1, 0);
 	assert(resource != NULL);
 	return resource;
 }
@@ -49,12 +50,11 @@ int main(void) {
 	struct wl_client *a = make_client(display, &a_fd);
 	struct wl_client *b = make_client(display, &b_fd);
 	assert(a != b);
-	/* ID 1 is reserved for the client's wl_display resource. */
-	struct wl_resource *role_a = make_resource(a, 101);
-	struct wl_resource *surface_a = make_resource(a, 102);
-	struct wl_resource *request_a = make_resource(a, 103);
-	struct wl_resource *request_b = make_resource(b, 104);
-	struct wl_resource *role_b = make_resource(b, 105);
+	struct wl_resource *role_a = make_resource(a);
+	struct wl_resource *surface_a = make_resource(a);
+	struct wl_resource *request_a = make_resource(a);
+	struct wl_resource *request_b = make_resource(b);
+	struct wl_resource *role_b = make_resource(b);
 
 	denied(stage_director_news_request_peer_probe(NULL, surface_a, request_a),
 		SD_NEWS_REQUEST_PEER_INVALID_RESOURCES);
