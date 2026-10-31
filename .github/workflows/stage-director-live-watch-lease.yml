@@ -1,0 +1,142 @@
+name: Stage Director live paired WATCH candidate ledger (zero authority)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/ci-qt-native-watch-bridge-20261031
+    paths:
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_weather_watch_protocol.c'
+      - 'include/sway/stage_director.h'
+      - 'include/sway/stage_director_news_session_lease.h'
+      - 'tests/stage_director/ci_qt_native_watch_bridge.cpp'
+      - 'tests/stage_director/ci_real_watch_layer_client.c'
+      - 'tests/stage_director/ci_real_watch_layer_smoke.sh'
+      - 'tests/stage_director/test_private_weather_watch_wire.c'
+      - '.github/workflows/stage-director-live-watch-lease.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ledger-source-and-protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check one native WATCH ledger and automatic teardown
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          stage = Path("sway/stage_director.c").read_text()
+          wire = Path("sway/stage_director_weather_watch_protocol.c").read_text()
+          ledger = Path("sway/stage_director_news_session_lease.c").read_text()
+          qt = Path("tests/stage_director/ci_qt_native_watch_bridge.cpp").read_text()
+          harness = Path("tests/stage_director/ci_real_watch_layer_smoke.sh").read_text()
+          assert "static struct stage_director_news_session_lease weather_watch_lease;" in stage
+          assert "stage_director_news_watch_record_candidate(" in stage
+          assert "stage_director_news_session_lease_reserve_candidate(" in stage
+          assert "stage_director_news_watch_probe_request(resource)" in stage
+          assert "weather_watch_lease.state != SD_NEWS_LEASE_EMPTY" in stage
+          assert "weather_host_session.client != wl_resource_get_client(resource)" in stage
+          assert "stage_director_news_session_lease_close(" in stage
+          assert "close_weather_watch_lease();" in stage.split("static void on_weather_host_revoked")[1].split("static void ensure_weather_host_session")[0]
+          assert "stage_director_news_host_session_invalidate(" in stage
+          assert "stage_director_news_watch_record_candidate(resource, source_id)" in wire
+          assert "POST_APOLLO_WEATHER_WATCH_V1_STATUS_DENIED" in wire
+          assert "result.can_launch = false" not in ledger  # Struct uses default false.
+          for denied in ("browser_launch_authorized = false", "can_launch = false",
+                         "can_bind_viewer = false", "can_clip = false",
+                         "can_render = false", "can_accept_input = false",
+                         "can_show_popup = false"):
+              assert denied in ledger, denied
+          assert 'post_apollo_weather_watch_v1_watch(s.watch,"cspan")' in qt
+          assert 's.status[0] != 2' in qt
+          assert "[WATCH_LEDGER] reserved epoch=" in harness
+          assert "[WATCH_LEDGER] closed epoch=" in harness
+          assert "SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER" in stage
+          # Still no browser/scene/seat/signal function called by live WATCH.
+          for forbidden in ("posix_spawn(", "fork(", "execve(", "system(",
+                            "kill(", "wlr_scene_", "wlr_seat_"):
+              assert forbidden not in wire, forbidden
+          for path in ("sway/ipc-server.c", "sway/commands.c"):
+              assert "stage_director_news_watch_record_candidate(" not in Path(path).read_text(), path
+          print("SD_LIVE_WATCH_LEDGER_BOUNDARY: one native candidate, "
+                "record/revoke, no browser or scene/input authorization PASS")
+          PY
+      - name: Native real-socket protocol regression for duplicate WATCH
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev libwayland-bin pkg-config
+          xml=protocols/post-apollo-weather-watch-v1.xml
+          wayland-scanner server-header "$xml" "$RUNNER_TEMP/post-apollo-weather-watch-v1-protocol.h"
+          wayland-scanner client-header "$xml" "$RUNNER_TEMP/post-apollo-weather-watch-v1-client-protocol.h"
+          wayland-scanner private-code "$xml" "$RUNNER_TEMP/weather-watch-protocol.c"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -pthread \
+            -Iinclude -I"$RUNNER_TEMP" \
+            $(pkg-config --cflags wayland-server wayland-client) \
+            sway/stage_director_weather_watch_protocol.c \
+            "$RUNNER_TEMP/weather-watch-protocol.c" \
+            tests/stage_director/test_private_weather_watch_wire.c \
+            -o "$RUNNER_TEMP/private-weather-watch-wire" \
+            $(pkg-config --libs wayland-server wayland-client)
+          "$RUNNER_TEMP/private-weather-watch-wire"
+
+  actual-qt-and-native-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile ordinary compositor with LIVE candidate ledger
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          grep -aFq 'WATCH_LEDGER' "$prod/bin/sway"
+          if grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$prod/bin/sway"; then
+            echo "FAIL: headless scene selection hook leaked into production" >&2
+            exit 1
+          fi
+          echo "Production SwayPX built with WATCH ledger; no viewer authority."
+      - name: Compile isolated SwayPX, native spoof and Qt6 same-client test
+        run: |
+          set -euo pipefail
+          ci_compositor="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_compositor.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          c_client="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_layer_client.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          qt_client="$(nix build --impure --expr 'import ./tests/stage_director/ci_qt_native_watch_bridge.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$ci_compositor/bin/sway"
+          test -x "$c_client/bin/sd-ci-real-watch-layer"
+          test -x "$qt_client/bin/sd-ci-qt-native-watch-bridge"
+          grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$ci_compositor/bin/sway"
+          echo "CI_COMPOSITOR=$ci_compositor" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT=$c_client/bin/sd-ci-real-watch-layer" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_QT_WATCH_BRIDGE=$qt_client/bin/sd-ci-qt-native-watch-bridge" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1" >> "$GITHUB_ENV"
+          echo "QT_QPA_PLATFORM=wayland" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Boot real compositor with live candidate and verify automatic close
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Confirm honest evidence boundary
+        if: always()
+        run: |
+          echo "Native candidate is not browser authorization, process supervision, popup/input confinement or QML integration." >> "$GITHUB_STEP_SUMMARY"
+          echo "Actual Qt6-owned Wayland client, same namespace spoof and foreign client are exercised in a disposable isolated compositor." >> "$GITHUB_STEP_SUMMARY"
+          echo "CI-only scene selection has no physical-input authentication claim, and normal production SwayPX remains disabled by default." >> "$GITHUB_STEP_SUMMARY"
