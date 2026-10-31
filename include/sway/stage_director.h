@@ -1,6 +1,7 @@
 #ifndef _SWAY_STAGE_DIRECTOR_H
 #define _SWAY_STAGE_DIRECTOR_H
 #include <stdbool.h>
+#include <stdint.h>
 
 struct sway_container;
 struct sway_layer_surface;
@@ -48,5 +49,7 @@ struct wl_resource;
  * compositor protocol implementation. They grant NO browser or render rights. */
 bool stage_director_news_watch_selected_client(struct wl_client *client);
 bool stage_director_news_watch_probe_request(struct wl_resource *resource);
+/* Prevent stale protocol objects from replaying after a new pairing epoch. */
+uint64_t stage_director_news_watch_current_epoch(struct wl_client *client);
 
 #endif
