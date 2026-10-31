@@ -6,11 +6,11 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#ifdef SD_STAGE_DIRECTOR_TEST_HELPER
+#if defined(SD_STAGE_DIRECTOR_TEST_HELPER) || defined(SD_STAGE_DIRECTOR_TEST_TREE)
 #include <spawn.h>
-#include "sway/stage_director_process_evidence.h"
 extern char **environ;
 #endif
+#include "sway/stage_director_process_evidence.h"
 #include "sway/stage_director_news_supervisor.h"
 
 static bool pidfd_alive(int pidfd) {
@@ -52,9 +52,32 @@ bool stage_director_news_supervisor_request_stop(
 			 s->state != SD_NEWS_SUPERVISOR_STOP_REQUESTED) ||
 			s->pidfd < 0) return false;
 #ifdef SYS_pidfd_send_signal
-	/* Kernel-pinned descriptor avoids ever signaling a reused PID. */
+	/* A browser-like child tree must be stopped as its OWN process group,
+	 * not merely by a pidfd signal to the leader. The direct launch root
+	 * remains unreaped, preventing process group ID reuse at this point.
+	 * Recheck kernel start/uid and process-group leader before signaling.
+	 */
+	if (s->owned_pgid > 0) {
+		struct stage_director_process_identity now = {0};
+		if (s->owned_pgid != s->child_pid ||
+				!pidfd_alive(s->pidfd) ||
+				!stage_director_read_linux_process(
+					s->child_pid, &now, NULL) ||
+				now.pid != s->child_pid ||
+				now.start_time_ticks != s->child_start_ticks ||
+				now.uid != s->child_uid ||
+				getpgid(s->child_pid) != s->owned_pgid) {
+			return false;
+		}
+		if (kill(-s->owned_pgid, SIGTERM) != 0) {
+			return false;
+		}
+		s->group_stop_sent = true;
+		s->state = SD_NEWS_SUPERVISOR_STOP_REQUESTED;
+		return true;
+	}
+	/* Existing single-child method stays strictly pidfd targeted. */
 	if (syscall(SYS_pidfd_send_signal, s->pidfd, SIGTERM, NULL, 0) != 0) {
-		/* ESRCH means the child already exited. Caller must still reap. */
 		if (errno != ESRCH) return false;
 	}
 	s->state = SD_NEWS_SUPERVISOR_STOP_REQUESTED;
@@ -90,7 +113,8 @@ bool stage_director_news_supervisor_finish(
 		struct stage_director_news_supervisor *s, uint64_t epoch) {
 	if (!s || epoch == 0 || s->epoch != epoch ||
 			s->state != SD_NEWS_SUPERVISOR_EXITED ||
-			s->pidfd < 0) return false;
+			s->pidfd < 0 ||
+			(s->owned_pgid > 0 && !s->group_stop_sent)) return false;
 	close(s->pidfd);
 	const uint64_t floor = s->last_epoch;
 	memset(s, 0, sizeof(*s));
@@ -138,6 +162,7 @@ bool stage_director_news_supervisor_start_test_child(
 		return false;
 	}
 	s->child_pid = pid;
+	s->child_uid = identity.uid;
 	s->child_start_ticks = identity.start_time_ticks;
 	s->pidfd = descriptor;
 	s->host_ref = host_ref;
