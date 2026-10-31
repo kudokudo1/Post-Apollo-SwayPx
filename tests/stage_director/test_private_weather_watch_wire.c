@@ -182,7 +182,7 @@ int main(void) {
 
 	close_client(&chosen);
 	/* Spoof was already rejected; free locally without another request. */
-	post_apollo_weather_watch_v1_destroy(forged);
+	wl_proxy_destroy((struct wl_proxy *)forged);
 	wl_registry_destroy(spoof.registry);
 	wl_display_disconnect(spoof.display);
 	atomic_store(&running, false);
