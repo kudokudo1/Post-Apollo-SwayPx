@@ -12,7 +12,6 @@
  * focus, input or popup authority is granted by a successful candidate.
  */
 #include <QGuiApplication>
-#include <QNativeInterface>
 #include <QByteArray>
 #include <QtGlobal>
 #include <cerrno>
