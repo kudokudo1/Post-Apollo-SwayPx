@@ -62,7 +62,7 @@ def main() -> None:
     cgroup: Path | None = None
     started = False
     try:
-        print("SD_CI_CHROME_SYSTEMD: real_browser=1 AppArmor=installed "
+        print("SD_CI_CHROME_SYSTEMD: real_browser=1 AppArmor=UNVERIFIED "
               "network=private root=read_only home=hidden "
               "sandbox_bypass=NONE", flush=True)
         run("sudo", "systemd-run",
