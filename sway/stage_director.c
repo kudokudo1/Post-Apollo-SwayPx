@@ -103,6 +103,11 @@ bool stage_director_news_watch_selected_client(struct wl_client *client) {
  * selection after unmap, output transfer, reconnect or a new pairing epoch.
  * No generic namespace/app_id/PID fallback is permitted.
  */
+uint64_t stage_director_news_watch_current_epoch(struct wl_client *client) {
+	return stage_director_news_watch_selected_client(client)
+		? weather_host_session.epoch : 0;
+}
+
 bool stage_director_news_watch_probe_request(struct wl_resource *resource) {
 	ensure_weather_host_session();
 	if (!resource ||
