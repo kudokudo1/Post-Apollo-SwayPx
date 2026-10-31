@@ -110,6 +110,13 @@ jobs:
           compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
           test -x "$foot/bin/foot"
           test -x "$compositor/bin/swaymsg"
+          # Guard against running an unexpectedly stale binary whose
+          # source-level observer was present only in the checkout.
+          if ! grep -aFq '[stage-director][SD1][NEWS_HOST_PEER]' "$compositor/bin/sway"; then
+            echo "FAIL: CI compositor binary lacks compiled native host peer observer" >&2
+            exit 1
+          fi
+          echo "SD_CI_LAYER_HOST_BINARY peer_observer_linked=1 authority=NONE"
           grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
           test -x "$grim/bin/grim"
           # Standalone CI-only program: a held kernel pidfd for the exact
