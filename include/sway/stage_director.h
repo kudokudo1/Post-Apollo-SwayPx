@@ -1,5 +1,6 @@
 #ifndef _SWAY_STAGE_DIRECTOR_H
 #define _SWAY_STAGE_DIRECTOR_H
+#include <stdbool.h>
 
 struct sway_container;
 struct sway_layer_surface;
@@ -29,5 +30,16 @@ void stage_director_layer_mapped(struct sway_layer_surface *surface);
 void stage_director_layer_committed(struct sway_layer_surface *surface);
 void stage_director_layer_unmapped(struct sway_layer_surface *surface);
 void stage_director_layer_destroyed(struct sway_layer_surface *surface);
+
+/*
+ * Pairing gesture's internal compositor callback, never callable from IPC.
+ * Exact output/client/surface verification happens on the scene-hit layer.
+ * Successful selection records only a revocable native candidate: not a
+ * WATCH admission, browser permission, input, popup or rendering authority.
+ */
+struct sway_seat;
+void stage_director_news_pairing_clear_host(void);
+bool stage_director_news_pairing_select_at(
+	struct sway_seat *seat, double lx, double ly);
 
 #endif
