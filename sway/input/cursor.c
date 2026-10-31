@@ -377,7 +377,7 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 	cursor_handle_activity_from_device(cursor, &event->pointer->base);
 	if (stage_director_news_pairing_pointer_button(
 			cursor->seat, &event->pointer->base, event->time_msec,
-			event->button, event->state,
+			server.session_lock.lock != NULL, event->button, event->state,
 			cursor->cursor->x, cursor->cursor->y)) {
 		return;
 	}
