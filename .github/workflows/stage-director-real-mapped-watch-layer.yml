@@ -102,7 +102,7 @@ jobs:
       - name: Boot actual isolated SwayPX and exercise mapped WATCH and spoofed peers
         run: |
           set -euo pipefail
-          bash tests/stage_director/headless_sway_smoke.sh "$CI_COMPOSITOR/bin/sway"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
       - name: Preserve honest evidence boundary
         if: always()
         run: |
