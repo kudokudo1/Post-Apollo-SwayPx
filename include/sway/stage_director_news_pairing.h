@@ -24,13 +24,14 @@ struct sway_seat;
  */
 bool stage_director_news_pairing_key_press(struct sway_seat *seat,
 	struct wlr_input_device *device, bool session_locked,
+	bool shortcuts_inhibited,
 	const xkb_keysym_t *raw_keysyms, size_t keysyms_len,
 	uint32_t raw_modifiers, uint32_t time_msec);
 
 /* true => consume the pointer press/release; ordinary input otherwise. */
 bool stage_director_news_pairing_pointer_button(struct sway_seat *seat,
 	struct wlr_input_device *device, uint32_t time_msec,
-	uint32_t button, enum wl_pointer_button_state state,
+	bool session_locked, uint32_t button, enum wl_pointer_button_state state,
 	double lx, double ly);
 
 #endif
