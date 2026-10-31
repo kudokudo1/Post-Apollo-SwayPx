@@ -1,0 +1,111 @@
+name: Stage Director real mapped Weather WATCH layer (isolated headless)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/paired-watch-wire-20261031
+    paths:
+      - 'meson.build'
+      - 'meson_options.txt'
+      - 'sway/stage_director.c'
+      - 'tests/stage_director/ci_real_watch_layer_client.c'
+      - 'tests/stage_director/ci_real_watch_layer_client.nix'
+      - 'tests/stage_director/ci_real_watch_compositor.nix'
+      - 'tests/stage_director/ci_real_watch_layer_smoke.sh'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-real-mapped-watch-layer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject production input bypass or fake layer tests
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          opts = Path("meson_options.txt").read_text()
+          meson = Path("meson.build").read_text()
+          stage = Path("sway/stage_director.c").read_text()
+          script = Path("tests/stage_director/ci_real_watch_layer_smoke.sh").read_text()
+          client = Path("tests/stage_director/ci_real_watch_layer_client.c").read_text()
+          assert "value: false" in opts.split("sd-ci-real-weather-watch-layer")[1].split("\n")[0]
+          assert "SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1" in meson
+          assert "#ifdef SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER" in stage
+          assert 'strcmp(ci, "true")' in stage and 'strcmp(gha, "true")' in stage
+          assert 'stage_director_news_pairing_select_at(seat, 160, 120)' in stage
+          assert 'node_at_coords(seat, lx, ly, &hit, &sx, &sy)' in stage
+          assert 'role->surface != root_surface' in stage
+          assert 'strcmp(role->namespace, STAGE_DIRECTOR_WEATHER_NAMESPACE)' in stage
+          assert 'wl_compositor_create_surface(s.compositor)' in client
+          assert 'zwlr_layer_shell_v1_get_layer_surface(s.shell, s.surface' in client
+          assert 'wl_surface_commit(s.surface)' in client
+          assert 'post_apollo_weather_watch_v1_watch(s.watch, "bbc")' in client
+          assert 'post_apollo_weather_watch_v1_close(s.watch)' in client
+          assert 'SD_CI_REAL_WATCH_UNPAIRED' in client
+          assert 'same_namespace_spoof=1' in script
+          assert 'STAGE_DIRECTOR_CI_REAL_WATCH_FULL_COMPOSITOR' not in script
+          assert 'browser=OFF input_auth=UNTESTED result=PASS' in script
+          assert 'POST_APOLLO_STAGE_DIRECTOR_PAIRING=1' not in script
+          assert 'stage_director_news_pairing_key_press(' not in script
+          print("SD_CI_REAL_WATCH_BOUNDARY: separate disabled default CI "
+                "scene-hit fixture, native mapped clients, no fake physical input PASS")
+          PY
+
+  real-headless-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary production SwayPX first (no test selection hook)
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          echo "Ordinary production compositor compiled: $prod"
+          if grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$prod/bin/sway"; then
+            echo "FAIL: CI-only selector compiled into ordinary compositor" >&2
+            exit 1
+          fi
+      - name: Build independently opt-in headless compositor and same-client layer host
+        run: |
+          set -euo pipefail
+          ci_compositor="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_compositor.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          layer="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_layer_client.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$ci_compositor/bin/sway"
+          test -x "$layer/bin/sd-ci-real-watch-layer"
+          grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$ci_compositor/bin/sway"
+          echo "CI_COMPOSITOR=$ci_compositor" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT=$layer/bin/sd-ci-real-watch-layer" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Boot actual isolated SwayPX and exercise mapped WATCH and spoofed peers
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/headless_sway_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Preserve honest evidence boundary
+        if: always()
+        run: |
+          echo "Two ordinary production and CI-only compositor builds are isolated from the operator's desktop." >> "$GITHUB_STEP_SUMMARY"
+          echo "Actual layer-shell and private WATCH requests run on real Wayland sockets. Scene hit-test is invoked by a CI-only callback, not a genuine physical input gesture." >> "$GITHUB_STEP_SUMMARY"
+          echo "No Qt/Quickshell bridge, browser playback, GPU pixel clipping acceptance, or input/popup containment is implied." >> "$GITHUB_STEP_SUMMARY"
