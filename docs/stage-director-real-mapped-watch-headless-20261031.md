@@ -28,6 +28,8 @@ Require both normal and CI-only SwayPX builds, same-client real Wayland protocol
 
 ## WATCH OUT FOR
 
+**SECURITY BUG DISCOVERED AND CORRECTED IN THIS DRAFT:** The original PR #42 global filter identified WATCH by comparing a pointer assigned only after `wl_global_create()` returned. Wayland broadcasts to existing registry clients synchronously during that call, so the two-stage protection failed at discovery (though unpaired binding was still rejected). This draft now identifies the global by its generated protocol interface inside the filter before the pointer assignment, and the real headless test covers a spoof client connected BEFORE publication. **Do not deploy or merge PR #42 by itself without this fix.** GitHub CI must verify this correction.
+
 The headless compositor deliberately has no physical keyboard/mouse and cannot verify libinput versus uinput, genuine operator intent or a real click through a transparent Quickshell layer. The mock Weather layer is a small native C program, **not Qt/Quickshell**, so the same-connection Qt bridge remains a separate cross-worker requirement. Full NEWS video, browser spawning, scene crop, focus, popup and input transformation are not implemented. Real graphics drivers and multi-monitor scenarios also remain.
 
 The CI-only layer callback is **compiled out by default** and additionally guarded by explicit GitHub CI environment variables. It may never become a production namespace-driven pairing shortcut. The bootstrap catalog IDs remain temporary fixtures.
