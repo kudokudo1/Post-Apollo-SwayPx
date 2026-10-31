@@ -26,6 +26,9 @@ on:
       - 'tests/stage_director/ci_native_news_actor_smoke.sh'
       - 'tests/stage_director/ci_native_news_pidfd_witness.c'
       - 'tests/stage_director/ci_native_child_lineage_witness.c'
+      - 'tests/stage_director/ci_real_layer_host.c'
+      - 'tests/stage_director/ci_real_layer_host.nix'
+      - 'tests/stage_director/ci_real_layer_host_smoke.sh'
       - 'tests/stage_director/assert_native_news_actor.py'
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
       - 'tests/stage_director/assert_news_render_pixels.py'
@@ -136,6 +139,13 @@ jobs:
           echo "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" >> "$GITHUB_ENV"
+          # Build the real minimal wlr-layer-shell client using the pinned
+          # protocol XML and the same locked Nixpkgs as the test compositor.
+          # It maps three disposable SHM surfaces, no Qt/GTK/NEWS browser.
+          layer="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_layer_host.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$layer/bin/sd-ci-real-layer-host"
+          echo "STAGE_DIRECTOR_TEST_LAYER_HOST=$layer/bin/sd-ci-real-layer-host" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_LAYER_HOST=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
           echo "The disposable actor uses a spoofable app_id as a candidate only."
