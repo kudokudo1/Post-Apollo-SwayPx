@@ -11,6 +11,7 @@
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
 #include "sway/stage_director_news_host_session.h"
+#include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
 #include "sway/server.h"
 #include "sway/stage_director_news_shadow.h"
@@ -72,11 +73,39 @@ static int last_news_actors = -1;
  * selection from namespace, focus, IPC, or a single matching host.
  */
 static struct stage_director_news_host_session weather_host_session;
+static struct stage_director_news_session_lease weather_watch_lease;
+static bool weather_watch_lease_initialized;
+
+static void ensure_weather_watch_lease(void) {
+	if (!weather_watch_lease_initialized) {
+		stage_director_news_session_lease_init(&weather_watch_lease);
+		weather_watch_lease_initialized = true;
+	}
+}
+
+/* This is the production close path; a candidate is never browser, clip,
+ * popup or input authority, even when its native connection matches.
+ * Clear before releasing the host or a callback can observe stale custody.
+ */
+static void close_weather_watch_lease(void) {
+	ensure_weather_watch_lease();
+	if (weather_watch_lease.state == SD_NEWS_LEASE_EMPTY) {
+		return;
+	}
+	const uint64_t epoch = weather_watch_lease.epoch;
+	if (stage_director_news_session_lease_close(
+			&weather_watch_lease, epoch)) {
+		sway_log(SWAY_INFO, "[stage-director][SD1][WATCH_LEDGER] "
+			"closed epoch=%" PRIu64 " child=NONE authority=NONE",
+			epoch);
+	}
+}
 
 static void on_weather_host_revoked(void *data) {
 	(void)data;
-	/* Also runs on native wl_client/resource destruction, not only explicit
-	 * layer unmap or CLOSE. No stale global remains after disconnect. */
+	/* Native wl_client/role/surface destroy and host loss all invalidate
+	 * the private global AND the same native WATCH candidate ledger. */
+	close_weather_watch_lease();
 	stage_director_weather_watch_protocol_revoke();
 }
 
@@ -88,6 +117,8 @@ static void ensure_weather_host_session(void) {
 
 void stage_director_news_pairing_clear_host(void) {
 	ensure_weather_host_session();
+	/* Even in an already-revoked pairing, never strand a WATCH candidate. */
+	close_weather_watch_lease();
 	stage_director_news_host_session_invalidate(&weather_host_session);
 	stage_director_weather_watch_protocol_revoke();
 }
@@ -147,6 +178,49 @@ bool stage_director_news_watch_probe_request(struct wl_resource *resource) {
 		!result.operator_watch_authenticated && !result.can_launch &&
 		!result.can_clip && !result.can_render &&
 		!result.can_accept_input && !result.can_show_popup;
+}
+
+
+/*
+ * Live pairing → candidate ledger. Called only from the actual private
+ * protocol's validated WATCH handler, not Sway IPC or QML direct pointers.
+ * Every request rechecks the selected host/client/role/output/epoch.
+ * The existing NEWS lease explicitly keeps every authority flag false.
+ */
+bool stage_director_news_watch_record_candidate(
+		struct wl_resource *resource, const char *source_id) {
+	ensure_weather_host_session();
+	ensure_weather_watch_lease();
+	if (!resource || !source_id ||
+			!stage_director_news_watch_probe_request(resource) ||
+			weather_watch_lease.state != SD_NEWS_LEASE_EMPTY ||
+			!weather_host_session.candidate ||
+			!weather_host_session.client ||
+			weather_host_session.client != wl_resource_get_client(resource)) {
+		return false;
+	}
+	const uint64_t epoch = weather_host_session.epoch;
+	const uintptr_t host_ref = weather_host_session.native_host_ref;
+	const uintptr_t client_ref = (uintptr_t)weather_host_session.client;
+	const uintptr_t output_ref = weather_host_session.native_output_ref;
+	if (!stage_director_news_session_lease_reserve_candidate(
+			&weather_watch_lease, epoch, host_ref, client_ref,
+			output_ref, source_id)) {
+		return false;
+	}
+	if (weather_watch_lease.state != SD_NEWS_LEASE_HOST_CANDIDATE ||
+			weather_watch_lease.epoch != epoch ||
+			weather_watch_lease.native_host_ref != host_ref ||
+			weather_watch_lease.native_host_client_ref != client_ref ||
+			weather_watch_lease.native_output_ref != output_ref) {
+		close_weather_watch_lease();
+		return false;
+	}
+	sway_log(SWAY_INFO, "[stage-director][SD1][WATCH_LEDGER] "
+		"reserved epoch=%" PRIu64 " source=%s "
+		"native_paired=1 process=NONE browser=OFF authority=NONE",
+		epoch, weather_watch_lease.source_id);
+	return true;
 }
 
 /*
