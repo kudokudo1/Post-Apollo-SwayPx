@@ -108,8 +108,19 @@ def main() -> None:
         for _ in range(120):
             inspect = json.loads(command("docker", "inspect", cid))[0]
             if not inspect["State"]["Running"]:
-                raise RuntimeError("BLOCKED_CHROMIUM_EXITED_EARLY: "
-                                   + command("docker", "logs", cid)[-2600:])
+                # Docker logs may be exclusively on stderr. Do not mask
+                # Chromium namespace/sandbox errors with stdout-only capture.
+                diagnostic = subprocess.run(
+                    ["docker", "logs", "--tail", "100", cid],
+                    text=True, capture_output=True, timeout=20, check=False)
+                state = inspect["State"]
+                raise RuntimeError(
+                    "BLOCKED_CHROMIUM_EXITED_EARLY "
+                    f"exit={state.get('ExitCode')} "
+                    f"oom={state.get('OOMKilled')} "
+                    f"docker_error={state.get('Error')} "
+                    "stderr=" + diagnostic.stderr[-3500:] +
+                    " stdout=" + diagnostic.stdout[-1000:])
             pids = members(group)
             browser_count = sum(
                 1 for p in pids if Path(f"/proc/{p}/comm").exists() and
