@@ -71,8 +71,17 @@ static int last_news_actors = -1;
  */
 static struct stage_director_news_host_session weather_host_session;
 
+static void on_weather_host_revoked(void *data) {
+	(void)data;
+	/* Also runs on native wl_client/resource destruction, not only explicit
+	 * layer unmap or CLOSE. No stale global remains after disconnect. */
+	stage_director_weather_watch_protocol_revoke();
+}
+
 static void ensure_weather_host_session(void) {
 	stage_director_news_host_session_init(&weather_host_session);
+	stage_director_news_host_session_on_revoked(
+		&weather_host_session, on_weather_host_revoked, NULL);
 }
 
 void stage_director_news_pairing_clear_host(void) {
