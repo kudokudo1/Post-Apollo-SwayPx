@@ -9,6 +9,7 @@
 #endif
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
+#include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_shadow.h"
 #include "sway/layers.h"
 #include "sway/output.h"
@@ -54,6 +55,18 @@ static FILE *shadow_log;
 static bool announced;
 static int last_news_hosts = -1;
 static int last_news_actors = -1;
+
+/*
+ * Production-linked native host lifetime guard. Zero authority and no
+ * admission issuer: only a future compositor-owned, verified physical-input
+ * selection ceremony may record the first native candidate. Never infer
+ * selection from namespace, focus, IPC, or a single matching host.
+ */
+static struct stage_director_news_host_session weather_host_session;
+
+static void ensure_weather_host_session(void) {
+	stage_director_news_host_session_init(&weather_host_session);
+}
 
 static void shadow_open(void) {
 	if (shadow_log) {
@@ -544,14 +557,34 @@ void stage_director_observe_container(struct sway_container *container,
 }
 
 void stage_director_layer_mapped(struct sway_layer_surface *surface) {
+	ensure_weather_host_session();
 	observe_layer(surface, "map", true);
 }
 
 void stage_director_layer_committed(struct sway_layer_surface *surface) {
+	ensure_weather_host_session();
+	if (stage_director_news_host_session_tracks(&weather_host_session,
+			(uintptr_t)surface)) {
+		/* Recheck a reserved native candidate against actual compositor
+		 * resources; lost map/output/process identity means revocation.
+		 * This path is dormant until an approved input issuer exists. */
+		const struct stage_director_weather_host_native_peer peer =
+			stage_director_weather_host_observe_native_peer(surface);
+		if (!peer.native_peer_candidate ||
+				peer.native_layer_ref != (uintptr_t)surface ||
+				peer.native_output_ref != weather_host_session.native_output_ref ||
+				peer.native_client_ref != (uintptr_t)weather_host_session.client) {
+			stage_director_news_host_session_invalidate(
+				&weather_host_session);
+		}
+	}
 	observe_layer(surface, "commit", false);
 }
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
+	ensure_weather_host_session();
+	stage_director_news_host_session_host_lost(
+		&weather_host_session, (uintptr_t)surface);
 	struct stage_director_layer_observation *observation = find_layer(surface);
 	if (!observation) {
 		return;
@@ -566,6 +599,9 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 }
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
+	ensure_weather_host_session();
+	stage_director_news_host_session_host_lost(
+		&weather_host_session, (uintptr_t)surface);
 	struct stage_director_layer_observation *observation = find_layer(surface);
 	if (!observation) {
 		return;

@@ -1,0 +1,98 @@
+name: Stage Director production native host session boundary
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/ci-real-watch-request-v0-20261031
+    paths:
+      - 'include/sway/stage_director_news_host_session.h'
+      - 'sway/stage_director_news_host_session.c'
+      - 'sway/stage_director_news_request_peer.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_news_host_session.c'
+      - '.github/workflows/stage-director-native-host-session.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-resource-lifetime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install real Wayland server headers
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev pkg-config
+      - name: Verify dormant production boundary and lifecycle hooks
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          stage = Path("sway/stage_director.c").read_text()
+          pairing = Path("sway/stage_director_news_host_session.c").read_text()
+          header = Path("include/sway/stage_director_news_host_session.h").read_text()
+          for src in ("stage_director_news_host_session.c",
+                      "stage_director_news_request_peer.c"):
+              assert f"'{src}'," in meson, src
+          assert "stage_director_news_host_session_host_lost(" in stage
+          assert "stage_director_news_host_session_tracks(" in stage
+          assert "stage_director_news_host_session_invalidate(" in stage
+          assert "stage_director_weather_host_observe_native_peer(surface)" in stage
+          # No production path can record a pairing merely by its namespace.
+          for path in Path("sway").rglob("*.c"):
+              if path.name == "stage_director_news_host_session.c":
+                  continue
+              assert "stage_director_news_host_session_record_native_candidate(" not in path.read_text(), path
+          assert "operator_watch_authenticated" in header
+          assert "can_launch" in header and "can_accept_input" in header
+          for banned in ("wl_global_create(", "posix_spawn(", "fork(", "execve(",
+                         "wlr_scene_buffer_set_dest_size(", "wlr_seat_"):
+              assert banned not in pairing, banned
+          print("SD_NEWS_HOST_SESSION_BOUNDARY: production compiled, lifecycle "
+                "revoked, no pairing issuer or actuation PASS")
+          PY
+      - name: Compile and execute native two-client resource lifecycle matrix
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude $(pkg-config --cflags wayland-server) \
+            sway/stage_director_news_request_peer.c \
+            sway/stage_director_news_host_session.c \
+            tests/stage_director/test_news_host_session.c \
+            -o "$RUNNER_TEMP/stage-director-native-host-session" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/stage-director-native-host-session"
+
+  production-swaypx-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact proposed SwayPX revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Nix on isolated runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile and link ordinary full compositor with new session module
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -n "$result"
+          test -x "$result/bin/sway"
+          echo "Actual compositor compiled: $result"
+          echo "Not deployed, not launched, and no pairing authority enabled."
