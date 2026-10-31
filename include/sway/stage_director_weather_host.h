@@ -7,9 +7,10 @@
 
 /*
  * Weather Station host detection, not authentication or compositor authority.
- * Current WeatherStationW.qml has no dedicated layer-shell namespace.
- * Until an authorized Weather UI patch assigns the required namespace,
- * all real host observations must fail closed.
+ * The Weather UI declares the dedicated namespace in WeatherStationW.qml,
+ * but any Wayland client can claim that string. The native peer reader must
+ * verify resources and kernel process identity separately, still WITHOUT
+ * interpreting a matching namespace/PID as WATCH authorization.
  */
 #define STAGE_DIRECTOR_WEATHER_NAMESPACE "post-apollo-weather-station"
 
@@ -53,8 +54,32 @@ struct stage_director_weather_host_result stage_director_weather_host_probe(
 
 /*
  * Native adapter for a live sway layer-shell surface. READ-ONLY.
- * Not wired into SD0 callbacks until ownership/acceptance is established.
+ * Already called by the existing SD0 map/commit/unmap observer. It only
+ * classifies a mapped layer, never grants process or render authority.
  */
+struct stage_director_weather_host_native_peer {
+	struct stage_director_weather_host_result host;
+	/* In-process native compositor refs, never serialize to QML/IPC. */
+	uintptr_t native_layer_ref;
+	uintptr_t native_client_ref;
+	uintptr_t native_output_ref;
+	int64_t client_pid;
+	uint32_t client_uid;
+	uint64_t client_start_time_ticks;
+	/* Means only same native wl_client + stable Linux PID/UID/starttime. */
+	bool native_peer_candidate;
+	bool owner_verified;
+	bool can_launch;
+	bool can_bind_viewer;
+	bool can_clip;
+	bool can_accept_input;
+};
+
+/* A fresh *read-only* view of a live layer-shell host's actual wl_client. */
+struct stage_director_weather_host_native_peer
+stage_director_weather_host_observe_native_peer(
+		const struct sway_layer_surface *surface);
+
 struct stage_director_weather_host_result stage_director_weather_host_observe_layer(
 		const struct sway_layer_surface *surface);
 
