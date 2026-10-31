@@ -42,4 +42,11 @@ void stage_director_news_pairing_clear_host(void);
 bool stage_director_news_pairing_select_at(
 	struct sway_seat *seat, double lx, double ly);
 
+struct wl_client;
+struct wl_resource;
+/* Exact selected Wayland peer and fresh mapped-host validation, private to
+ * compositor protocol implementation. They grant NO browser or render rights. */
+bool stage_director_news_watch_selected_client(struct wl_client *client);
+bool stage_director_news_watch_probe_request(struct wl_resource *resource);
+
 #endif
