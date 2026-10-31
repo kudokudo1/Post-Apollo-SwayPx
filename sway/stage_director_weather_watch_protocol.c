@@ -34,7 +34,16 @@ static void destroy_binding(struct wl_resource *resource) {
 
 bool stage_director_weather_watch_protocol_is_global(
 		const struct wl_global *global) {
-	return global && global == watch_global;
+	/*
+	 * wl_global_create() synchronously advertises the new global BEFORE
+	 * returning its pointer. The display filter is invoked inside that
+	 * create call, when watch_global is still NULL. Comparing only the
+	 * stored pointer leaks the private interface to existing registries.
+	 * Match the generated Wayland protocol interface identity FIRST.
+	 */
+	return global &&
+		wl_global_get_interface(global) ==
+			&post_apollo_weather_watch_v1_interface;
 }
 
 static bool known_source(const char *id) {

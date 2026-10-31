@@ -141,6 +141,12 @@ if [[ -n "${STAGE_DIRECTOR_TEST_FOOT:-}" ]]; then
   bash tests/stage_director/ci_native_news_actor_smoke.sh \
     "$runtime" "${socket##*/}"
 fi
+# The real WATCH layer harness is only invoked by an explicit CI variant.
+# No virtual-input fiction and no production browser.
+if [[ -n "${STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT:-}" ]]; then
+  export WAYLAND_DISPLAY="${socket##*/}"
+  bash tests/stage_director/ci_real_watch_layer_smoke.sh "$runtime"
+fi
 
 kill -TERM "$child"
 for _ in {1..40}; do
