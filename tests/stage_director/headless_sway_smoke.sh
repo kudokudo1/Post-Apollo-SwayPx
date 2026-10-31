@@ -141,6 +141,18 @@ if [[ -n "${STAGE_DIRECTOR_TEST_FOOT:-}" ]]; then
   bash tests/stage_director/ci_native_news_actor_smoke.sh \
     "$runtime" "${socket##*/}"
 fi
+# Real browser actor is an isolated CI-only TEST, not WATCH playback.
+# The systemd test obtains its process identity from its own cgroup and
+# correlates with a mapped XDG client from this same compositor's Sway IPC.
+if [[ "${STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_NON_CI_REAL_BROWSER_WINDOW" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_real_chrome_wayland_window.py
+fi
 # The real WATCH layer harness is only invoked by an explicit CI variant.
 # No virtual-input fiction and no production browser.
 if [[ -n "${STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT:-}" ]]; then
