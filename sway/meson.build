@@ -20,6 +20,7 @@ sway_sources = files(
 	'stage_director_news_request_peer.c',
 	'stage_director_news_host_session.c',
 	'stage_director_news_pairing.c',
+	'stage_director_weather_watch_protocol.c',
 	'stage_director_news_shadow.c',
 	'stage_director_process_evidence.c',
 	'stage_director_process_linux.c',

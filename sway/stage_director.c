@@ -10,6 +10,8 @@
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
 #include "sway/stage_director_news_host_session.h"
+#include "sway/stage_director_weather_watch_protocol.h"
+#include "sway/server.h"
 #include "sway/stage_director_news_shadow.h"
 #include "sway/layers.h"
 #include "sway/input/cursor.h"
@@ -69,13 +71,80 @@ static int last_news_actors = -1;
  */
 static struct stage_director_news_host_session weather_host_session;
 
+static void on_weather_host_revoked(void *data) {
+	(void)data;
+	/* Also runs on native wl_client/resource destruction, not only explicit
+	 * layer unmap or CLOSE. No stale global remains after disconnect. */
+	stage_director_weather_watch_protocol_revoke();
+}
+
 static void ensure_weather_host_session(void) {
 	stage_director_news_host_session_init(&weather_host_session);
+	stage_director_news_host_session_on_revoked(
+		&weather_host_session, on_weather_host_revoked, NULL);
 }
 
 void stage_director_news_pairing_clear_host(void) {
 	ensure_weather_host_session();
 	stage_director_news_host_session_invalidate(&weather_host_session);
+	stage_director_weather_watch_protocol_revoke();
+}
+
+bool stage_director_news_watch_selected_client(struct wl_client *client) {
+	ensure_weather_host_session();
+	return !server.session_lock.lock && client &&
+		weather_host_session.candidate &&
+		weather_host_session.client == client;
+}
+
+/*
+ * Verify all native references from the live compositor's mapped host on
+ * EACH request, including close(). A stale request cannot borrow an old
+ * selection after unmap, output transfer, reconnect or a new pairing epoch.
+ * No generic namespace/app_id/PID fallback is permitted.
+ */
+uint64_t stage_director_news_watch_current_epoch(struct wl_client *client) {
+	return stage_director_news_watch_selected_client(client)
+		? weather_host_session.epoch : 0;
+}
+
+bool stage_director_news_watch_probe_request(struct wl_resource *resource) {
+	ensure_weather_host_session();
+	if (!resource ||
+			!stage_director_news_watch_selected_client(
+				wl_resource_get_client(resource))) {
+		return false;
+	}
+	struct sway_layer_surface *host =
+		(struct sway_layer_surface *)weather_host_session.native_host_ref;
+	if (!host || !host->layer_surface || !host->output ||
+			!host->mapped || !host->layer_surface->surface ||
+			!host->layer_surface->surface->mapped ||
+			host->layer_surface->resource != weather_host_session.layer_role ||
+			host->layer_surface->surface->resource !=
+				weather_host_session.host_surface) {
+		stage_director_news_pairing_clear_host();
+		return false;
+	}
+	const struct stage_director_weather_host_native_peer fresh =
+		stage_director_weather_host_observe_native_peer(host);
+	if (!fresh.native_peer_candidate ||
+			fresh.native_layer_ref != weather_host_session.native_host_ref ||
+			fresh.native_output_ref != weather_host_session.native_output_ref ||
+			fresh.native_client_ref != (uintptr_t)weather_host_session.client) {
+		stage_director_news_pairing_clear_host();
+		return false;
+	}
+	const struct stage_director_news_host_session_probe result =
+		stage_director_news_host_session_probe_request(
+			&weather_host_session, resource,
+			(uintptr_t)host, (uintptr_t)host->output,
+			weather_host_session.epoch);
+	return result.native_candidate_matches &&
+		result.state == SD_NEWS_HOST_SESSION_NATIVE_CANDIDATE_ONLY &&
+		!result.operator_watch_authenticated && !result.can_launch &&
+		!result.can_clip && !result.can_render &&
+		!result.can_accept_input && !result.can_show_popup;
 }
 
 /*
@@ -127,10 +196,17 @@ bool stage_director_news_pairing_select_at(
 		return false;
 	}
 	const uint64_t epoch = weather_host_session.last_epoch + 1;
-	return stage_director_news_host_session_record_native_candidate(
-		&weather_host_session,
-		role->resource, role->surface->resource,
-		(uintptr_t)host, (uintptr_t)host->output, epoch);
+	if (!stage_director_news_host_session_record_native_candidate(
+			&weather_host_session, role->resource,
+			role->surface->resource, (uintptr_t)host,
+			(uintptr_t)host->output, epoch)) {
+		return false;
+	}
+	if (!stage_director_weather_watch_protocol_publish()) {
+		stage_director_news_pairing_clear_host();
+		return false;
+	}
+	return true;
 }
 
 
@@ -640,8 +716,7 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 				peer.native_layer_ref != (uintptr_t)surface ||
 				peer.native_output_ref != weather_host_session.native_output_ref ||
 				peer.native_client_ref != (uintptr_t)weather_host_session.client) {
-			stage_director_news_host_session_invalidate(
-				&weather_host_session);
+			stage_director_news_pairing_clear_host();
 		}
 	}
 	observe_layer(surface, "commit", false);
@@ -649,6 +724,10 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+	if (stage_director_news_host_session_tracks(
+			&weather_host_session, (uintptr_t)surface)) {
+		stage_director_news_pairing_clear_host();
+	}
 	stage_director_news_host_session_host_lost(
 		&weather_host_session, (uintptr_t)surface);
 	struct stage_director_layer_observation *observation = find_layer(surface);
@@ -666,6 +745,10 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+	if (stage_director_news_host_session_tracks(
+			&weather_host_session, (uintptr_t)surface)) {
+		stage_director_news_pairing_clear_host();
+	}
 	stage_director_news_host_session_host_lost(
 		&weather_host_session, (uintptr_t)surface);
 	struct stage_director_layer_observation *observation = find_layer(surface);

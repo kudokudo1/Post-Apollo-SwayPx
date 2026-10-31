@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="post_apollo_weather_watch_v1">
+  <copyright>
+    Copyright (c) Post-Apollo contributors. MIT license.
+  </copyright>
+  <interface name="post_apollo_weather_watch_v1" version="1">
+    <description summary="paired Weather Station NEWS request, non-authorizing">
+      Requests originate from the exact compositor-paired Weather Station
+      Wayland client. A successful response is candidate evidence ONLY.
+      The protocol cannot launch browsers, draw scenes, route input or
+      permit popups. There is no URL or client-chosen process ID.
+    </description>
+    <enum name="status">
+      <entry name="denied" value="0" summary="no valid host pairing or stale origin"/>
+      <entry name="candidate_only" value="1" summary="native request recognized, no playback authority"/>
+      <entry name="invalid_source" value="2" summary="source ID unsupported or malformed"/>
+      <entry name="closed" value="3" summary="candidate host selection revoked"/>
+    </enum>
+    <request name="watch">
+      <arg name="source_id" type="string" summary="catalog token, never a URL"/>
+    </request>
+    <request name="close"/>
+    <request name="destroy" type="destructor"/>
+    <event name="result">
+      <arg name="status" type="uint" enum="status"/>
+    </event>
+  </interface>
+</protocol>

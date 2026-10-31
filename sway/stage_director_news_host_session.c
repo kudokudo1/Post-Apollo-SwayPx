@@ -29,11 +29,22 @@ void stage_director_news_host_session_init(
 	session->initialized = true;
 }
 
+void stage_director_news_host_session_on_revoked(
+		struct stage_director_news_host_session *session,
+		void (*callback)(void *data), void *data) {
+	if (!session || !session->initialized) {
+		return;
+	}
+	session->on_revoked = callback;
+	session->on_revoked_data = data;
+}
+
 void stage_director_news_host_session_invalidate(
 		struct stage_director_news_host_session *session) {
 	if (!session || !session->initialized) {
 		return;
 	}
+	const bool was_candidate = session->candidate;
 	if (session->candidate) {
 		/* All listeners are compositor-local, never serialized to clients. */
 		wl_list_remove(&session->client_destroy.link);
@@ -51,6 +62,9 @@ void stage_director_news_host_session_invalidate(
 	session->epoch = 0;
 	session->candidate = false;
 	/* last_epoch is intentionally retained to refuse stale replays. */
+	if (was_candidate && session->on_revoked) {
+		session->on_revoked(session->on_revoked_data);
+	}
 }
 
 static void on_client_destroy(struct wl_listener *listener, void *data) {
