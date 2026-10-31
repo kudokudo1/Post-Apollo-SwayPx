@@ -9,13 +9,16 @@ in pkgs.stdenv.mkDerivation {
   dontUnpack = true;
   strictDeps = true;
   nativeBuildInputs = [ pkgs.pkg-config pkgs.wayland-scanner ];
-  buildInputs = [ pkgs.wayland ];
+  buildInputs = [ pkgs.wayland pkgs.wayland-protocols ];
   buildPhase = ''
     runHook preBuild
     wayland-scanner client-header ${../../protocols/wlr-layer-shell-unstable-v1.xml} wlr-layer-shell-unstable-v1-client-protocol.h
     wayland-scanner private-code ${../../protocols/wlr-layer-shell-unstable-v1.xml} layer-protocol.c
+    # Generated layer-shell interface metadata references xdg_popup even when
+    # no popup is created; supply the pinned official XDG protocol metadata.
+    wayland-scanner private-code ${pkgs.wayland-protocols}/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
     $CC -std=c11 -Wall -Wextra -Werror -pedantic -I. \
-      ${./ci_real_layer_host.c} layer-protocol.c \
+      ${./ci_real_layer_host.c} layer-protocol.c xdg-shell-protocol.c \
       $(pkg-config --cflags --libs wayland-client) \
       -o sd-ci-real-layer-host
     runHook postBuild
