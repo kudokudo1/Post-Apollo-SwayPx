@@ -74,6 +74,11 @@ def main() -> None:
         raise RuntimeError("BLOCKED_NO_ISOLATED_WAYLAND_SOCKET")
     if call("id", "-un") != "runner":
         raise RuntimeError("BLOCKED_NOT_RUNNER_USER")
+    ipc_sockets = [p for p in runtime.glob("sway-ipc.*.sock")
+                   if p.is_socket()]
+    if len(ipc_sockets) != 1:
+        raise RuntimeError("BLOCKED_NO_UNIQUE_PRIVATE_SWAY_IPC")
+    ipc = str(ipc_sockets[0])
     run_id = e["GITHUB_RUN_ID"] + "-" + e.get("GITHUB_RUN_ATTEMPT", "1")
     unit = "sd-ci-chrome-wayland-" + run_id + ".service"
     rt_name = "sd-ci-chrome-wayland-" + run_id
@@ -143,7 +148,7 @@ def main() -> None:
                 Path(f"/proc/{p}/comm").read_text().strip() == "chrome"))
             snapshot.update((p, st) for p in pids
                             if (st := proc_start(p)) is not None)
-            tree = json.loads(call(swaymsg, "-r", "-t", "get_tree"))
+            tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
             matches = []
             for node in containers(tree):
                 pid = node["pid"]
@@ -182,7 +187,7 @@ def main() -> None:
             raise RuntimeError(f"FAIL_BROWSER_WAYLAND_CGROUP_TEARDOWN "
                                f"survivors={survivors} members={current} "
                                f"profile_runtime_exists={profile.parent.exists()}")
-        after = json.loads(call(swaymsg, "-r", "-t", "get_tree"))
+        after = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
         if any(n.get("pid") == client_pid for n in containers(after)):
             raise RuntimeError("FAIL_STALE_BROWSER_XDG_AFTER_STOP")
         print("SD_CI_REAL_CHROME_WAYLAND_TEARDOWN: original_pids_gone=1 "
