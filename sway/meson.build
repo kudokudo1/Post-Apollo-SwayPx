@@ -21,6 +21,7 @@ sway_sources = files(
 	'stage_director_process_evidence.c',
 	'stage_director_process_linux.c',
 	'stage_director_news_custody.c',
+	'stage_director_news_session_lease.c',
 	'stage_director_news_launch_plan.c',
 	'stage_director_news_supervisor.c',
 	'stage_director_news_containment.c',

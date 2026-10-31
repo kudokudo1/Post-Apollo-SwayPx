@@ -9,6 +9,8 @@ foot_binary="${STAGE_DIRECTOR_TEST_FOOT:-}"
 swaymsg_binary="${STAGE_DIRECTOR_TEST_SWAYMSG:-}"
 actor=""
 pidfd_witness=""
+lineage_root=""
+lineage_child=""
 actor_log="$runtime/news-actor.log"
 tree_json="$runtime/news-tree.json"
 
@@ -31,6 +33,15 @@ cleanup_actor() {
       kill -TERM "$pidfd_witness" 2>/dev/null || true
     fi
     wait "$pidfd_witness" 2>/dev/null || true
+  fi
+  if [[ -n "$lineage_child" ]] && kill -0 "$lineage_child" 2>/dev/null; then
+    kill -TERM "$lineage_child" 2>/dev/null || true
+  fi
+  if [[ -n "$lineage_root" ]]; then
+    if kill -0 "$lineage_root" 2>/dev/null; then
+      kill -TERM "$lineage_root" 2>/dev/null || true
+    fi
+    wait "$lineage_root" 2>/dev/null || true
   fi
 }
 trap cleanup_actor EXIT
@@ -442,5 +453,111 @@ if [[ "${STAGE_DIRECTOR_CI_PIDFD_WITNESS:-}" == 1 ]]; then
     echo "FAIL: native pidfd release and replay gate missing" >&2
     exit 1
   fi
+fi
+if [[ "${STAGE_DIRECTOR_CI_CHILD_LINEAGE:-0}" == 1 ]]; then
+  if [[ -z "${STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS:-}" ||
+        ! -x "$STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS" ||
+        "${GITHUB_ACTIONS:-}" != true ||
+        "${CI:-}" != true ]]; then
+    echo "BLOCKED_CI_CHILD_LINEAGE_ENV" >&2
+    exit 2
+  fi
+  # The FIRST fixed actor's 320x240 render, move, opacity, cold
+  # compositor and pidfd-exit checks are already complete. Launch a
+  # DIFFERENT disposable native window through an independent bash
+  # parent; it cannot acquire the first actor's CI source/dest crop.
+  # The parent's real kernel PID+starttime identifies our launch root.
+  CI_CHILD_PID_FILE="$runtime/sd1-lineage-child.pid" \
+  CI_CHILD_ACTOR_LOG="$runtime/sd1-lineage-child.log" \
+    bash -c '
+      "$@" >"$CI_CHILD_ACTOR_LOG" 2>&1 &
+      child=$!
+      printf "%d\\n" "$child" >"$CI_CHILD_PID_FILE"
+      wait "$child"
+    ' _ "$foot_binary" \
+        --app-id=post-apollo-weather-news-child \
+        --title=SD1-CI-LINEAGE-CHILD-NOT-BROWSER \
+        --window-size-pixels=850x600 \
+        /usr/bin/sleep 30 >"$runtime/sd1-lineage-launcher.log" 2>&1 &
+  lineage_root=$!
+
+  lineage_mapped=0
+  for _ in {1..90}; do
+    if [[ -s "$runtime/sd1-lineage-child.pid" ]]; then
+      read -r lineage_child < "$runtime/sd1-lineage-child.pid"
+      if [[ "$lineage_child" =~ ^[1-9][0-9]*$ ]] &&
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/sd1-lineage-tree.json" 2>/dev/null &&
+          python3 - "$runtime/sd1-lineage-tree.json" "$lineage_child" <<'PY'
+import json, sys
+tree=json.load(open(sys.argv[1],encoding="utf-8"))
+pid=int(sys.argv[2])
+matches=[]
+def visit(node):
+    if (node.get("pid")==pid and
+            node.get("app_id")=="post-apollo-weather-news-child" and
+            node.get("name")=="SD1-CI-LINEAGE-CHILD-NOT-BROWSER"):
+        matches.append(node)
+    for key in ("nodes","floating_nodes"):
+        for child in node.get(key,[]):
+            visit(child)
+visit(tree)
+if len(matches)!=1:
+    raise SystemExit("FAIL: no exact mapped native lineage child")
+PY
+      then
+        lineage_mapped=1
+        break
+      fi
+    fi
+    if ! kill -0 "$lineage_root" 2>/dev/null; then break; fi
+    sleep 0.1
+  done
+  if [[ "$lineage_mapped" != 1 ]]; then
+    echo "FAIL: trusted CI launch root did not map exact child actor" >&2
+    cat "$runtime/sd1-lineage-launcher.log" >&2 || true
+    cat "$runtime/sd1-lineage-child.log" >&2 || true
+    exit 1
+  fi
+  native_seen=0
+  for _ in {1..50}; do
+    if grep -Fq 'SD_CI_CHILD_WL_PEER ' "$runtime/sway.log"; then
+      native_seen=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ "$native_seen" != 1 ]]; then
+    echo "FAIL: no native wl_client credentials for separate fixed child" >&2
+    exit 1
+  fi
+  grep -F 'SD_CI_CHILD_WL_PEER ' "$runtime/sway.log"
+  python3 - "$runtime/sway.log" "$lineage_child" "$runtime/sd1-lineage-peer" <<'PY'
+import pathlib, re, sys
+log=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+expected=int(sys.argv[2])
+rows=re.findall(
+    r"SD_CI_CHILD_WL_PEER pid=(\d+) view_pid=(\d+) uid=(\d+) "
+    r"proc_uid=(\d+) proc_start=(\d+) evidence=(PASS|FAIL) authority=NONE",
+    log)
+if len(rows)!=1:
+    raise SystemExit(f"FAIL: expected single distinct Wayland child credential, got {len(rows)}")
+pid, view_pid, uid, proc_uid, start, result=rows[0]
+if not (int(pid)==expected==int(view_pid) and
+        int(uid)==int(proc_uid) and int(start)>0 and result=="PASS"):
+    raise SystemExit("FAIL: Wayland child is not the fixed launcher child")
+pathlib.Path(sys.argv[3]).write_text(f"{pid} {uid} {start}\n",encoding="ascii")
+PY
+  read -r peer_pid peer_uid peer_start < "$runtime/sd1-lineage-peer"
+  "$STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS" \
+    "$lineage_root" "$peer_pid" "$peer_uid" "$peer_start"
+
+  # The launcher is the parent of exactly this test actor. Terminate only
+  # our own child, reap the bash parent; no browser/session actor exists.
+  kill -TERM "$lineage_child"
+  wait "$lineage_root" 2>/dev/null || true
+  lineage_root=""
+  lineage_child=""
+  echo "SD_CI_CHILD_LIFETIME owned_launch_root_reaped=1 authority=NONE result=PASS"
 fi
 echo "No video browser, keyboard/popup guard or production scene authority activated."

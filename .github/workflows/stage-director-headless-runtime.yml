@@ -13,6 +13,8 @@ on:
       - stage-director/ci-scenefx-render-pass-trace-20261027
       - stage-director/news-frame-policy-contract-20261027
       - stage-director/ci-native-wayland-client-credentials-20261027
+      - stage-director/ci-native-news-pidfd-lifetime-20261027
+      - stage-director/ci-native-child-lineage-20261027
       - stage-director/news-scene-clip-probe-ci-v0-20261026
     paths:
       - 'sway/**'
@@ -23,6 +25,7 @@ on:
       - 'tests/stage_director/ci_udmabuf_smoke.sh'
       - 'tests/stage_director/ci_native_news_actor_smoke.sh'
       - 'tests/stage_director/ci_native_news_pidfd_witness.c'
+      - 'tests/stage_director/ci_native_child_lineage_witness.c'
       - 'tests/stage_director/assert_native_news_actor.py'
       - 'tests/stage_director/test_ci_scene_probe_boundary.py'
       - 'tests/stage_director/assert_news_render_pixels.py'
@@ -113,6 +116,14 @@ jobs:
             tests/stage_director/ci_native_news_pidfd_witness.c \
             -o "$RUNNER_TEMP/sd1-pidfd-witness"
           test -x "$RUNNER_TEMP/sd1-pidfd-witness"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_evidence.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/ci_native_child_lineage_witness.c \
+            -o "$RUNNER_TEMP/sd1-child-lineage-witness"
+          test -x "$RUNNER_TEMP/sd1-child-lineage-witness"
+          echo "STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS=$RUNNER_TEMP/sd1-child-lineage-witness" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_CHILD_LINEAGE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_PIDFD_WITNESS=$RUNNER_TEMP/sd1-pidfd-witness" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_PIDFD_WITNESS=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"

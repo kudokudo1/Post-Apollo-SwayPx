@@ -1,0 +1,75 @@
+name: Stage Director NEWS compositor session lease contract
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/news-frame-policy-contract-20261027
+      - stage-director/ci-native-child-lineage-20261027
+    paths:
+      - 'include/sway/stage_director_news_session_lease.h'
+      - 'sway/stage_director_news_session_lease.c'
+      - 'sway/stage_director_process_evidence.c'
+      - 'sway/stage_director_news_launch_plan.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_news_session_lease.c'
+      - '.github/workflows/stage-director-news-session-lease.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  default-deny:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce default-deny production boundary
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("sway/stage_director_news_session_lease.c").read_text(encoding="utf-8")
+          header = Path("include/sway/stage_director_news_session_lease.h").read_text(encoding="utf-8")
+          meson = Path("sway/meson.build").read_text(encoding="utf-8")
+          assert "'stage_director_news_session_lease.c'," in meson
+          for needle in ("operator_watch_authenticated = false",
+                         "browser_launch_authorized = false",
+                         "owner_verified = false", "can_launch = false",
+                         "can_bind_viewer = false", "can_render = false",
+                         "can_clip = false", "can_accept_input = false",
+                         "can_show_popup = false"):
+              assert needle in source, needle
+          assert "SD_NEWS_LEASE_PROBE_MATCHED_CANDIDATE_ONLY" in header
+          assert 'stage_director_news_source_url(registered_source_id)' in source
+          assert "stage_director_process_check(" in source
+          for banned in ("posix_spawn(", "fork(", "execve(", "system(",
+                         "kill(", "wlr_scene_buffer_set_dest_size(",
+                         "wl_client_get_credentials(", "wlr_seat_"):
+              assert banned not in source, banned
+          for name in ("sway/stage_director.c",
+                       "sway/tree/view.c",
+                       "sway/desktop/launcher.c",
+                       "sway/desktop/xdg_shell.c",
+                       "sway/desktop/output.c",
+                       "sway/commands.c",
+                       "sway/ipc-server.c",
+                       "sway/input/cursor.c"):
+              text = Path(name).read_text(encoding="utf-8")
+              assert "stage_director_news_session_lease_" not in text, name
+          print("SD_NEWS_LEASE: production-built, no caller, no browser launch/IPC/scene or seat authority: PASS")
+          PY
+      - name: Strict C compile and negative-case lifecycle matrix
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_news_session_lease.c \
+            sway/stage_director_news_launch_plan.c \
+            sway/stage_director_process_evidence.c \
+            tests/stage_director/test_news_session_lease.c \
+            -o "$RUNNER_TEMP/sd-news-session-lease"
+          "$RUNNER_TEMP/sd-news-session-lease"
