@@ -12,6 +12,11 @@
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_shadow.h"
 #include "sway/layers.h"
+#include "sway/input/cursor.h"
+#include "sway/input/seat.h"
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_compositor.h>
+#include <stdint.h>
 #include "sway/output.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
@@ -67,6 +72,67 @@ static struct stage_director_news_host_session weather_host_session;
 static void ensure_weather_host_session(void) {
 	stage_director_news_host_session_init(&weather_host_session);
 }
+
+void stage_director_news_pairing_clear_host(void) {
+	ensure_weather_host_session();
+	stage_director_news_host_session_invalidate(&weather_host_session);
+}
+
+/*
+ * Called ONLY by the native libinput keyboard -> pointer ceremony. Do not
+ * insert a Sway command, IPC command, QML property or public Wayland method.
+ * If the Weather chassis has a transparent hole, node_at_coords sees the
+ * underlying scene instead, so this selection must refuse it.
+ */
+bool stage_director_news_pairing_select_at(
+		struct sway_seat *seat, double lx, double ly) {
+	ensure_weather_host_session();
+	if (!seat || !seat->cursor || !seat->cursor->cursor) {
+		return false;
+	}
+	struct wlr_surface *hit = NULL;
+	double sx = 0, sy = 0;
+	(void)node_at_coords(seat, lx, ly, &hit, &sx, &sy);
+	if (!hit) {
+		return false;
+	}
+	struct wlr_surface *root_surface = wlr_surface_get_root_surface(hit);
+	if (!root_surface || !root_surface->mapped) {
+		return false;
+	}
+	struct wlr_layer_surface_v1 *role =
+		wlr_layer_surface_v1_try_from_wlr_surface(root_surface);
+	if (!role || role->surface != root_surface || !role->initialized ||
+			!role->resource || !role->surface->resource ||
+			!role->namespace ||
+			strcmp(role->namespace, STAGE_DIRECTOR_WEATHER_NAMESPACE) != 0 ||
+			role->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+		return false;
+	}
+	struct sway_layer_surface *host = role->data;
+	if (!host || host->layer_surface != role || !host->mapped ||
+			!host->output) {
+		return false;
+	}
+	const struct stage_director_weather_host_native_peer peer =
+		stage_director_weather_host_observe_native_peer(host);
+	if (!peer.native_peer_candidate ||
+			peer.native_layer_ref != (uintptr_t)host ||
+			peer.native_output_ref != (uintptr_t)host->output ||
+			peer.native_client_ref !=
+				(uintptr_t)wl_resource_get_client(role->resource)) {
+		return false;
+	}
+	if (weather_host_session.last_epoch == UINT64_MAX) {
+		return false;
+	}
+	const uint64_t epoch = weather_host_session.last_epoch + 1;
+	return stage_director_news_host_session_record_native_candidate(
+		&weather_host_session,
+		role->resource, role->surface->resource,
+		(uintptr_t)host, (uintptr_t)host->output, epoch);
+}
+
 
 static void shadow_open(void) {
 	if (shadow_log) {
