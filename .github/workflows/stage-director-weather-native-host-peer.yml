@@ -1,0 +1,32 @@
+name: Stage Director Weather native Wayland host peer
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/ci-native-child-lineage-20261027
+    paths:
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_weather_host_adapter.c'
+      - 'sway/stage_director_weather_host.c'
+      - 'include/sway/stage_director_weather_host.h'
+      - 'tests/stage_director/test_native_weather_host_peer.py'
+      - '.github/workflows/stage-director-weather-native-host-peer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-native-host-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check live wl_resource evidence and non-authorizing callback contract
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_native_weather_host_peer.py
