@@ -537,7 +537,7 @@ static void handle_key_event(struct sway_keyboard *keyboard,
 	 */
 	if (!handled && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		handled = stage_director_news_pairing_key_press(
-			seat, wlr_device, locked,
+			seat, wlr_device, locked, shortcuts_inhibited,
 			keyinfo.raw_keysyms, keyinfo.raw_keysyms_len,
 			keyinfo.raw_modifiers, event->time_msec);
 	}
