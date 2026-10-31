@@ -52,6 +52,12 @@ A pass requires actual running Chromium with multiple recorded subprocesses, vis
 - [ ] Popup, focus, input, geometry, crash recovery, and all-descendant custody
 - [ ] Actual Weather Quickshell bridge and operator live acceptance
 
+## FAILED VERIFICATION / RUNNER CONSTRAINT
+
+GitHub Actions Docker Chromium check failed twice before custody could be observed. The second run's new diagnostics showed real exit code `134`, with Chromium reporting its setuid sandbox was not running as root and `Failed to move to new namespace ... errno = Operation not permitted`. The Docker container was cleaned. **Do not mark the Docker test green, disable Chromium sandbox or enable an external viewer.** This is a genuine namespace/seccomp security blocker, not a process-tree success.
+
+A separate independent CI lane was added to test the existing GitHub Ubuntu Google Chrome binary at `/opt/google/chrome/chrome` in a *transient systemd service* with a distinct cgroup, `PrivateNetwork=yes`, a non-root runner account, protected read-only filesystem/home, NoNewPrivileges, private RuntimeDirectory profile, controlled group-wide shutdown and native PID/starttime survivor checks. The Docker lane remains visibly failed; a passing systemd lane would establish only that **a different, still restricted CI environment** can run and clean a Chromium-family browser. It would not validate a production broker or renderer. Await the systemd CI result and report honestly.
+
 ## NEXT
 
 Verify the CI. If Chrome cannot use its sandbox in the isolated runner, preserve the exact error and design a supported sandboxed runner instead of loosening isolation. If green, use the evidence to design a compositor-owned browser cgroup with explicitly verified process/renderer identity, without connecting live WATCH until clipping and input/popup containment are finished.
