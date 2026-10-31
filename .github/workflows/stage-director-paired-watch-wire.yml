@@ -54,6 +54,10 @@ jobs:
           assert 'wl_global_create(' in prot
           assert 'stage_director_news_watch_selected_client(client)' in prot
           assert 'stage_director_news_watch_probe_request(resource)' in prot
+          assert 'request_epoch_current(client, resource)' in prot
+          assert 'stage_director_news_watch_current_epoch(client)' in prot
+          assert 'binding->pairing_epoch' in prot
+          assert 'destroy_binding' in prot
           assert 'wl_client_post_implementation_error(' in prot
           assert 'stage_director_weather_watch_protocol_is_global(global)' in server
           assert 'stage_director_news_watch_selected_client(' in server
