@@ -8,6 +8,9 @@ on:
     paths:
       - 'include/sway/stage_director_news_host_session.h'
       - 'sway/stage_director_news_host_session.c'
+      - 'sway/stage_director_news_pairing.c'
+      - 'sway/input/keyboard.c'
+      - 'sway/input/cursor.c'
       - 'sway/stage_director_news_request_peer.c'
       - 'sway/stage_director.c'
       - 'sway/meson.build'
@@ -48,18 +51,29 @@ jobs:
           assert "stage_director_news_host_session_tracks(" in stage
           assert "stage_director_news_host_session_invalidate(" in stage
           assert "stage_director_weather_host_observe_native_peer(surface)" in stage
-          # No production path can record a pairing merely by its namespace.
+          # After the operator-approved A1 native pairing seam, exactly
+          # one compositor scene-hit function may record a native candidate.
+          # It cannot be reached from public Sway IPC or a namespace scan.
+          pairing_input = Path("sway/stage_director_news_pairing.c")
+          stage = Path("sway/stage_director.c").read_text()
+          assert stage.count("stage_director_news_host_session_record_native_candidate(") == 1
+          assert "stage_director_news_pairing_select_at(" in stage
+          assert "node_at_coords(seat, lx, ly, &hit, &sx, &sy)" in stage
+          assert "stage_director_weather_host_observe_native_peer(host)" in stage
+          assert "POST_APOLLO_STAGE_DIRECTOR_PAIRING" in pairing_input.read_text()
           for path in Path("sway").rglob("*.c"):
-              if path.name == "stage_director_news_host_session.c":
+              if path.name in ("stage_director_news_host_session.c", "stage_director.c"):
                   continue
               assert "stage_director_news_host_session_record_native_candidate(" not in path.read_text(), path
+          for path in ("sway/ipc-server.c", "sway/commands.c", "sway/server.c"):
+              assert "stage_director_news_pairing_select_at(" not in Path(path).read_text(), path
           assert "operator_watch_authenticated" in header
           assert "can_launch" in header and "can_accept_input" in header
           for banned in ("wl_global_create(", "posix_spawn(", "fork(", "execve(",
                          "wlr_scene_buffer_set_dest_size(", "wlr_seat_"):
               assert banned not in pairing, banned
           print("SD_NEWS_HOST_SESSION_BOUNDARY: production compiled, lifecycle "
-                "revoked, no pairing issuer or actuation PASS")
+                "revoked, exactly one opt-in input-issued native candidate, no actuation PASS")
           PY
       - name: Compile and execute native two-client resource lifecycle matrix
         run: |

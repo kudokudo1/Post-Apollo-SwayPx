@@ -13,6 +13,7 @@
 #include "sway/input/keyboard.h"
 #include "sway/input/seat.h"
 #include "sway/input/cursor.h"
+#include "sway/stage_director_news_pairing.h"
 #include "sway/ipc-server.h"
 #include "sway/server.h"
 #include "log.h"
@@ -526,6 +527,19 @@ static void handle_key_event(struct sway_keyboard *keyboard,
 		// Only handle device specific bindings for keyboards in a group
 		free(device_identifier);
 		return;
+	}
+
+	/*
+	 * A native-only, opt-in pairing gesture, after device-specific binding
+	 * precedence and BEFORE regular compositor key handling. This is not
+	 * seat_execute_command, so a public Sway IPC sender cannot arm pairing.
+	 * Grouped and virtual keyboards cannot reach an accepted libinput gate.
+	 */
+	if (!handled && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		handled = stage_director_news_pairing_key_press(
+			seat, wlr_device, locked, shortcuts_inhibited,
+			keyinfo.raw_keysyms, keyinfo.raw_keysyms_len,
+			keyinfo.raw_modifiers, event->time_msec);
 	}
 
 	// Compositor bindings
