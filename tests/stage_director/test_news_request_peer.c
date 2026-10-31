@@ -49,11 +49,12 @@ int main(void) {
 	struct wl_client *a = make_client(display, &a_fd);
 	struct wl_client *b = make_client(display, &b_fd);
 	assert(a != b);
-	struct wl_resource *role_a = make_resource(a, 1);
-	struct wl_resource *surface_a = make_resource(a, 2);
-	struct wl_resource *request_a = make_resource(a, 3);
-	struct wl_resource *request_b = make_resource(b, 4);
-	struct wl_resource *role_b = make_resource(b, 5);
+	/* ID 1 is reserved for the client's wl_display resource. */
+	struct wl_resource *role_a = make_resource(a, 101);
+	struct wl_resource *surface_a = make_resource(a, 102);
+	struct wl_resource *request_a = make_resource(a, 103);
+	struct wl_resource *request_b = make_resource(b, 104);
+	struct wl_resource *role_b = make_resource(b, 105);
 
 	denied(stage_director_news_request_peer_probe(NULL, surface_a, request_a),
 		SD_NEWS_REQUEST_PEER_INVALID_RESOURCES);
