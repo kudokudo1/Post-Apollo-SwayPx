@@ -38,6 +38,14 @@ jobs:
           stage = Path("sway/stage_director.c").read_text()
           script = Path("tests/stage_director/ci_real_watch_layer_smoke.sh").read_text()
           client = Path("tests/stage_director/ci_real_watch_layer_client.c").read_text()
+          protocol = Path("sway/stage_director_weather_watch_protocol.c").read_text()
+          # wl_global_create() can synchronously notify clients who already
+          # own a registry, before the returned pointer is assigned. The
+          # filter must identify the interface, never only the saved pointer.
+          assert "wl_global_get_interface(global)" in protocol
+          assert "&post_apollo_weather_watch_v1_interface" in protocol
+          assert "return global && global == watch_global;" not in protocol
+          assert "stage_director_weather_watch_protocol_is_global(global)" in Path("sway/server.c").read_text()
           assert "value: false" in opts.split("sd-ci-real-weather-watch-layer")[1].split("\n")[0]
           assert "SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1" in meson
           assert "#ifdef SD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER" in stage
