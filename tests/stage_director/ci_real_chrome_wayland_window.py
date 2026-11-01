@@ -195,6 +195,8 @@ def main() -> None:
 
         actor = None
         count = 0
+        stable_candidate = None
+        stable_observations = 0
         for _ in range(80):
             if call("systemctl", "is-active", unit, check=False) != "active":
                 logs = call("sudo", "-n", "journalctl", "-u", unit,
@@ -217,9 +219,29 @@ def main() -> None:
                         rect.get("width", 0) >= 300 and
                         rect.get("height", 0) >= 200):
                     matches.append(node)
+            # Avoid accepting a momentary sole toplevel while Chrome is
+            # still adding/removing surfaces. In the pixel mode, require
+            # THREE consecutive observations of the same unique native
+            # PID, border and settled rectangle. Do not relax uniqueness.
             if count >= 3 and len(matches) == 1:
-                actor = matches[0]
-                break
+                candidate = matches[0]
+                rect = candidate.get("rect") or {}
+                key = (
+                    candidate.get("pid"),
+                    candidate.get("border"),
+                    rect.get("x"), rect.get("y"),
+                    rect.get("width"), rect.get("height"))
+                if key == stable_candidate:
+                    stable_observations += 1
+                else:
+                    stable_candidate = key
+                    stable_observations = 1
+                if stable_observations >= (3 if pixel_mode else 1):
+                    actor = candidate
+                    break
+            else:
+                stable_candidate = None
+                stable_observations = 0
             time.sleep(0.15)
         if actor is None:
             # Read-only diagnostic: preserve actual mapped window dimensions
@@ -258,6 +280,7 @@ def main() -> None:
         print(f"SD_CI_REAL_CHROME_WAYLAND_WINDOW: native_xdg=1 "
               f"mapped=1 actor_in_exact_service_cgroup=1 "
               f"kernel_starttime=1 browser_processes={count} "
+              f"stable_native_observations={stable_observations} "
               "authority=NONE PASS", flush=True)
         if pixel_mode:
             # Never infer pixel containment from clip state or Sway hit tests.
