@@ -30,6 +30,12 @@ Open the stacked draft PR and `Stage Director real Chrome screenshot crop (isola
 
 Source boundary checks require native `wl_client` credentials, exact cgroup, kernel starttime, CI-only Meson flag and four independent screenshot edge tests. Build ordinary SwayPX and assert the `SD_CI_CHROME_PIXEL_SCENE` selector is absent from its binary. Build a separate CI probe SwayPX and verify the selector exists. Launch the ordinary Chrome binary under an isolated non-root transient systemd cgroup with no external network or sandbox bypass, map its real XDG window, take baseline and held-clip compositor screenshots, assert actual pixel containment and original process/window/profile teardown. GitHub validation is pending until workflows execute.
 
+## FAILED SCREENSHOT / DEBUG EVIDENCE
+
+The first actual four-edge screenshot **failed** on GitHub Actions run `41256769548`, despite the native `wl_client`+cgroup check and wlroots hit-test crop passing. The GitHub workflow artifact `sd-ci-real-chrome-crop-evidence` contains the actual 1920×1080 Chrome screenshot, black baseline PPM and native Sway tree. The screenshot shows a tightly cropped white 320×240 Chrome page surrounded by black, but a **blue Sway-managed titlebar stretches across the output top**. Measured white inside was 255; the top outside point was ~53.8 and the desktop corner ~141.6 compared to a black baseline. This was **not** Chrome content leaking around the source crop. It was a separate compositor container-decoration paint node that the root surface clip never touches.
+
+The narrow CI-only correction adds `default_border pixel 0` and `default_floating_border pixel 0` to the **disposable runner's Sway config only** under strict `STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL=1`, `CI=true`, `GITHUB_ACTIONS=true`, and private `RUNNER_TEMP` checks. Re-run full screenshot acceptance. **This is NOT an acceptable production policy yet:** a real Weather viewer must suppress or crop the container decoration per authenticated actor without globally overriding unrelated windows or relying on the user's regular border configuration.
+
 ## WATCH OUT FOR
 
 - Historic scene test discovered real painting can leak beyond `wlr_scene_subsurface_tree_set_clip`: SceneFX root source crop and destination rectangle are separate. **Never call hit-test success a visual PASS**. This PR may reveal the rendering path still leaks; a failed pixel job is a blocker, not evidence of a finished viewport.
