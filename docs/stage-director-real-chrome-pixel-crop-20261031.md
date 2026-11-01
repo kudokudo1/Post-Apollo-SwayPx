@@ -1,6 +1,6 @@
 # Stage Director SD1 // Actual real-Chrome viewport crop pixels, isolated CI
 
-STATE // Draft CI-only real browser SceneFX experiment, actual screenshot acceptance pending. NOT production NEWS viewer or Weather Quickshell integration.
+STATE // Draft CI-only real browser SceneFX pixel crop verified under decoration-free disposable SwayPX; NOT production NEWS viewer or Weather Quickshell integration.
 
 PATIENT // kudokudo1/Post-Apollo-SwayPx.
 
@@ -36,6 +36,14 @@ The first actual four-edge screenshot **failed** on GitHub Actions run `41256769
 
 The narrow CI-only correction adds `default_border pixel 0` and `default_floating_border pixel 0` to the **disposable runner's Sway config only** under strict `STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL=1`, `CI=true`, `GITHUB_ACTIONS=true`, and private `RUNNER_TEMP` checks. Re-run full screenshot acceptance. **This is NOT an acceptable production policy yet:** a real Weather viewer must suppress or crop the container decoration per authenticated actor without globally overriding unrelated windows or relying on the user's regular border configuration.
 
+## VERIFIED SCREENSHOT / CURRENT ACCEPTANCE
+
+The next isolated workflow run **passed** after disabling Sway's test-only titlebar: GitHub Actions `41257045631`, normal SwayPX build without test selector, separate real Chrome 13-process XDG mapping and cgroup, actual screenshot four-edge acceptance, exact window/process/profile teardown and restored temporary runner device ACL. Meta Apollo Grammar also passed on that commit.
+
+The pixel verifier runs against **two actual 1920×1080 compositor screenshots**, one entirely black baseline and one with real Chrome `about:blank`. Inside points must be bright (at least 165 luma), all five outside samples including four independent edges must remain at or below 50, and outside may differ from the baseline by no more than 30. Real Chrome white content was visible; after only CI-only Sway decoration suppression the test returned exit zero. A follow-up CI change now emits actual per-point luma values and a positive pixel acceptance marker into GitHub logs for easier independent audit.
+
+**Critical distinction:** this is a fixed rectangle with decorations disabled in a disposable test config, NOT yet a secure production container-specific decoration policy. Popups, extra independent windows, interaction and actual Weather viewport geometry are still unverified.
+
 ## WATCH OUT FOR
 
 - Historic scene test discovered real painting can leak beyond `wlr_scene_subsurface_tree_set_clip`: SceneFX root source crop and destination rectangle are separate. **Never call hit-test success a visual PASS**. This PR may reveal the rendering path still leaks; a failed pixel job is a blocker, not evidence of a finished viewport.
@@ -53,7 +61,7 @@ The narrow CI-only correction adds `default_border pixel 0` and `default_floatin
 - [x] Implement before/after real screenshot and four independent pixel-edge comparison
 - [x] Preserve native browser cgroup process, Wayland window and profile teardown
 - [x] Add production-vs-CI binary boundary tests and upload disposable screenshot artifacts
-- [ ] GitHub native compile and pixel test pass; if not, record leak and repair independently
+- [x] GitHub native compile and actual screenshot pixel test pass under CI-only borderless configuration
 - [ ] Host-derived Weather Station viewport placement and normal compositor transaction persistence
 - [ ] Popup, focus/keyboard/pointer and click/drag/zoom guard tests
 - [ ] Production verified actor broker, source allowlist and WATCH admission
