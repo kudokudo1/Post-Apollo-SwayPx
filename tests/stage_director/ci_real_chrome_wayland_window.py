@@ -101,6 +101,68 @@ def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
     raise RuntimeError("FAIL_UNRELATED_CONTROL_STILL_MAPPED_AFTER_STOP")
 
 
+def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
+                            root: Path, original_pid: int,
+                            original_start: int) -> dict:
+    """Only disposable test-owned native XDG actor, not a production IPC API."""
+    con_id = actor.get("id")
+    if type(con_id) is not int or con_id <= 0:
+        raise RuntimeError("BLOCKED_NO_NATIVE_SWAY_CONTAINER_ID")
+    rect0 = actor.get("rect") or {}
+    if (rect0.get("width") != 1920 or rect0.get("height") != 1080 or
+            rect0.get("x") != 0 or rect0.get("y") != 0):
+        raise RuntimeError("BLOCKED_INITIAL_BROWSER_NOT_FULL_OUTPUT: "
+                           + str(rect0))
+    criteria = f"[con_id={con_id}]"
+    # These Sway IPC operations run ONLY on an exact native container ID
+    # captured from the independently verified Chrome cgroup.
+    # No app_id, title or client-controlled string selects the window.
+    for operation in (
+            "floating enable",
+            "resize set width 1100 px height 700 px",
+            "move position 430 220"):
+        answer = json.loads(call(swaymsg, "-s", ipc, "-r",
+                                 criteria + " " + operation))
+        if (not isinstance(answer, list) or len(answer) != 1 or
+                answer[0].get("success") is not True):
+            raise RuntimeError("FAIL_SWAY_GEOMETRY_COMMAND: "
+                               + operation + " " + repr(answer))
+    stable = 0
+    previous = None
+    for _ in range(90):
+        group_pids = members(root)
+        if original_pid not in group_pids or proc_start(original_pid) != original_start:
+            raise RuntimeError("FAIL_NATIVE_ACTOR_LOST_DURING_MOVE")
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        matches = [n for n in containers(tree)
+                   if n.get("id") == con_id and
+                   n.get("pid") == original_pid and
+                   n.get("shell") == "xdg_shell" and
+                   n.get("border") == "none"]
+        if len(matches) == 1:
+            rect = matches[0].get("rect") or {}
+            key = tuple(rect.get(v) for v in ("x", "y", "width", "height"))
+            if (all(type(t) is int for t in key) and
+                    key[0] >= 330 and key[1] >= 150 and
+                    950 <= key[2] <= 1250 and
+                    600 <= key[3] <= 850 and
+                    key[0] + key[2] < 1920 and
+                    key[1] + key[3] < 1080):
+                stable = stable + 1 if key == previous else 1
+                previous = key
+                if stable >= 3:
+                    print("SD_CI_CHROME_VIEWPORT_MOTION "
+                          f"same_native_actor=1 actor_id={con_id} "
+                          f"move={key[0]},{key[1]} "
+                          f"resized={key[2]}x{key[3]} "
+                          "stable_geometry=3 border=none "
+                          "authority=NONE PASS", flush=True)
+                    return matches[0]
+        time.sleep(0.15)
+    raise RuntimeError("FAIL_NATIVE_CHROME_MOVE_OR_RESIZE_NOT_STABLE "
+                       f"last={previous} stable={stable}")
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -318,6 +380,47 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if e.get("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION") == "1":
+                # Wait until compositor committed the initial 320x240 crop.
+                # Then actually move and resize the same service-held XDG
+                # actor. Require a DIFFERENT native rectangle and new
+                # 400x300 scene crop; pixels alone never prove this.
+                actor_after = move_and_resize_browser(
+                    swaymsg, ipc, actor, root, client_pid,
+                    snapshot[client_pid])
+                tree_after = json.loads(call(swaymsg, "-s", ipc,
+                                             "-r", "-t", "get_tree"))
+                (temp / "sd-chrome-motion-tree.json").write_text(
+                    json.dumps(tree_after), encoding="utf-8")
+                motion_log = (runtime / "sway.log")
+                found_dynamic = False
+                for _ in range(75):
+                    logs = motion_log.read_text(
+                        encoding="utf-8", errors="replace")
+                    if ("SD_CI_CHROME_MOTION_REBIND" in logs and
+                            "clip=400x300" in logs):
+                        found_dynamic = True
+                        break
+                    time.sleep(0.1)
+                if not found_dynamic:
+                    raise RuntimeError("FAIL_REAL_CHROME_DYNAMIC_SCENE_REBIND "
+                                       + logs[-3000:])
+                time.sleep(0.4)
+                moved_ppm = temp / "sd-chrome-motion.ppm"
+                call(grim, "-t", "ppm", str(moved_ppm), timeout=25)
+                call(grim, "-t", "png",
+                     str(temp / "sd-chrome-motion.png"), timeout=25)
+                dynamic_report = call(
+                    sys.executable,
+                    "tests/stage_director/assert_real_chrome_motion_pixels.py",
+                    str(temp / "sd-chrome-before.ppm"),
+                    str(crop_ppm), str(moved_ppm),
+                    str(tree_path),
+                    str(temp / "sd-chrome-motion-tree.json"),
+                    str(client_pid), timeout=30)
+                print(dynamic_report, flush=True)
+                if "SD_CI_REAL_CHROME_DYNAMIC_PIXELS: result=PASS" not in dynamic_report:
+                    raise RuntimeError("FAIL_DYNAMIC_SCREENSHOT_ACCEPTANCE_MARKER")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]
