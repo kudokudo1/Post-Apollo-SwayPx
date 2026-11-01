@@ -163,6 +163,7 @@ jobs:
             ${{ runner.temp }}/sd-chrome-crop.ppm
             ${{ runner.temp }}/sd-chrome-crop.png
             ${{ runner.temp }}/sd-chrome-mapped-tree.json
+            ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
         run: |
