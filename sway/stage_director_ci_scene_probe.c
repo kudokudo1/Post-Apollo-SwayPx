@@ -347,8 +347,7 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
 			!view || view->type != SWAY_VIEW_XDG_SHELL ||
 			!view->surface || !view->surface->resource ||
 			!view->container || view->container->node.destroying ||
-			!view->content_tree || !view->wlr_xdg_toplevel ||
-			wl_list_empty(&view->content_tree->children)) {
+			!view->content_tree || !view->wlr_xdg_toplevel) {
 		return false;
 	}
 	struct wl_client *client =
@@ -396,9 +395,30 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
 	return match;
 }
 
+/* Applied once at XDG view_map, before the first container arrange.
+ * Verify the source via kernel wl_client credentials and the exact private
+ * CI service cgroup; never by app_id/title, request source ID, or IPC.
+ * No global border config changes, and no other native view is modified.
+ */
+bool stage_director_ci_scene_probe_borderless_verified_actor(
+		struct sway_view *view) {
+	if (!view || !view->container || !view->surface) return false;
+	pid_t native_peer = -1;
+	if (!ci_real_chrome_process(view, &native_peer)) return false;
+	view->container->pending.border = B_NONE;
+	view->container->pending.border_thickness = 0;
+	wlr_log(WLR_INFO,
+		"SD_CI_CHROME_PER_VIEW_BORDER native_cgroup=1 "
+		"exact_native_peer=1 actor_only=1 border=none "
+		"unrelated_window_policy=UNCHANGED authority=NONE pid=%ld",
+		(long)native_peer);
+	return true;
+}
+
 static bool ci_real_chrome_pixel_probe(struct sway_view *view) {
 	static bool selected;
-	if (selected || ci_render_actor || !view ||
+	if (selected || ci_render_actor || !view || !view->content_tree ||
+			wl_list_empty(&view->content_tree->children) ||
 			view->geometry.width < 600 || view->geometry.height < 440) {
 		return false;
 	}

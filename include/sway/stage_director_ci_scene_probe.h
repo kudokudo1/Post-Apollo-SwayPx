@@ -4,6 +4,12 @@
 struct sway_view;
 struct wlr_scene_buffer;
 /* Available only to an explicitly test-enabled compositor binary. */
+/* CI-only: override *one verified actor* to a borderless Sway container,
+ * before the first layout transaction. All other views keep their border.
+ * Does not grant production WATCH, scene, popup, focus or input authority.
+ */
+bool stage_director_ci_scene_probe_borderless_verified_actor(
+	struct sway_view *view);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);

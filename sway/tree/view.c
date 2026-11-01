@@ -29,6 +29,9 @@
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/server.h"
 #include "sway/sway_text_node.h"
 #include "sway/tree/arrange.h"
@@ -947,6 +950,13 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 		view->container->pending.border_thickness = config->border_thickness;
 		view_set_tiled(view, true);
 	}
+
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* A specific, kernel-matched CI Chrome wl_client may be borderless,
+	 * without modifying config->border or any other mapped Wayland view.
+	 * This code is absent from the ordinary SwayPX binary. */
+	(void)stage_director_ci_scene_probe_borderless_verified_actor(view);
+#endif
 
 	if (config->popup_during_fullscreen == POPUP_LEAVE &&
 			container->pending.workspace &&
