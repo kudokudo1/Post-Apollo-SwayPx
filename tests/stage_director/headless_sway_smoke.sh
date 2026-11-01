@@ -52,19 +52,18 @@ output * resolution 1920x1080
 for_window [app_id="post-apollo-weather-news"] floating enable
 EOF
 
-# Chrome's Sway-managed titlebar is a separate container decoration, not a
-# wl_surface child; cropping only the browser content does NOT hide it.
-# For this narrow CI-only pixel experiment, remove the ordinary compositor
-# titlebar before Chrome maps. Production must enforce that boundary under
-# an authenticated session instead of depending on a global user setting.
+# The ordinary Sway titlebar remains enabled for unrelated windows.
+# A CI-only native process/cgroup-matched Chrome actor receives a per-view
+# B_NONE policy in view_map() before its first container layout transaction.
+# No compositor-global border change is allowed in this experiment.
 if [[ "${STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL:-}" == 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
-    echo "BLOCKED_NON_CI_CHROME_DECORATION_SUPPRESSION" >&2
+    echo "BLOCKED_NON_CI_CHROME_PER_VIEW_DECORATION" >&2
     exit 2
   fi
-  printf '\ndefault_border pixel 0\ndefault_floating_border pixel 0\n' >> "$config"
-  echo "SD_CI_CHROME_DECORATION_SAFETY titlebar=OFF test_only=1"
+  printf '\ndefault_border normal\ndefault_floating_border normal\n' >> "$config"
+  echo "SD_CI_CHROME_DECORATION_SAFETY default_titlebar=ON per_view_chrome=ONLY"
 fi
 
 # Two independent compositor boots use different virtual output sizes.
