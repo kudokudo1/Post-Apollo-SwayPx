@@ -209,10 +209,17 @@ def main() -> None:
             tree_path.write_text(json.dumps(tree), encoding="utf-8")
             call(grim, "-t", "ppm", str(crop_ppm), timeout=25)
             call(grim, "-t", "png", str(crop_png), timeout=25)
-            call(sys.executable,
+            pixel_report = call(
+                 sys.executable,
                  "tests/stage_director/assert_real_chrome_clip_pixels.py",
                  str(temp / "sd-chrome-before.ppm"), str(crop_ppm),
                  str(tree_path), str(client_pid), timeout=30)
+            # Preserve actual measured luma in GitHub logs, not only a green
+            # child exit code; no operator screenshot or private URL involved.
+            print(pixel_report, flush=True)
+            if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
+                    "no_left_top_right_bottom_leak=1" not in pixel_report):
+                raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]
