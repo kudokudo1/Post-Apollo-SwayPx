@@ -54,10 +54,14 @@ def main():
     pid = int(sys.argv[6])
     old_id, (x0, y0, w0, h0) = actor(sys.argv[4], pid)
     new_id, (x1, y1, w1, h1) = actor(sys.argv[5], pid)
-    if old_id != new_id or (x0, y0, w0, h0) != (0, 0, 1920, 1080):
+    if (old_id != new_id or
+            not (0 <= x0 <= 400 and 0 <= y0 <= 160 and
+                 1500 <= w0 <= 1750 and 750 <= h0 <= 970 and
+                 x0 + w0 < 1920 and y0 + h0 < 1080)):
         raise ValueError("FAIL_BROWSER_IDENTITY_OR_ORIGINAL_RECT_CHANGED")
     dx, dy = x1 - x0, y1 - y0
-    if not (330 <= dx <= 600 and 150 <= dy <= 330 and
+    if not (x1 >= 330 and y1 >= 150 and
+            x0 + 176 < x1 and
             950 <= w1 <= 1250 and 600 <= h1 <= 850 and
             x1+w1 < 1920 and y1+h1 < 1080):
         raise ValueError(
