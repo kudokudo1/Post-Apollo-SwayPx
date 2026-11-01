@@ -38,6 +38,7 @@ jobs:
           p=Path("sway/stage_director_ci_scene_probe.c").read_text()
           pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
           dynamic=Path("tests/stage_director/assert_real_chrome_motion_pixels.py").read_text()
+          test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "ci_motion_rebind(" in p
           assert "SD_CI_CHROME_MOTION_REBIND" in p
           assert 'ci_render_clip.width == 400 && ci_render_clip.height == 300' in p
@@ -53,7 +54,6 @@ jobs:
           assert "sd-chrome-motion.ppm" in test
           ast.parse(dynamic)
 
-          test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
           runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "default_border normal" in runtime
