@@ -184,6 +184,7 @@ jobs:
             ${{ runner.temp }}/sd-chrome-motion.ppm
             ${{ runner.temp }}/sd-chrome-motion.png
             ${{ runner.temp }}/sd-chrome-motion-tree.json
+            ${{ runner.temp }}/sd-chrome-motion-failed-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
