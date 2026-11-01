@@ -32,6 +32,14 @@ Review this draft PR and `Stage Director scoped Chrome decoration with unrelated
 
 Source checks require native `wl_client`, exact cgroup and Linux PID/starttime, per-container `B_NONE`, normal Sway defaults, the separate unrelated `border=normal` control, Chrome-only `border=none`, native screenshot crop and absolute test-only Meson guards. CI also builds full ordinary SwayPX to ensure test hooks are absent. The final full run is still pending.
 
+## TEST EVIDENCE AND REPEATABILITY
+
+First full real-browser run on PR #50 passed normal SwayPX compilation and the unrelated Foot XDG view's `border=normal`, and the compositor's native process/cgroup matcher logged `SD_CI_CHROME_PER_VIEW_BORDER` plus `SD_CI_CHROME_PIXEL_SCENE ... hit_test_crop=PASS`. However, the browser-window test reported no unique externally observable Chrome XDG candidate before its deadline. **That attempt failed and is not counted as a pixel pass.**
+
+The following CI diagnostic run `41259461594` passed source boundary, normal and CI compositor builds, unrelated-window titlebar, exact Chrome `border=none`, real Chrome cgroup/native peer, and four-edge screenshot. Measured brightness: inside `255.0, 255.0`, all five outside samples `0.0`, baseline and desktop `0.0`; all Chrome process identities, Wayland view, private profile and temporary runner device ACL were cleaned up. The diagnostic code also captures native PID, shell, border and rectangle to an artifact on any future candidate mismatch, **without accepting ambiguous windows**.
+
+Because there was an earlier intermittent native-window mismatch, the current acceptance now requires **three consecutive observations of one identical, cgroup-owned XDG PID, border and rectangle** during the pixel test, instead of accepting a single transient candidate. This change requires another GitHub Actions verification. CI success on the preceding commit is not yet proof that the strengthened current HEAD passes.
+
 ## WATCH OUT FOR
 
 - A CI-only **per-view** border override is not a vetted, operator-authenticated **production** per-view decoration policy; production admission still requires a trusted WATCH session, exact browser ownership and all native actor/host/frame boundaries.
