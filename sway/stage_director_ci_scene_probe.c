@@ -343,12 +343,14 @@ void stage_director_ci_scene_probe_post_layout(void) {
 	 * the right and below. Measure those edges in the SAME post-layout state. */
 	struct wlr_scene_node *outside_right = wlr_scene_node_at(
 		&view->content_tree->node,
-		(double)x + view->geometry.x + 450,
+		(double)x + view->geometry.x +
+			(ci_render_clip.width == 400 ? 550 : 450),
 		(double)y + view->geometry.y + 150, &sx, &sy);
 	struct wlr_scene_node *outside_bottom = wlr_scene_node_at(
 		&view->content_tree->node,
 		(double)x + view->geometry.x + 160,
-		(double)y + view->geometry.y + 370, &sx, &sy);
+		(double)y + view->geometry.y +
+			(ci_render_clip.height == 300 ? 445 : 370), &sx, &sy);
 	wlr_log(WLR_INFO,
 		"SD_CI_POST_LAYOUT clip_reapplied=1 origin=%d,%d "
 		"inside=%d outside=%d result=%s outside_right=%d outside_bottom=%d",
