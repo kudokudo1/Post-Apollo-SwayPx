@@ -7,6 +7,7 @@ on:
       - stage-director/real-chrome-wayland-actor-20261031
     paths:
       - 'sway/stage_director_ci_scene_probe.c'
+      - 'tests/stage_director/headless_sway_smoke.sh'
       - 'tests/stage_director/ci_real_chrome_pixel_compositor.nix'
       - 'tests/stage_director/ci_real_chrome_wayland_window.py'
       - 'tests/stage_director/assert_real_chrome_clip_pixels.py'
@@ -35,6 +36,12 @@ jobs:
           pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
           test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
+          runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert "default_border pixel 0" in runtime
+          assert "default_floating_border pixel 0" in runtime
+          assert "SD_CI_CHROME_DECORATION_SAFETY" in runtime
+          assert "BLOCKED_NON_CI_CHROME_DECORATION_SUPPRESSION" in runtime
+
           options=Path("meson_options.txt").read_text()
           assert "option('sd-ci-news-scene-probe', type: 'boolean', value: false" in options
           assert '"-Dsd-ci-news-scene-probe=true"' in nix
