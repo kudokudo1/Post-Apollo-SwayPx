@@ -1,4 +1,7 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <ctype.h>
 #include <string.h>
 #include <sys/types.h>
 #include <wayland-server-core.h>
@@ -311,7 +314,146 @@ void stage_director_ci_scene_probe_post_layout(void) {
 		outside_right ? 1 : 0, outside_bottom ? 1 : 0);
 }
 
+
+/*
+ * SD1 // Real Chrome pixel experiment, compiled ONLY in CI probe variant.
+ *
+ * IMPORTANT: the production SwayPX build never links this translation unit.
+ * This is a disposable test selector, not WATCH authority or an actor broker.
+ * The compositor independently resolves wl_client credentials and the
+ * systemd-owned exact cgroup path, rather than trusting app_id/window title.
+ */
+static bool ci_digits(const char *value) {
+	if (!value || !*value) return false;
+	for (const unsigned char *p = (const unsigned char *)value; *p; p++) {
+		if (!isdigit(*p)) return false;
+	}
+	return true;
+}
+
+static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
+	const char *github = getenv("GITHUB_ACTIONS");
+	const char *ci = getenv("CI");
+	const char *flag = getenv("STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL");
+	const char *run = getenv("GITHUB_RUN_ID");
+	const char *attempt = getenv("GITHUB_RUN_ATTEMPT");
+	const char *runner_temp = getenv("RUNNER_TEMP");
+	if (!github || strcmp(github, "true") != 0 ||
+			!ci || strcmp(ci, "true") != 0 ||
+			!flag || strcmp(flag, "1") != 0 ||
+			!runner_temp || !*runner_temp ||
+			!ci_digits(run) || strlen(run) > 22 ||
+			(attempt && (!ci_digits(attempt) || strlen(attempt) > 8)) ||
+			!view || view->type != SWAY_VIEW_XDG_SHELL ||
+			!view->surface || !view->surface->resource ||
+			!view->container || view->container->node.destroying ||
+			!view->content_tree || !view->wlr_xdg_toplevel ||
+			wl_list_empty(&view->content_tree->children)) {
+		return false;
+	}
+	struct wl_client *client =
+		wl_resource_get_client(view->surface->resource);
+	pid_t peer = -1;
+	uid_t uid = (uid_t)-1;
+	gid_t gid = (gid_t)-1;
+	if (!client) return false;
+	wl_client_get_credentials(client, &peer, &uid, &gid);
+	struct stage_director_process_identity observed = {0};
+	if (peer <= 1 || uid != getuid() || view->pid != peer ||
+			!stage_director_read_linux_process((int64_t)peer,
+				&observed, NULL) ||
+			observed.pid != peer || observed.uid != (uint32_t)uid ||
+			observed.start_time_ticks == 0) {
+		return false;
+	}
+	/* The cgroup is created by the *separate* CI systemd service.
+	 * Match an exact final path component, no prefix/substring spoof.
+	 */
+	char expected[100];
+	const int size = snprintf(expected, sizeof(expected),
+		"/sd-ci-chrome-wayland-%s-%s.service",
+		run, attempt ? attempt : "1");
+	if (size <= 0 || size >= (int)sizeof(expected)) return false;
+	char file[64];
+	if (snprintf(file, sizeof(file), "/proc/%ld/cgroup",
+			(long)peer) <= 0) return false;
+	FILE *fp = fopen(file, "r");
+	if (!fp) return false;
+	char line[512];
+	bool match = false;
+	while (fgets(line, sizeof(line), fp)) {
+		size_t n = strcspn(line, "\r\n");
+		line[n] = '\0';
+		const size_t suffix = strlen(expected);
+		if (strncmp(line, "0::/", 4) == 0 && n >= suffix &&
+				strcmp(line + n - suffix, expected) == 0) {
+			match = true;
+			break;
+		}
+	}
+	fclose(fp);
+	if (match && peer_out) *peer_out = peer;
+	return match;
+}
+
+static bool ci_real_chrome_pixel_probe(struct sway_view *view) {
+	static bool selected;
+	if (selected || ci_render_actor || !view ||
+			view->geometry.width < 600 || view->geometry.height < 440) {
+		return false;
+	}
+	pid_t peer = -1;
+	if (!ci_real_chrome_process(view, &peer)) return false;
+	int x = 0, y = 0;
+	wlr_scene_node_coords(&view->content_tree->node, &x, &y);
+	const struct wlr_box crop = {
+		.x = view->geometry.x + 96,
+		.y = view->geometry.y + 96,
+		.width = 320,
+		.height = 240,
+	};
+	double sx = 0, sy = 0;
+	const struct wlr_scene_node *before_inside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 160,
+		(double)y + view->geometry.y + 160, &sx, &sy);
+	const struct wlr_scene_node *before_outside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 24,
+		(double)y + view->geometry.y + 24, &sx, &sy);
+	if (!before_inside || !before_outside) return false;
+
+	wlr_scene_subsurface_tree_set_clip(&view->content_tree->node, &crop);
+	const struct wlr_scene_node *after_inside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 160,
+		(double)y + view->geometry.y + 160, &sx, &sy);
+	const struct wlr_scene_node *after_outside = wlr_scene_node_at(
+		&view->content_tree->node,
+		(double)x + view->geometry.x + 24,
+		(double)y + view->geometry.y + 24, &sx, &sy);
+	if (!after_inside || after_outside) {
+		view_center_and_clip_surface(view);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_PIXEL_SCENE "
+			"native=1 cgroup=1 hit_test_crop=FAIL authority=NONE");
+		return false;
+	}
+	selected = true;
+	ci_render_actor = view;
+	ci_render_clip = crop;
+	ci_render_geometry = view->geometry;
+	wlr_log(WLR_INFO, "SD_CI_CHROME_PIXEL_SCENE "
+		"native=1 cgroup=1 pid=%ld starttime_checked=1 "
+		"hit_test_crop=PASS viewport=320x240 "
+		"render_pixels=UNVERIFIED authority=NONE",
+		(long)peer);
+	return true;
+}
+
 void stage_director_ci_scene_probe(struct sway_view *view) {
+	/* Separate isolated CI Chrome candidate, verified by native process
+	 * cgroup and kernel identity, never window title or app_id. */
+	(void)ci_real_chrome_pixel_probe(view);
 	static bool measured = false;
 	static bool child_reported = false;
 	if (!view || !view->surface || !view->content_tree ||
