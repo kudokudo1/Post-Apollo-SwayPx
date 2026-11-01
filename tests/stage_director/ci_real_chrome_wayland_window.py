@@ -222,11 +222,28 @@ def main() -> None:
                 break
             time.sleep(0.15)
         if actor is None:
+            # Read-only diagnostic: preserve actual mapped window dimensions
+            # and border state instead of guessing why a unique XDG candidate
+            # was not found. No untrusted title/app_id authorizes a candidate.
+            try:
+                final_tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                (temp / "sd-chrome-failed-tree.json").write_text(
+                    json.dumps(final_tree), encoding="utf-8")
+                observed = [
+                    {"pid": n.get("pid"), "shell": n.get("shell"),
+                     "border": n.get("border"), "rect": n.get("rect"),
+                     "cgroup_member": n.get("pid") in members(root),
+                     "kernel_start_matches":
+                         proc_start(n.get("pid")) == snapshot.get(n.get("pid"))}
+                    for n in containers(final_tree)]
+            except Exception as exc:
+                observed = [{"read_error": str(exc)}]
             logs = call("sudo", "-n", "journalctl", "-u", unit,
                         "-n", "65", "--no-pager", check=False)
             raise RuntimeError("BLOCKED_NO_UNIQUE_LIVE_NATIVE_CHROME_TOPLEVEL "
-                               f"chrome={count} group_pids={len(snapshot)}\n"
-                               + logs[-3500:])
+                               f"chrome={count} group_pids={len(snapshot)} "
+                               "observed=" + json.dumps(observed) + "\n" +
+                               logs[-3500:])
         if pixel_mode and actor.get("border") != "none":
             raise RuntimeError("FAIL_NATIVE_CHROME_BORDER_NOT_SCOPED: "
                                + str(actor.get("border")))
