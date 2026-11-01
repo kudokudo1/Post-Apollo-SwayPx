@@ -453,6 +453,17 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
 	if (!ci_real_chrome_process(view, &native_peer)) return false;
 	view->container->pending.border = B_NONE;
 	view->container->pending.border_thickness = 0;
+	/* In the isolated motion experiment, map the verified browser as
+	 * floating BEFORE its first source clip. This isolates dynamic
+	 * move/resize from an unrelated tiled->floating transition which
+	 * currently unmaps the native Chrome XDG view in the runner.
+	 * No ordinary build or other native view can reach this path. */
+	const char *motion = getenv("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION");
+	if (motion && strcmp(motion, "1") == 0) {
+		container_set_floating(view->container, true);
+		wlr_log(WLR_INFO, "SD_CI_CHROME_INITIAL_FLOAT "
+			"native_cgroup=1 before_clip=1 authority=NONE");
+	}
 	wlr_log(WLR_INFO,
 		"SD_CI_CHROME_PER_VIEW_BORDER native_cgroup=1 "
 		"exact_native_peer=1 actor_only=1 border=none "
