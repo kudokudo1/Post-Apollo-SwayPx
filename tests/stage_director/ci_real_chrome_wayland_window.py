@@ -101,6 +101,108 @@ def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
     raise RuntimeError("FAIL_UNRELATED_CONTROL_STILL_MAPPED_AFTER_STOP")
 
 
+def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
+                            root: Path, original_pid: int,
+                            original_start: int) -> dict:
+    """Only disposable test-owned native XDG actor, not a production IPC API."""
+    con_id = actor.get("id")
+    if type(con_id) is not int or con_id <= 0:
+        raise RuntimeError("BLOCKED_NO_NATIVE_SWAY_CONTAINER_ID")
+    rect0 = actor.get("rect") or {}
+    if (not all(type(rect0.get(k)) is int for k in
+                ("x", "y", "width", "height")) or
+            not (0 <= rect0["x"] <= 400 and 0 <= rect0["y"] <= 160 and
+                 1500 <= rect0["width"] <= 1750 and
+                 750 <= rect0["height"] <= 970 and
+                 rect0["x"] + rect0["width"] < 1920 and
+                 rect0["y"] + rect0["height"] < 1080)):
+        raise RuntimeError("BLOCKED_INITIAL_BROWSER_NOT_BOUNDED_FLOAT: "
+                           + str(rect0))
+    criteria = f"[con_id={con_id}]"
+    # These Sway IPC operations run ONLY on an exact native container ID
+    # captured from the independently verified Chrome cgroup.
+    # No app_id, title or client-controlled string selects the window.
+    # Verified Chrome was mapped floating *before* clip; switching a tiled
+    # Chrome XDG view to floating during the clip caused a native unmap
+    # in the earlier separate CI experiment. Test resize and move only.
+    for operation in (
+            "resize set width 1100 px height 700 px",
+            "move position 430 220"):
+        answer = json.loads(call(swaymsg, "-s", ipc, "-r",
+                                 criteria + " " + operation))
+        if (not isinstance(answer, list) or len(answer) != 1 or
+                answer[0].get("success") is not True):
+            raise RuntimeError("FAIL_SWAY_GEOMETRY_COMMAND: "
+                               + operation + " " + repr(answer))
+        # A successful Sway IPC response doesn't prove the mapped Wayland
+        # surface survived the transaction. Inspect after EACH operation,
+        # before sending another mutating command to the same test window.
+        observed_step = None
+        for _ in range(50):
+            tree_step = json.loads(call(swaymsg, "-s", ipc, "-r",
+                                        "-t", "get_tree"))
+            matches_step = [n for n in containers(tree_step)
+                            if n.get("id") == con_id and
+                            n.get("pid") == original_pid and
+                            n.get("shell") == "xdg_shell"]
+            if len(matches_step) == 1:
+                n = matches_step[0]
+                observed_step = {
+                    "id": n.get("id"), "pid": n.get("pid"),
+                    "rect": n.get("rect"), "border": n.get("border"),
+                    "floating": n.get("floating")}
+                break
+            time.sleep(0.1)
+        print("SD_CI_CHROME_GEOMETRY_STEP "
+              f"operation={operation.replace(' ', '_')} "
+              f"observed={json.dumps(observed_step)}", flush=True)
+        if observed_step is None:
+            raise RuntimeError("FAIL_CHROME_XDG_UNMAPPED_AFTER_GEOMETRY_STEP "
+                               + operation)
+    stable = 0
+    previous = None
+    last_seen = []
+    for _ in range(90):
+        group_pids = members(root)
+        if original_pid not in group_pids or proc_start(original_pid) != original_start:
+            raise RuntimeError("FAIL_NATIVE_ACTOR_LOST_DURING_MOVE")
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        last_seen = [
+            {"id": n.get("id"), "pid": n.get("pid"),
+             "border": n.get("border"), "rect": n.get("rect"),
+             "floating": n.get("floating"), "shell": n.get("shell")}
+            for n in containers(tree)
+            if n.get("id") == con_id or n.get("pid") == original_pid]
+        matches = [n for n in containers(tree)
+                   if n.get("id") == con_id and
+                   n.get("pid") == original_pid and
+                   n.get("shell") == "xdg_shell" and
+                   n.get("border") == "none"]
+        if len(matches) == 1:
+            rect = matches[0].get("rect") or {}
+            key = tuple(rect.get(v) for v in ("x", "y", "width", "height"))
+            if (all(type(t) is int for t in key) and
+                    key[0] >= 330 and key[1] >= 150 and
+                    950 <= key[2] <= 1250 and
+                    600 <= key[3] <= 850 and
+                    key[0] + key[2] < 1920 and
+                    key[1] + key[3] < 1080):
+                stable = stable + 1 if key == previous else 1
+                previous = key
+                if stable >= 3:
+                    print("SD_CI_CHROME_VIEWPORT_MOTION "
+                          f"same_native_actor=1 actor_id={con_id} "
+                          f"move={key[0]},{key[1]} "
+                          f"resized={key[2]}x{key[3]} "
+                          "stable_geometry=3 border=none "
+                          "authority=NONE PASS", flush=True)
+                    return matches[0]
+        time.sleep(0.15)
+    raise RuntimeError("FAIL_NATIVE_CHROME_MOVE_OR_RESIZE_NOT_STABLE "
+                       f"last={previous} stable={stable} "
+                       "tree=" + json.dumps(last_seen))
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -181,7 +283,9 @@ def main() -> None:
              "--disable-extensions", "--disable-sync",
              "--no-first-run", "--no-default-browser-check",
              "--user-data-dir=" + str(profile),
-             "--window-size=1120,720",
+             "--window-size=" + (
+                 "1600,900" if e.get("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION") == "1"
+                 else "1120,720"),
              "--app=about:blank", timeout=30)
         started = True
         relative = call("systemctl", "show", unit,
@@ -318,6 +422,59 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if e.get("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION") == "1":
+                # Wait until compositor committed the initial 320x240 crop.
+                # Then actually move and resize the same service-held XDG
+                # actor. Require a DIFFERENT native rectangle and new
+                # 400x300 scene crop; pixels alone never prove this.
+                try:
+                    actor_after = move_and_resize_browser(
+                        swaymsg, ipc, actor, root, client_pid,
+                        snapshot[client_pid])
+                except RuntimeError as exc:
+                    journal = call("sudo", "-n", "journalctl", "-u",
+                                   unit, "--no-pager", "-n", "100",
+                                   check=False)
+                    tree_fail = json.loads(call(
+                        swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                    (temp / "sd-chrome-motion-failed-tree.json").write_text(
+                        json.dumps(tree_fail), encoding="utf-8")
+                    raise RuntimeError(str(exc) +
+                                       " chrome_journal=" +
+                                       journal[-3800:]) from exc
+                tree_after = json.loads(call(swaymsg, "-s", ipc,
+                                             "-r", "-t", "get_tree"))
+                (temp / "sd-chrome-motion-tree.json").write_text(
+                    json.dumps(tree_after), encoding="utf-8")
+                motion_log = (runtime / "sway.log")
+                found_dynamic = False
+                for _ in range(75):
+                    logs = motion_log.read_text(
+                        encoding="utf-8", errors="replace")
+                    if ("SD_CI_CHROME_MOTION_REBIND" in logs and
+                            "clip=400x300" in logs):
+                        found_dynamic = True
+                        break
+                    time.sleep(0.1)
+                if not found_dynamic:
+                    raise RuntimeError("FAIL_REAL_CHROME_DYNAMIC_SCENE_REBIND "
+                                       + logs[-3000:])
+                time.sleep(0.4)
+                moved_ppm = temp / "sd-chrome-motion.ppm"
+                call(grim, "-t", "ppm", str(moved_ppm), timeout=25)
+                call(grim, "-t", "png",
+                     str(temp / "sd-chrome-motion.png"), timeout=25)
+                dynamic_report = call(
+                    sys.executable,
+                    "tests/stage_director/assert_real_chrome_motion_pixels.py",
+                    str(temp / "sd-chrome-before.ppm"),
+                    str(crop_ppm), str(moved_ppm),
+                    str(tree_path),
+                    str(temp / "sd-chrome-motion-tree.json"),
+                    str(client_pid), timeout=30)
+                print(dynamic_report, flush=True)
+                if "SD_CI_REAL_CHROME_DYNAMIC_PIXELS: result=PASS" not in dynamic_report:
+                    raise RuntimeError("FAIL_DYNAMIC_SCREENSHOT_ACCEPTANCE_MARKER")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]

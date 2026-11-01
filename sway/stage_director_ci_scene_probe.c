@@ -27,6 +27,47 @@
 static struct sway_view *ci_render_actor;
 static struct wlr_box ci_render_clip;
 static struct wlr_box ci_render_geometry;
+/* CI only: dynamic actor geometry must be kernel-verified again before
+ * changing crop dimensions or moving the held scene. */
+static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out);
+static bool ci_motion_rebind(struct sway_view *view) {
+	const char *enabled = getenv("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION");
+	if (!enabled || strcmp(enabled, "1") != 0 || !view ||
+			view != ci_render_actor || !view->content_tree ||
+			!view->container || view->container->node.destroying) return false;
+	pid_t peer = -1;
+	if (!ci_real_chrome_process(view, &peer)) return false;
+	const struct wlr_box g = view->geometry;
+	if (g.width < 700 || g.height < 500 ||
+			g.x < 0 || g.y < 0) return false;
+	const int w = g.width >= 1500 ? 320 : 400;
+	const int h = g.width >= 1500 ? 240 : 300;
+	if (g.x + 96 + w > g.x + g.width ||
+			g.y + 96 + h > g.y + g.height) return false;
+	const struct wlr_box new_clip = {
+		.x = g.x + 96, .y = g.y + 96,
+		.width = w, .height = h,
+	};
+	const bool changed = g.x != ci_render_geometry.x ||
+		g.y != ci_render_geometry.y ||
+		g.width != ci_render_geometry.width ||
+		g.height != ci_render_geometry.height ||
+		new_clip.width != ci_render_clip.width ||
+		new_clip.height != ci_render_clip.height;
+	ci_render_geometry = g;
+	ci_render_clip = new_clip;
+	wlr_scene_subsurface_tree_set_clip(
+		&view->content_tree->node, &ci_render_clip);
+	if (changed) {
+		wlr_log(WLR_INFO, "SD_CI_CHROME_MOTION_REBIND "
+			"native_cgroup=1 native_pid=%ld "
+			"geometry=%d,%d %dx%d clip=%dx%d "
+			"authority=NONE result=PASS",
+			(long)peer, g.x, g.y, g.width, g.height, w, h);
+	}
+	return true;
+}
+
 
 /*
  * Diagnostic: wlroots' subsurface clip narrows the SOURCE rectangle, while
@@ -109,8 +150,9 @@ bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer
 	struct ci_dest_candidate probe = initial;
 	wlr_scene_node_for_each_buffer(&ci_render_actor->content_tree->node,
 		ci_match_render_dest, &probe);
-	if (!probe.found || ci_render_clip.width != 320 ||
-			ci_render_clip.height != 240) {
+	if (!probe.found ||
+			!((ci_render_clip.width == 320 && ci_render_clip.height == 240) ||
+			  (ci_render_clip.width == 400 && ci_render_clip.height == 300))) {
 		return false;
 	}
 	wlr_scene_buffer_set_dest_size(buffer,
@@ -251,9 +293,11 @@ void stage_director_ci_scene_probe_post_layout(void) {
 			view->geometry.y != ci_render_geometry.y ||
 			view->geometry.width != ci_render_geometry.width ||
 			view->geometry.height != ci_render_geometry.height) {
-		stage_director_ci_scene_probe_restore(view);
-		wlr_log(WLR_ERROR, "SD_CI_POST_LAYOUT stale_geometry=1 result=FAIL");
-		return;
+		if (!ci_motion_rebind(view)) {
+			stage_director_ci_scene_probe_restore(view);
+			wlr_log(WLR_ERROR, "SD_CI_POST_LAYOUT stale_geometry=1 result=FAIL");
+			return;
+		}
 	}
 	wlr_scene_subsurface_tree_set_clip(
 		&view->content_tree->node, &ci_render_clip);
@@ -299,12 +343,14 @@ void stage_director_ci_scene_probe_post_layout(void) {
 	 * the right and below. Measure those edges in the SAME post-layout state. */
 	struct wlr_scene_node *outside_right = wlr_scene_node_at(
 		&view->content_tree->node,
-		(double)x + view->geometry.x + 450,
+		(double)x + view->geometry.x +
+			(ci_render_clip.width == 400 ? 550 : 450),
 		(double)y + view->geometry.y + 150, &sx, &sy);
 	struct wlr_scene_node *outside_bottom = wlr_scene_node_at(
 		&view->content_tree->node,
 		(double)x + view->geometry.x + 160,
-		(double)y + view->geometry.y + 370, &sx, &sy);
+		(double)y + view->geometry.y +
+			(ci_render_clip.height == 300 ? 445 : 370), &sx, &sy);
 	wlr_log(WLR_INFO,
 		"SD_CI_POST_LAYOUT clip_reapplied=1 origin=%d,%d "
 		"inside=%d outside=%d result=%s outside_right=%d outside_bottom=%d",
@@ -407,6 +453,17 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
 	if (!ci_real_chrome_process(view, &native_peer)) return false;
 	view->container->pending.border = B_NONE;
 	view->container->pending.border_thickness = 0;
+	/* In the isolated motion experiment, map the verified browser as
+	 * floating BEFORE its first source clip. This isolates dynamic
+	 * move/resize from an unrelated tiled->floating transition which
+	 * currently unmaps the native Chrome XDG view in the runner.
+	 * No ordinary build or other native view can reach this path. */
+	const char *motion = getenv("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION");
+	if (motion && strcmp(motion, "1") == 0) {
+		container_set_floating(view->container, true);
+		wlr_log(WLR_INFO, "SD_CI_CHROME_INITIAL_FLOAT "
+			"native_cgroup=1 before_clip=1 authority=NONE");
+	}
 	wlr_log(WLR_INFO,
 		"SD_CI_CHROME_PER_VIEW_BORDER native_cgroup=1 "
 		"exact_native_peer=1 actor_only=1 border=none "
@@ -524,8 +581,10 @@ void stage_director_ci_scene_probe(struct sway_view *view) {
 				view->geometry.y != ci_render_geometry.y ||
 				view->geometry.width != ci_render_geometry.width ||
 				view->geometry.height != ci_render_geometry.height) {
-			stage_director_ci_scene_probe_restore(view);
-			wlr_log(WLR_ERROR, "SD_CI_RENDER_PIXEL stale_geometry=1 result=FAIL");
+			if (!ci_motion_rebind(view)) {
+				stage_director_ci_scene_probe_restore(view);
+				wlr_log(WLR_ERROR, "SD_CI_RENDER_PIXEL stale_geometry=1 result=FAIL");
+			}
 		} else {
 			/* Ordinary XDG commits/transactions can reset the clip. */
 			wlr_scene_subsurface_tree_set_clip(

@@ -1,0 +1,197 @@
+name: Stage Director real Chrome dynamic viewport motion and resize (CI)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/chrome-per-view-decoration-20261031
+    paths:
+      - 'sway/stage_director_ci_scene_probe.c'
+      - 'sway/tree/view.c'
+      - 'include/sway/stage_director_ci_scene_probe.h'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - 'tests/stage_director/ci_real_chrome_pixel_compositor.nix'
+      - 'tests/stage_director/ci_real_chrome_wayland_window.py'
+      - 'tests/stage_director/assert_real_chrome_clip_pixels.py'
+      - 'tests/stage_director/assert_real_chrome_motion_pixels.py'
+      - '.github/workflows/stage-director-chrome-viewport-motion.yml'
+      - 'docs/stage-director-chrome-viewport-motion-20261031.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pixel-source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Per-actor source boundary and unrelated-view protection
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import ast
+          p=Path("sway/stage_director_ci_scene_probe.c").read_text()
+          pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
+          dynamic=Path("tests/stage_director/assert_real_chrome_motion_pixels.py").read_text()
+          test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
+          assert "ci_motion_rebind(" in p
+          assert "SD_CI_CHROME_MOTION_REBIND" in p
+          assert 'ci_render_clip.width == 400 && ci_render_clip.height == 300' in p
+          assert "STAGE_DIRECTOR_CI_REAL_CHROME_MOTION" in p
+          assert "move_and_resize_browser(" in test
+          assert "SD_CI_CHROME_INITIAL_FLOAT" in p
+          assert "container_set_floating(view->container, true);" in p
+          assert "BLOCKED_INITIAL_BROWSER_NOT_BOUNDED_FLOAT" in test
+          assert '"floating enable"' not in test
+          assert '"resize set width 1100 px height 700 px"' in test
+          assert '"move position 430 220"' in test
+          assert "SD_CI_REAL_CHROME_DYNAMIC_PIXELS:" in dynamic
+          assert "FAIL_OLD_CHROME_VIEWPORT_RESIDUAL_AFTER_MOVE" in dynamic
+          assert "viewport_before=320x240 viewport_after=400x300" in dynamic
+          assert "stable_geometry=3" in test
+          assert "sd-chrome-motion.ppm" in test
+          ast.parse(dynamic)
+
+          nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
+          runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert "default_border normal" in runtime
+          assert "default_floating_border normal" in runtime
+          assert "default_border pixel 0" not in runtime
+          assert "default_floating_border pixel 0" not in runtime
+          assert "SD_CI_CHROME_DECORATION_SAFETY" in runtime
+          assert "BLOCKED_NON_CI_CHROME_PER_VIEW_DECORATION" in runtime
+
+          options=Path("meson_options.txt").read_text()
+          assert "option('sd-ci-news-scene-probe', type: 'boolean', value: false" in options
+          assert '"-Dsd-ci-news-scene-probe=true"' in nix
+          assert 'ci_real_chrome_process(' in p
+          view=Path("sway/tree/view.c").read_text()
+          header=Path("include/sway/stage_director_ci_scene_probe.h").read_text()
+          assert "stage_director_ci_scene_probe_borderless_verified_actor(" in p
+          assert "stage_director_ci_scene_probe_borderless_verified_actor(view);" in view
+          assert "#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE" in view
+          assert "view->container->pending.border = B_NONE;" in p
+          assert "view->container->pending.border_thickness = 0;" in p
+          assert "stage_director_ci_scene_probe_borderless_verified_actor(" in header
+          assert "SD_CI_UNRELATED_DECORATION:" in test
+          assert 'control.get("border") != "normal"' in test
+          assert 'actor.get("border") != "none"' in test
+          assert "SD_CI_CHROME_PER_VIEW_DECORATION:" in test
+
+          assert 'wl_resource_get_client(view->surface->resource)' in p
+          assert 'wl_client_get_credentials(client, &peer, &uid, &gid)' in p
+          assert 'observed.start_time_ticks == 0' in p
+          assert '"/proc/%ld/cgroup"' in p
+          assert 'strcmp(line + n - suffix, expected) == 0' in p
+          assert 'SD_CI_CHROME_PIXEL_SCENE' in p
+          assert 'render_pixels=UNVERIFIED authority=NONE' in p
+          assert 'ci_render_actor = view;' in p
+          assert 'wlr_scene_subsurface_tree_set_clip(' in p
+          for line in ('before.ppm', 'sd-chrome-crop.ppm', 'sd-chrome-crop.png',
+                       'assert_real_chrome_clip_pixels.py'):
+              assert line in test or line in pix, line
+          for line in ('(x + 24, y + 160)', '(x + 160, y + 24)',
+                       '(x + 450, y + 150)', '(x + 160, y + 370)'):
+              assert line in pix, line
+          assert 'FAIL: real browser pixels leak beyond viewport' in pix
+          assert 'SD_CI_REAL_CHROME_RENDER_PIXELS:' in pix
+          assert '"--no-sandbox"' not in test
+          assert '"--disable-setuid-sandbox"' not in test
+          for path in ('sway/stage_director.c',
+                       'sway/stage_director_weather_watch_protocol.c',
+                       'sway/stage_director_news_supervisor.c'):
+              assert 'ci_real_chrome_pixel_probe' not in Path(path).read_text()
+          ast.parse(test)
+          ast.parse(pix)
+          print("SD_CI_REAL_CHROME_PIXEL_BOUNDARY: "
+                "native client+cgroup only, screenshot required, "
+                "no prod/browser WATCH authority PASS")
+          PY
+
+  real-chrome-four-edge-pixels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile normal SwayPX without a test-only browser pixel selector
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          if grep -aFq 'SD_CI_CHROME_PIXEL_SCENE' "$prod/bin/sway"; then
+            echo "FAIL: browser scene test selector linked into production" >&2
+            exit 1
+          fi
+          # Both the actor-only policy and pixel selector are test-only.
+          if grep -aFq 'SD_CI_CHROME_PER_VIEW_BORDER' "$prod/bin/sway"; then
+            echo "FAIL: per-actor test-only decoration policy linked into production" >&2
+            exit 1
+          fi
+          echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
+      - name: Compile test-only compositor and screenshot client separately
+        run: |
+          set -euo pipefail
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_chrome_pixel_compositor.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$ci/bin/sway"
+          test -x "$ci/bin/swaymsg"
+          grep -aFq 'SD_CI_CHROME_PIXEL_SCENE' "$ci/bin/sway"
+          echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_CHROME_MOTION=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          echo "STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+      - name: Boot actual headless SwayPX, Chrome and verify four-edge rendered pixels
+        run: |
+          set -euo pipefail
+          test -x /opt/google/chrome/chrome
+          test -r /sys/fs/cgroup/cgroup.controllers
+          test -d /run/systemd/system
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Preserve actual disposable screenshots for failure analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-ci-real-chrome-viewport-motion-evidence
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-chrome-before.ppm
+            ${{ runner.temp }}/sd-chrome-crop.ppm
+            ${{ runner.temp }}/sd-chrome-crop.png
+            ${{ runner.temp }}/sd-chrome-mapped-tree.json
+            ${{ runner.temp }}/sd-chrome-motion.ppm
+            ${{ runner.temp }}/sd-chrome-motion.png
+            ${{ runner.temp }}/sd-chrome-motion-tree.json
+            ${{ runner.temp }}/sd-chrome-motion-failed-tree.json
+            ${{ runner.temp }}/sd-chrome-failed-tree.json
+      - name: Declare evidence boundary
+        if: always()
+        run: |
+          echo "CI-only real browser moves and resizes by exact verified Sway container ID; independent pre/post screenshot proves viewport expands from 320x240 to 400x300 with old pixels removed." >> "$GITHUB_STEP_SUMMARY"
+          echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
+          echo "This is CI-only output/crop geometry proof, not authenticated Weather host-driven geometry or production input/focus/popup authority; no local browser launch." >> "$GITHUB_STEP_SUMMARY"
