@@ -129,11 +129,18 @@ def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
                                + operation + " " + repr(answer))
     stable = 0
     previous = None
+    last_seen = []
     for _ in range(90):
         group_pids = members(root)
         if original_pid not in group_pids or proc_start(original_pid) != original_start:
             raise RuntimeError("FAIL_NATIVE_ACTOR_LOST_DURING_MOVE")
         tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        last_seen = [
+            {"id": n.get("id"), "pid": n.get("pid"),
+             "border": n.get("border"), "rect": n.get("rect"),
+             "floating": n.get("floating"), "shell": n.get("shell")}
+            for n in containers(tree)
+            if n.get("id") == con_id or n.get("pid") == original_pid]
         matches = [n for n in containers(tree)
                    if n.get("id") == con_id and
                    n.get("pid") == original_pid and
@@ -160,7 +167,8 @@ def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
                     return matches[0]
         time.sleep(0.15)
     raise RuntimeError("FAIL_NATIVE_CHROME_MOVE_OR_RESIZE_NOT_STABLE "
-                       f"last={previous} stable={stable}")
+                       f"last={previous} stable={stable} "
+                       "tree=" + json.dumps(last_seen))
 
 
 def main() -> None:
