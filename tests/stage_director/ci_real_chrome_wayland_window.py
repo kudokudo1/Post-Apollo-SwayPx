@@ -79,6 +79,14 @@ def main() -> None:
     if len(ipc_sockets) != 1:
         raise RuntimeError("BLOCKED_NO_UNIQUE_PRIVATE_SWAY_IPC")
     ipc = str(ipc_sockets[0])
+    pixel_mode = e.get("STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL") == "1"
+    grim = e.get("STAGE_DIRECTOR_TEST_GRIM", "")
+    if pixel_mode:
+        if not grim.startswith("/nix/store/") or not Path(grim).is_file():
+            raise RuntimeError("BLOCKED_MISSING_PINNED_GRIM")
+        # A clean image from exactly this compositor before Chrome maps.
+        call(grim, "-t", "ppm",
+             str(temp / "sd-chrome-before.ppm"), timeout=20)
     run_id = e["GITHUB_RUN_ID"] + "-" + e.get("GITHUB_RUN_ATTEMPT", "1")
     unit = "sd-ci-chrome-wayland-" + run_id + ".service"
     rt_name = "sd-ci-chrome-wayland-" + run_id
@@ -176,6 +184,35 @@ def main() -> None:
               f"mapped=1 actor_in_exact_service_cgroup=1 "
               f"kernel_starttime=1 browser_processes={count} "
               "authority=NONE PASS", flush=True)
+        if pixel_mode:
+            # Never infer pixel containment from clip state or Sway hit tests.
+            # The compositor test-only probe has independently checked the
+            # exact browser's wl_client PID, kernel starttime and cgroup.
+            verified_crop = False
+            for _ in range(60):
+                log = (runtime / "sway.log").read_text(
+                    encoding="utf-8", errors="replace")
+                if ("SD_CI_CHROME_PIXEL_SCENE native=1 cgroup=1"
+                        in log and "hit_test_crop=PASS viewport=320x240" in log):
+                    verified_crop = True
+                    break
+                time.sleep(0.1)
+            if not verified_crop:
+                raise RuntimeError("FAIL_NO_CGROUP_VERIFIED_CHROME_SCENE_CROP "
+                                   + log[-3800:])
+            # Read compositor screenshot AFTER the actual browser maps.
+            # Keep evidence if pixel assertion fails, not just after PASS.
+            time.sleep(0.4)
+            crop_ppm = temp / "sd-chrome-crop.ppm"
+            crop_png = temp / "sd-chrome-crop.png"
+            tree_path = temp / "sd-chrome-mapped-tree.json"
+            tree_path.write_text(json.dumps(tree), encoding="utf-8")
+            call(grim, "-t", "ppm", str(crop_ppm), timeout=25)
+            call(grim, "-t", "png", str(crop_png), timeout=25)
+            call(sys.executable,
+                 "tests/stage_director/assert_real_chrome_clip_pixels.py",
+                 str(temp / "sd-chrome-before.ppm"), str(crop_ppm),
+                 str(tree_path), str(client_pid), timeout=30)
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]
