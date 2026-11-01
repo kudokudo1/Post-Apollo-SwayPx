@@ -54,6 +54,53 @@ def containers(node):
             yield from containers(sub)
 
 
+def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
+    """One ordinary native Wayland control proves borders aren't disabled globally."""
+    if not foot.startswith("/nix/store/") or not Path(foot).is_file():
+        raise RuntimeError("BLOCKED_MISSING_PINNED_UNRELATED_WAYLAND_CONTROL")
+    actor = subprocess.Popen(
+        [foot, "--app-id=sd-ci-unrelated-titlebar-control",
+         "--title=SD1-CI-UNRELATED-TITLEBAR-KEPT",
+         "--window-size-pixels=720x480", "/usr/bin/sleep", "15"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=False)
+    try:
+        control = None
+        for _ in range(100):
+            if actor.poll() is not None:
+                raise RuntimeError("FAIL_UNRELATED_CONTROL_EXITED_BEFORE_MAP")
+            tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            matches = [n for n in containers(tree)
+                       if n.get("pid") == actor.pid and
+                       n.get("shell") == "xdg_shell" and
+                       n.get("name") == "SD1-CI-UNRELATED-TITLEBAR-KEPT"]
+            if len(matches) == 1:
+                control = matches[0]
+                break
+            time.sleep(0.1)
+        if control is None:
+            raise RuntimeError("FAIL_UNRELATED_NATIVE_WINDOW_NOT_MAPPED")
+        if control.get("border") != "normal":
+            raise RuntimeError("FAIL_UNRELATED_WINDOW_DECORATION_CHANGED: "
+                               + str(control.get("border")))
+        print("SD_CI_UNRELATED_DECORATION: native_xdg=1 "
+              "normal_border=1 titlebar_policy_preserved=1 "
+              "not_browser_cgroup=1 result=PASS", flush=True)
+    finally:
+        actor.terminate()
+        try:
+            actor.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            actor.kill()
+            actor.wait(timeout=3)
+    for _ in range(100):
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        if not any(n.get("pid") == actor.pid for n in containers(tree)):
+            return
+        time.sleep(0.05)
+    raise RuntimeError("FAIL_UNRELATED_CONTROL_STILL_MAPPED_AFTER_STOP")
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -84,6 +131,10 @@ def main() -> None:
     if pixel_mode:
         if not grim.startswith("/nix/store/") or not Path(grim).is_file():
             raise RuntimeError("BLOCKED_MISSING_PINNED_GRIM")
+        # This unrelated app uses the SAME compositor and normal titlebar
+        # config. The Chrome candidate has not yet been spawned.
+        verify_unrelated_titlebar(
+            swaymsg, ipc, e.get("STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT", ""))
         # A clean image from exactly this compositor before Chrome maps.
         call(grim, "-t", "ppm",
              str(temp / "sd-chrome-before.ppm"), timeout=20)
@@ -176,6 +227,13 @@ def main() -> None:
             raise RuntimeError("BLOCKED_NO_UNIQUE_LIVE_NATIVE_CHROME_TOPLEVEL "
                                f"chrome={count} group_pids={len(snapshot)}\n"
                                + logs[-3500:])
+        if pixel_mode and actor.get("border") != "none":
+            raise RuntimeError("FAIL_NATIVE_CHROME_BORDER_NOT_SCOPED: "
+                               + str(actor.get("border")))
+        if pixel_mode:
+            print("SD_CI_CHROME_PER_VIEW_DECORATION: "
+                  "browser_border=none unrelated_border=normal "
+                  "native_cgroup_verified=1 PASS", flush=True)
         client_pid = actor["pid"]
         # A mapped XDG root is actual native Sway provenance, not title or
         # advertised app_id; matching kernel starttime and exact service cgroup
