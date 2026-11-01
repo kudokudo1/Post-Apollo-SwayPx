@@ -44,7 +44,10 @@ jobs:
           assert 'ci_render_clip.width == 400 && ci_render_clip.height == 300' in p
           assert "STAGE_DIRECTOR_CI_REAL_CHROME_MOTION" in p
           assert "move_and_resize_browser(" in test
-          assert '"floating enable"' in test
+          assert "SD_CI_CHROME_INITIAL_FLOAT" in p
+          assert "container_set_floating(view->container, true);" in p
+          assert "BLOCKED_INITIAL_BROWSER_NOT_BOUNDED_FLOAT" in test
+          assert '"floating enable"' not in test
           assert '"resize set width 1100 px height 700 px"' in test
           assert '"move position 430 220"' in test
           assert "SD_CI_REAL_CHROME_DYNAMIC_PIXELS:" in dynamic
