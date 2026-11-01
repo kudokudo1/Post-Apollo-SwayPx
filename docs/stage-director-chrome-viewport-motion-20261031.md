@@ -16,12 +16,17 @@ BASE // PR #50 HEAD `fd1f35535aac5699e4e2633ff30ede80aa6a25c1`. Upstream PRs are
 
 Existing CI-only SceneFX probe fixed one native Chrome XDG view to a 320×240 content-source clip and failed closed on any `view->geometry` change. The new opt-in `STAGE_DIRECTOR_CI_REAL_CHROME_MOTION=1` path retains the original fail-closed behavior when the flag is absent, but after each geometry change it **re-verifies the actual mapped `wl_client` PID/UID/starttime and exact systemd test service cgroup** before updating the held crop and source/destination frame size. Supported, bounded CI-only cases are an initial native view at least 1500 pixels wide with 320×240 crop, and a resized window at least 700×500 with 400×300 crop, both anchored at local geometry offset (96,96). Unexpected geometry or provenance forces restoration, never blanket cropping.
 
-The disposable GitHub test uses the Sway compositor's private IPC socket and the exact **native XDG container ID**, not app_id or window title, to issue:
-- `floating enable`
+The first real run demonstrated that **`floating enable` on an already mapped tiled Chrome window caused its native XDG top-level to disappear**, even though the browser process continued inside its original systemd cgroup. Initial real Chrome mapping and 320×240 screenshot still passed, but the dynamic test **failed**. A repeat run confirmed the failure. The independent step-by-step diagnostic isolated it specifically to `floating enable`; we did not relax native identity or claim a moved screenshot pass. This tiled-to-floating transition is now an explicitly retained SwayPX blocker requiring separate isolation.
+
+The narrower CI motion test now maps the **same native, cgroup-verified Chrome view as floating before its first clip**, using the existing per-actor `view_map()` hook and `container_set_floating()` ONLY in the opt-in CI variant. Normal SwayPX behavior and unrelated Wayland windows are unaffected. Chrome requests an initial 1600×900 window, and source constraints require its actual floating rectangle to be bounded on the output.
+
+The disposable GitHub test uses the compositor's private IPC socket and the exact **native XDG container ID**, not app_id or title, to issue only:
 - `resize set width 1100 px height 700 px`
 - `move position 430 220`
 
-The original 1920×1080 tiled Chrome actor must keep the SAME native container ID and kernel PID/starttime, have `border=none`, and settle for three repeated geometry observations inside the output. An unrelated Foot Wayland control retains its normal titlebar, proving the global border config has not changed. The browser is non-root, confined to a private systemd cgroup/network namespace, with ephemeral profile, fixed `about:blank`, no sandbox-bypass flag and no production browser process issuer.
+It checks the native view survives each individual command before verifying three stable final geometry observations and screenshots.
+
+The initial bounded floating Chrome actor must keep the SAME native container ID and kernel PID/starttime, have `border=none`, and settle for three repeated geometry observations inside the output. An unrelated Foot Wayland control retains its normal titlebar, proving the global border config has not changed. The browser is non-root, confined to a private systemd cgroup/network namespace, with ephemeral profile, fixed `about:blank`, no sandbox-bypass flag and no production browser process issuer.
 
 An independent pixel checker compares three actual `grim` PPM screenshots from the SAME isolated SwayPX process: black desktop baseline, initial Chrome at its original location and moved/resized Chrome. It verifies that the originally bright point turns black, the moved 400×300 viewport has bright points including newly expanded width and height, four outer margins remain dark, and desktop background is unchanged. A green scene hit-test alone is insufficient. Exact browser process, profile, window teardown and runner /dev/udmabuf ACL restoration remain mandatory.
 
@@ -56,7 +61,7 @@ Source gate ensures this logic is exclusive to `sd-ci-news-scene-probe=true`. Bu
 
 ## NEXT
 
-If green, advance to real popup/subsurface containment and input/focus, then cross-worker Weather bridge integration. If red, preserve actual pixels and fix renderer geometry without weakening native actor/identity checks.
+If green, advance to the separately blocking tiled-to-floating transition, then real popup/subsurface and input/focus containment. If red, preserve stepwise native tree/journal evidence without claiming geometry support. If red, preserve actual pixels and fix renderer geometry without weakening native actor/identity checks.
 
 ## DECISIONS
 
