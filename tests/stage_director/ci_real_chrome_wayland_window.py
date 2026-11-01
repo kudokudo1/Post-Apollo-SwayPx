@@ -109,16 +109,23 @@ def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
     if type(con_id) is not int or con_id <= 0:
         raise RuntimeError("BLOCKED_NO_NATIVE_SWAY_CONTAINER_ID")
     rect0 = actor.get("rect") or {}
-    if (rect0.get("width") != 1920 or rect0.get("height") != 1080 or
-            rect0.get("x") != 0 or rect0.get("y") != 0):
-        raise RuntimeError("BLOCKED_INITIAL_BROWSER_NOT_FULL_OUTPUT: "
+    if (not all(type(rect0.get(k)) is int for k in
+                ("x", "y", "width", "height")) or
+            not (0 <= rect0["x"] <= 400 and 0 <= rect0["y"] <= 160 and
+                 1500 <= rect0["width"] <= 1750 and
+                 750 <= rect0["height"] <= 970 and
+                 rect0["x"] + rect0["width"] < 1920 and
+                 rect0["y"] + rect0["height"] < 1080)):
+        raise RuntimeError("BLOCKED_INITIAL_BROWSER_NOT_BOUNDED_FLOAT: "
                            + str(rect0))
     criteria = f"[con_id={con_id}]"
     # These Sway IPC operations run ONLY on an exact native container ID
     # captured from the independently verified Chrome cgroup.
     # No app_id, title or client-controlled string selects the window.
+    # Verified Chrome was mapped floating *before* clip; switching a tiled
+    # Chrome XDG view to floating during the clip caused a native unmap
+    # in the earlier separate CI experiment. Test resize and move only.
     for operation in (
-            "floating enable",
             "resize set width 1100 px height 700 px",
             "move position 430 220"):
         answer = json.loads(call(swaymsg, "-s", ipc, "-r",
@@ -276,7 +283,9 @@ def main() -> None:
              "--disable-extensions", "--disable-sync",
              "--no-first-run", "--no-default-browser-check",
              "--user-data-dir=" + str(profile),
-             "--window-size=1120,720",
+             "--window-size=" + (
+                 "1600,900" if e.get("STAGE_DIRECTOR_CI_REAL_CHROME_MOTION") == "1"
+                 else "1120,720"),
              "--app=about:blank", timeout=30)
         started = True
         relative = call("systemctl", "show", unit,
