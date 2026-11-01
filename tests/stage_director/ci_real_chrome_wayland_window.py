@@ -127,6 +127,31 @@ def move_and_resize_browser(swaymsg: str, ipc: str, actor: dict,
                 answer[0].get("success") is not True):
             raise RuntimeError("FAIL_SWAY_GEOMETRY_COMMAND: "
                                + operation + " " + repr(answer))
+        # A successful Sway IPC response doesn't prove the mapped Wayland
+        # surface survived the transaction. Inspect after EACH operation,
+        # before sending another mutating command to the same test window.
+        observed_step = None
+        for _ in range(50):
+            tree_step = json.loads(call(swaymsg, "-s", ipc, "-r",
+                                        "-t", "get_tree"))
+            matches_step = [n for n in containers(tree_step)
+                            if n.get("id") == con_id and
+                            n.get("pid") == original_pid and
+                            n.get("shell") == "xdg_shell"]
+            if len(matches_step) == 1:
+                n = matches_step[0]
+                observed_step = {
+                    "id": n.get("id"), "pid": n.get("pid"),
+                    "rect": n.get("rect"), "border": n.get("border"),
+                    "floating": n.get("floating")}
+                break
+            time.sleep(0.1)
+        print("SD_CI_CHROME_GEOMETRY_STEP "
+              f"operation={operation.replace(' ', '_')} "
+              f"observed={json.dumps(observed_step)}", flush=True)
+        if observed_step is None:
+            raise RuntimeError("FAIL_CHROME_XDG_UNMAPPED_AFTER_GEOMETRY_STEP "
+                               + operation)
     stable = 0
     previous = None
     last_seen = []
@@ -393,9 +418,21 @@ def main() -> None:
                 # Then actually move and resize the same service-held XDG
                 # actor. Require a DIFFERENT native rectangle and new
                 # 400x300 scene crop; pixels alone never prove this.
-                actor_after = move_and_resize_browser(
-                    swaymsg, ipc, actor, root, client_pid,
-                    snapshot[client_pid])
+                try:
+                    actor_after = move_and_resize_browser(
+                        swaymsg, ipc, actor, root, client_pid,
+                        snapshot[client_pid])
+                except RuntimeError as exc:
+                    journal = call("sudo", "-n", "journalctl", "-u",
+                                   unit, "--no-pager", "-n", "100",
+                                   check=False)
+                    tree_fail = json.loads(call(
+                        swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                    (temp / "sd-chrome-motion-failed-tree.json").write_text(
+                        json.dumps(tree_fail), encoding="utf-8")
+                    raise RuntimeError(str(exc) +
+                                       " chrome_journal=" +
+                                       journal[-3800:]) from exc
                 tree_after = json.loads(call(swaymsg, "-s", ipc,
                                              "-r", "-t", "get_tree"))
                 (temp / "sd-chrome-motion-tree.json").write_text(
