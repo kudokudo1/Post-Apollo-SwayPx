@@ -494,6 +494,31 @@ bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
 	return false;
 }
 
+/* Observes the exact wlroots delivery path after keyboard/pointer routing.
+ * This is evidence, not a substitute for focus control. Only the native
+ * root surfaces are classified; all descendants remain OTHER/UNVERIFIED. */
+void stage_director_ci_scene_probe_record_input_delivery(
+		struct wlr_surface *surface, bool is_keyboard) {
+	const char *enabled = getenv("STAGE_DIRECTOR_CI_CHROME_REAL_INPUT");
+	if (!enabled || strcmp(enabled, "1") != 0 || !ci_render_actor) return;
+	const char *target = "OTHER";
+	if (!surface) {
+		target = "NONE";
+	} else if (ci_render_actor->surface == surface) {
+		target = "MAIN";
+	} else {
+		for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
+			struct sway_view *sibling = ci_sibling_actors[i];
+			if (sibling && sibling->surface == surface) {
+				target = "HIDDEN_SIBLING";
+				break;
+			}
+		}
+	}
+	wlr_log(WLR_INFO, "SD_CI_NATIVE_INPUT_DELIVERED "
+		"kind=%s target=%s root_only=1 authority=NONE",
+		is_keyboard ? "KEYBOARD" : "POINTER", target);
+}
 void stage_director_ci_scene_probe_quarantine_chrome_sibling(
 		struct sway_view *view) {
 	if (!stage_director_ci_scene_probe_is_chrome_sibling(view) ||
