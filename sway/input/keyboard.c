@@ -16,6 +16,9 @@
 #include "sway/stage_director_news_pairing.h"
 #include "sway/ipc-server.h"
 #include "sway/server.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "log.h"
 
 #if WLR_HAS_SESSION
@@ -568,6 +571,10 @@ static void handle_key_event(struct sway_keyboard *keyboard,
 			event->state, keyinfo.keycode, 0);
 		if (pressed_sent && seat->wlr_seat->keyboard_state.focused_surface) {
 			wlr_seat_set_keyboard(wlr_seat, keyboard->wlr);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+			stage_director_ci_scene_probe_record_input_delivery(
+				wlr_seat->keyboard_state.focused_surface, true);
+#endif
 			wlr_seat_keyboard_notify_key(wlr_seat, event->time_msec,
 				event->keycode, event->state);
 			handled = true;
@@ -592,6 +599,10 @@ static void handle_key_event(struct sway_keyboard *keyboard,
 			&keyboard->state_pressed_sent, event->keycode, event->state,
 			keyinfo.keycode, 0);
 		wlr_seat_set_keyboard(wlr_seat, keyboard->wlr);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+		stage_director_ci_scene_probe_record_input_delivery(
+			wlr_seat->keyboard_state.focused_surface, true);
+#endif
 		wlr_seat_keyboard_notify_key(wlr_seat, event->time_msec,
 				event->keycode, event->state);
 	}
