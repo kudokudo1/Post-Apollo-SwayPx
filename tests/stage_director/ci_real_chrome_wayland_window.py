@@ -380,6 +380,172 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
         request.unlink(missing_ok=True)
 
 
+def verify_multi_chrome_sibling_cycles(e, temp, swaymsg, ipc, grim,
+                                       unit, root, snapshot, original_id,
+                                       crop_ppm, before_tree, initial_siblings):
+    """Two simultaneous real Chrome roots, close one, reopen a fresh root.
+
+    Only the exact disposable Chrome service may emit the requests. This
+    evaluates steady-state compositor pixels, not unseen transient frames.
+    """
+    if (e.get("CI") != "true" or e.get("GITHUB_ACTIONS") != "true" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") != "1" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT") != "1"):
+        raise RuntimeError("BLOCKED_MULTI_CHROME_OUTSIDE_CI")
+    prefix = (temp / ("sd-ci-chrome-sibling-" + e["GITHUB_RUN_ID"] +
+                       "-" + e.get("GITHUB_RUN_ATTEMPT", "1") + ".request"))
+    initial_id = initial_siblings[0]["id"]
+    identities = {initial_id}
+    expected_current = {initial_id}
+    first_rect = None
+
+    def observed_native():
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        pids = members(root)
+        candidates = {}
+        for n in native_xdg_toplevels(tree):
+            pid = n.get("pid")
+            if (n.get("shell") == "xdg_shell" and pid in pids and
+                    proc_start(pid) is not None):
+                candidates[n["id"]] = n
+                snapshot[pid] = proc_start(pid)
+        if original_id not in candidates:
+            raise RuntimeError("FAIL_MULTI_CHROME_ORIGINAL_LOST")
+        return tree, {k: n for k, n in candidates.items()
+                      if k != original_id}
+
+    def request(stage):
+        path = Path(str(prefix) + "." + str(stage))
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                     getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            value = ("SIBLING" + str(stage) + "\n").encode("ascii")
+            if os.write(fd, value) != len(value):
+                raise RuntimeError("FAIL_MULTI_CHROME_SHORT_REQUEST")
+        finally:
+            os.close(fd)
+        return path
+
+    def wait_for(expected, retired=None):
+        for _ in range(150):
+            tree, siblings = observed_native()
+            keys = set(siblings)
+            if keys == expected and (retired is None or retired not in keys):
+                return tree, siblings
+            time.sleep(0.10)
+        raise RuntimeError(
+            "FAIL_MULTI_CHROME_NATIVE_ROOT_COUNT "
+            f"expected={sorted(expected)} actual={sorted(keys)}")
+
+    def photo(stage, tree):
+        tree_path = temp / ("sd-ci-chrome-multi-" + stage + "-tree.json")
+        ppm = temp / ("sd-ci-chrome-multi-" + stage + ".ppm")
+        tree_path.write_text(json.dumps(tree), encoding="utf-8")
+        call(grim, "-t", "ppm", str(ppm), timeout=25)
+        call(grim, "-t", "png",
+             str(temp / ("sd-ci-chrome-multi-" + stage + ".png")), timeout=25)
+        report = call(
+            sys.executable,
+            "tests/stage_director/assert_real_chrome_sibling_discovery.py",
+            str(crop_ppm), str(ppm), str(before_tree),
+            str(tree_path), str(original_id), "--require-contained",
+            "--require-extras", "2" if stage != "after-close" else "1",
+            timeout=30)
+        print(report, flush=True)
+        if "SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS" not in report:
+            raise RuntimeError("FAIL_MULTI_CHROME_PIXELS_NOT_CONTAINED")
+        print(f"SD_CI_CHROME_MULTI_FRAME stage={stage} "
+              "sampled_outside_bright=0 main_geometry_stable=1 "
+              "authority=NONE result=PASS", flush=True)
+
+    paths = []
+    try:
+        paths.append(request(2))
+        both_tree = None
+        for _ in range(150):
+            tree, siblings = observed_native()
+            if len(siblings) == 2 and initial_id in siblings:
+                both_tree = tree
+                break
+            time.sleep(0.1)
+        if both_tree is None:
+            raise RuntimeError("FAIL_MULTI_CHROME_SECOND_SIBLING_NOT_MAPPED")
+        second_id = next(k for k in siblings if k != initial_id)
+        identities.add(second_id)
+        expected_current = {initial_id, second_id}
+        time.sleep(0.35)
+        both_tree, siblings = wait_for(expected_current)
+        photo("two-open", both_tree)
+        log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+            encoding="utf-8", errors="replace")
+        if log.count("SD_CI_CHROME_SIBLING_QUARANTINED") < 2:
+            raise RuntimeError("FAIL_MULTI_CHROME_TWO_QUARANTINE_EVENTS")
+
+        # Close one and require the surviving hidden sibling remains mapped.
+        command = f"[con_id={initial_id}] kill"
+        result = json.loads(call(
+            swaymsg, "-s", ipc, "-r", "-t", "command", command, timeout=20))
+        if not (isinstance(result, list) and len(result) == 1 and
+                result[0].get("success") is True):
+            raise RuntimeError("FAIL_MULTI_CHROME_EXACT_CLOSE_REJECTED")
+        for _ in range(120):
+            tree, siblings = observed_native()
+            if set(siblings) == {second_id}:
+                break
+            time.sleep(0.10)
+        else:
+            raise RuntimeError("FAIL_MULTI_CHROME_CLOSED_ROOT_STILL_MAPPED")
+        expected_current = {second_id}
+        time.sleep(0.25)
+        tree, siblings = wait_for(expected_current, retired=initial_id)
+        # after-close uses one surviving sibling, never a source title.
+        photo("after-close", tree)
+        log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+            encoding="utf-8", errors="replace")
+        if "SD_CI_CHROME_SIBLING_UNMAPPED" not in log:
+            raise RuntimeError("FAIL_MULTI_CHROME_SLOT_NOT_REVOKED")
+
+        paths.append(request(3))
+        for _ in range(150):
+            tree, siblings = observed_native()
+            if (len(siblings) == 2 and second_id in siblings and
+                    initial_id not in siblings):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("FAIL_MULTI_CHROME_REOPEN_ROOT_NOT_MAPPED")
+        reopened_id = next(k for k in siblings if k != second_id)
+        if reopened_id in identities:
+            raise RuntimeError("FAIL_MULTI_CHROME_REUSED_NATIVE_ID")
+        identities.add(reopened_id)
+        expected_current = {second_id, reopened_id}
+        time.sleep(0.35)
+        tree, siblings = wait_for(expected_current, retired=initial_id)
+        photo("reopened", tree)
+        log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+            encoding="utf-8", errors="replace")
+        if (log.count("SD_CI_CHROME_SIBLING_QUARANTINED") < 3 or
+                log.count("SD_CI_CHROME_SIBLING_UNMAPPED") < 1 or
+                "SD_CI_CHROME_SIBLING_CAPACITY_EXCEEDED" in log):
+            raise RuntimeError("FAIL_MULTI_CHROME_SCENE_SLOT_LIFECYCLE")
+        journal = call("sudo", "-n", "journalctl", "-u", unit,
+                       "-n", "150", "--no-pager", check=False)
+        for stage in (1, 2, 3):
+            if f"SD_CI_CHROME_SIBLING_EXECUTABLE_REQUESTED stage={stage}" not in journal:
+                raise RuntimeError(
+                    "FAIL_MULTI_CHROME_REAL_EXECUTABLE_STAGE_" + str(stage))
+        print("SD_CI_CHROME_MULTI_SIBLING_LIFECYCLE: result=PASS "
+              "native_chrome_extra_roots=2 simultaneous=1 "
+              "closed_root_unmapped=1 new_native_root=1 "
+              "scene_slots_reused=1 three_real_snapshots=1 "
+              "zero_sampled_bright_escape=1 original_geometry_stable=1 "
+              "same_exact_service=1 authority=NONE", flush=True)
+        return identities
+    finally:
+        for path in paths:
+            path.unlink(missing_ok=True)
+
+
 def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                                      unit, root, snapshot, actor,
                                      crop_ppm, profile):
@@ -498,8 +664,13 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
               "real_chrome_executable=1 native_cgroup=1 "
               "kernel_starttime=1 confinement=UNVERIFIED authority=NONE",
               flush=True)
+        all_extra_ids = {n["id"] for n in latest}
+        if e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") == "1":
+            all_extra_ids |= verify_multi_chrome_sibling_cycles(
+                e, temp, swaymsg, ipc, grim, unit, root, snapshot,
+                original_id, crop_ppm, before_tree, latest)
         call("sudo", "-n", "systemctl", "stop", unit)
-        ids = {original_id} | {n["id"] for n in latest}
+        ids = {original_id} | all_extra_ids
         for _ in range(100):
             left = json.loads(call(
                 swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
@@ -624,6 +795,9 @@ def main() -> None:
                      e.get("GITHUB_RUN_ATTEMPT", "1"),
                  "--setenv=RUNNER_TEMP=" + str(temp),
                  "--setenv=STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1",
+                 *([
+                     "--setenv=STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING=1",
+                 ] if e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") == "1" else []),
                  "/usr/bin/bash",
                  str(Path("tests/stage_director/ci_chrome_sibling_service.sh")
                      .resolve()),
