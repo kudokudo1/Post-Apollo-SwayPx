@@ -431,21 +431,16 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
  */
 bool stage_director_ci_scene_probe_reject_chrome_popup(
 		struct sway_view *view) {
-	if (!view || view != ci_render_actor || !view->surface ||
-			!view->content_tree || !view->container ||
-			view->container->node.destroying) {
-		return false;
-	}
+	if (!view || view != ci_render_actor) return false;
+	/* A previously selected browser may lose process credentials during
+	 * crash/unmap. NEVER convert that loss into permission to attach to
+	 * the global popup scene. Selected actor stays denied until restore. */
 	pid_t peer = -1;
-	if (!ci_real_chrome_process(view, &peer)) {
-		/* No affirmative identity, no new popup permission. The owner
-		 * teardown path will revoke any held browser mask separately. */
-		return false;
-	}
+	const bool current = ci_real_chrome_process(view, &peer);
 	wlr_log(WLR_INFO, "SD_CI_CHROME_POPUP_DENIED "
-		"exact_native_actor=1 cgroup=1 pid=%ld "
+		"selected_native_actor=1 current_cgroup=%d pid=%ld "
 		"global_popup_tree=BLOCKED authority=NONE result=PASS",
-		(long)peer);
+		current ? 1 : 0, (long)peer);
 	return true;
 }
 
