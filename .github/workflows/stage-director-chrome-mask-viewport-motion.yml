@@ -165,6 +165,11 @@ jobs:
           assert 'source=seat_direct_root_surface' in p
           assert 'SD_CI_CHROME_FOCUS_CUSTODY: result=PASS' in test
           assert 'FAIL_FOCUS_HIDDEN_CHROME_STOLE_SEAT' in test
+          assert 'SD_CI_EARLY_IPC_RESPONSE_MISSED' in test
+          assert 'SD_CI_EARLY_IPC_RECOVERED' in test
+          assert 'FAIL_EARLY_IPC_RECOVERY_EXHAUSTED' in test
+          assert 'read_unrelated_startup_tree(swaymsg, ipc)' in test
+          assert 'bounded=4 pre_chrome=1' in test
           assert 'CI_CHROME_SIBLING_SLOTS 8' in p
           assert 'ci_sibling_actors[CI_CHROME_SIBLING_SLOTS]' in p
           assert 'SD_CI_CHROME_SIBLING_CAPACITY_EXCEEDED' in p
