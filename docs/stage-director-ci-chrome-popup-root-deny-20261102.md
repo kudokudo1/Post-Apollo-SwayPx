@@ -11,7 +11,7 @@ CONNECTION // External Hospital-compatible Doctor, no live registration verified
 
 Source inspection identified a concrete compositor layering problem. Sway's `handle_new_popup()` attaches a real XDG popup to `root->layers.popup`, while nested `popup_handle_new_popup()` creates further scene descendants of that independent popup tree. The existing fixed browser SceneFX clip only operates on `view->content_tree`. Consequently neither strict popup *coordinates* nor an otherwise correct browser clip proves pixel containment.
 
-This narrow experiment adds a CI-only refusal hook to **both native XDG popup event handlers**, before any `popup_create` call. The hook blocks popup creation for the currently selected Chrome actor in the isolated renderer test. It uses the native mapped view identity already bound to the exact browser Wayland client and service cgroup. If the actor was selected but its process credentials have gone stale, the guard **still denies** rather than treating identity loss as permission. Native `wlr_xdg_popup_destroy` is used on the untrusted popup; ordinary applications continue their stock popup logic.
+This narrow experiment adds a CI-only refusal hook to **both native XDG popup event handlers**, before any `popup_create` call. The hook blocks popup creation for **either** the already-selected Chrome actor **or any native XDG view from the exact disposable Chrome service cgroup**, including an early popup before screenshot selection. It rechecks native wl_client/process identity. If an actor was selected but its process credentials have since gone stale, the guard **still denies** rather than treating identity loss as permission. Native `wlr_xdg_popup_destroy` is used on the untrusted popup; ordinary applications continue their stock popup logic.
 
 The hook is compiled only in the opt-in `SD_STAGE_DIRECTOR_CI_SCENE_PROBE` variant. The normal production SwayPX binary does not contain the guard. This is a **deny-all policy** for the isolated browser; not an interior popup renderer or an approval to place popup surfaces elsewhere.
 
@@ -24,7 +24,7 @@ There is no local Fedora configuration or Weather Station NEWS control to enable
 ## VERIFY
 
 - [ ] Source gate verifies both **root** and **nested** popup paths invoke the deny hook before `popup_create`.
-- [ ] Source checks verify selected Chrome identity is tied to exact native process/cgroup and that identity loss cannot open the popup path.
+- [ ] Source checks verify the selected actor **or** exact native Chrome service cgroup is denied, including before selection and after selected actor identity loss.
 - [ ] Normal production SwayPX build excludes all CI popup-deny symbols; opt-in test compositor links them.
 - [ ] Previous real Chrome pixel/mask/abrupt SIGKILL tests remain green.
 - [ ] Future real XDG popup *event* test must generate a mapped popup and observe the event denial; this PR **does not claim** that evidence.
