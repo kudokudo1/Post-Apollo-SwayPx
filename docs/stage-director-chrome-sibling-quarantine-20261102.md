@@ -13,8 +13,10 @@ PR #61 independently proved a genuine Chrome-generated second native XDG top-lev
 
 This narrow opt-in CI-only patch adds two safeguards for **the exact second Chrome native view** whose Wayland peer, Linux process generation and final cgroup component match the disposable Chrome systemd service:
 
-1. Before Sway arranges the new sibling, `view_map()` invokes an exact cgroup verifier and marks only that sibling floating so it cannot retile the original masked browser.
-2. The compositor's CI scene probe disables the **entire sibling container scene tree**, including content and decorations. The existing after-arrange CI hook reapplies that disabled state; the existing view-unmap lifecycle revokes the held sibling pointer. A third same-service view is fail-closed on its scene, but full multi-window lifecycle coverage is still outstanding.
+1. Let the additional Chrome window complete its normal native XDG map, then the CI scene probe moves that exact cgroup-matched sibling out of Sway's tiled layout. Doing so before its configure handshake prevented stable IPC observation in the initial experiment.
+2. The same post-map CI scene probe disables the **entire sibling container scene tree**, including content and decorations. The existing after-arrange CI hook reapplies that disabled state; the existing view-unmap lifecycle revokes the held sibling pointer. A third same-service view is fail-closed on its scene, but full multi-window lifecycle coverage is still outstanding.
+
+Because this quarantine is applied after the native map, **absence of a transient rendered frame before the post-map hook is not yet proven**. The test requires no leaked pixels at its captured steady-state frame; any pre-capture transient still needs separate frame-by-frame evidence.
 
 The test's fourth Chrome matrix lane switches from discovery to **strict fail-on-leak**. It retains the original first-mask screenshot, requires two distinct real Chrome native XDG IDs and an actual second Chrome executable request, asserts the quarantine log, and compares actual grim output. The new checker fails on *any* additional sampled bright pixels outside the viewport or any original-XDG geometry change. Teardown must still remove both XDG roots, cgroup processes and private profile.
 
@@ -29,7 +31,7 @@ Review the PR's `Stage Director real Chrome stationary XDG moving mask (CI)` / `
 - [ ] Normal production SwayPX binary excludes `SD_CI_CHROME_SIBLING_QUARANTINED` and compiles
 - [ ] Actual Chrome second native XDG IDs and process/cgroup proof
 - [ ] CI-only whole-sibling scene disabled before screenshot; post-layout reapply observed
-- [ ] Original main Chrome XDG geometry remains unchanged
+- [ ] Original main Chrome XDG geometry remains unchanged after the floating/layout transaction
 - [ ] Post-sibling screenshot outside-mask bright delta = 0 and no stale pixels
 - [ ] Unrelated app titlebar, real native XDG popup and Chrome kill/regression scenarios pass
 - [ ] Exact cgroup/native/profile teardown and all workflows pass before merge
