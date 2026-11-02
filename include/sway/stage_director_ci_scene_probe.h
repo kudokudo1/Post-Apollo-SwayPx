@@ -10,6 +10,12 @@ struct wlr_scene_buffer;
  */
 bool stage_director_ci_scene_probe_borderless_verified_actor(
 	struct sway_view *view);
+/* CI-only exact native Chrome actor: deny ALL XDG popup creation before
+ * it enters root->layers.popup. Bounds alone cannot protect that tree.
+ * Returns false for unrelated native views; never a production permission.
+ */
+bool stage_director_ci_scene_probe_reject_chrome_popup(
+	struct sway_view *view);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
