@@ -323,6 +323,103 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
         request.unlink(missing_ok=True)
 
 
+def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
+                                     unit, root, snapshot, actor,
+                                     crop_ppm, profile):
+    """Real Chrome second XDG root; diagnostic classification, not custody."""
+    if (e.get("CI") != "true" or e.get("GITHUB_ACTIONS") != "true" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY") != "1"):
+        raise RuntimeError("BLOCKED_CHROME_SIBLING_OUTSIDE_CI")
+    request = temp / ("sd-ci-chrome-sibling-" + e["GITHUB_RUN_ID"] +
+                      "-" + e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
+    previous = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+    before_tree = temp / "sd-ci-chrome-sibling-before-tree.json"
+    before_tree.write_text(json.dumps(previous), encoding="utf-8")
+    original_id, original_pid = actor["id"], actor["pid"]
+    fd = os.open(request, os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                 getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.write(fd, b"SIBLING\n")
+    finally:
+        os.close(fd)
+    try:
+        siblings = []
+        for _ in range(120):
+            tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            active = members(root)
+            originals = [n for n in containers(tree)
+                         if n.get("id") == original_id and
+                         n.get("pid") == original_pid]
+            siblings = [n for n in containers(tree)
+                        if n.get("id") != original_id and
+                        n.get("shell") == "xdg_shell" and
+                        n.get("pid") in active and
+                        proc_start(n["pid"]) is not None]
+            if originals and siblings:
+                break
+            if not active:
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG")
+        if not originals or not siblings:
+            raise RuntimeError("FAIL_CHROME_SIBLING_LOST_ORIGINAL_NATIVE_XDG")
+        journal = call("sudo", "-n", "journalctl", "-u", unit,
+                       "-n", "100", "--no-pager", check=False)
+        if "SD_CI_CHROME_SIBLING_EXECUTABLE_REQUESTED" not in journal:
+            raise RuntimeError("FAIL_CHROME_SECOND_EXECUTABLE_NOT_STARTED " +
+                               journal[-2500:])
+        for node in siblings:
+            snapshot[node["pid"]] = proc_start(node["pid"])
+        time.sleep(0.4)
+        after_tree = temp / "sd-ci-chrome-sibling-after-tree.json"
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        active = members(root)
+        latest = [n for n in containers(tree)
+                  if n.get("shell") == "xdg_shell" and
+                  n.get("id") != original_id and n.get("pid") in active]
+        if not latest:
+            raise RuntimeError("FAIL_CHROME_SECOND_ROOT_DID_NOT_REMAIN")
+        after_tree.write_text(json.dumps(tree), encoding="utf-8")
+        shot = temp / "sd-ci-chrome-second-toplevel.ppm"
+        call(grim, "-t", "ppm", str(shot), timeout=25)
+        call(grim, "-t", "png",
+             str(temp / "sd-ci-chrome-second-toplevel.png"), timeout=25)
+        measured = call(
+            sys.executable,
+            "tests/stage_director/assert_real_chrome_sibling_discovery.py",
+            str(crop_ppm), str(shot), str(before_tree),
+            str(after_tree), str(original_id), timeout=30)
+        print(measured, flush=True)
+        if ("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: result=OBSERVED"
+                not in measured):
+            raise RuntimeError("FAIL_CHROME_SIBLING_PIXEL_PROOF_MISSING")
+        print("SD_CI_CHROME_SECOND_NATIVE_XDG_DISCOVERED "
+              f"initial_native_id={original_id} second_count={len(latest)} "
+              "real_chrome_executable=1 native_cgroup=1 "
+              "kernel_starttime=1 confinement=UNVERIFIED authority=NONE",
+              flush=True)
+        call("sudo", "-n", "systemctl", "stop", unit)
+        ids = {original_id} | {n["id"] for n in latest}
+        for _ in range(100):
+            left = json.loads(call(
+                swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            if (not members(root) and not profile.parent.exists() and
+                    all(proc_start(pid) != st
+                        for pid, st in snapshot.items()) and
+                    not any(n.get("id") in ids for n in containers(left))):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("FAIL_CHROME_SIBLING_TEARDOWN")
+        print("SD_CI_CHROME_SECOND_TOPLEVEL_TEARDOWN "
+              "all_native_roots_unmapped=1 cgroup_empty=1 "
+              "private_profile_removed=1 authority=NONE result=PASS",
+              flush=True)
+    finally:
+        request.unlink(missing_ok=True)
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -369,6 +466,12 @@ def main() -> None:
     root: Path | None = None
     snapshot: dict[int, int] = {}
     popup_mode = e.get("STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS") == "1"
+    sibling_mode = e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY") == "1"
+    if popup_mode and sibling_mode:
+        raise RuntimeError("BLOCKED_CONFLICTING_CHROME_CI_MODES")
+    sibling_request = temp / (
+        "sd-ci-chrome-sibling-" + e["GITHUB_RUN_ID"] + "-" +
+        e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
     popup_exe = e.get("STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS", "")
     popup_request = temp / (
         "sd-ci-xdg-popup-" + e["GITHUB_RUN_ID"] + "-" +
@@ -560,6 +663,11 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if sibling_mode:
+                discover_chrome_second_toplevel(
+                    e, temp, swaymsg, ipc, grim, unit, root, snapshot,
+                    actor, crop_ppm, profile)
+                return
             if popup_mode:
                 verify_native_popup_witness(
                     e, temp, runtime, grim, unit, snapshot, root, crop_ppm)
