@@ -139,7 +139,8 @@ jobs:
           assert 'stage_director_ci_scene_probe_is_chrome_sibling(' in native_header
           assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(' in p
           assert 'wlr_scene_node_set_enabled(&view->container->scene_tree->node, false)' in p
-          assert 'container_set_floating(view->container, true);' in Path('sway/tree/view.c').read_text()
+          assert 'container_set_floating(view->container, true);' in p
+          assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(view);' in p
           assert 'STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT' in test
           assert 'FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED' in test
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
