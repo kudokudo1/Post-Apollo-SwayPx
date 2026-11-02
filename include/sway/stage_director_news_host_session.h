@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include "sway/stage_director_news_request_peer.h"
+#include "sway/stage_director_viewport.h"
 
 /*
  * Native compositor-owned Weather host CANDIDATE custody.
@@ -35,6 +36,22 @@ struct stage_director_news_host_session_probe {
 	bool can_show_popup;
 };
 
+/* Compositor-local, read-only outer Weather layer geometry evidence. */
+struct stage_director_news_host_geometry_snapshot {
+	bool candidate_only;
+	uint64_t epoch;
+	uint64_t revision;
+	uintptr_t native_host_ref;
+	uintptr_t native_client_ref;
+	uintptr_t native_output_ref;
+	struct stage_director_rect host;
+	struct stage_director_rect output;
+	bool can_launch;
+	bool can_clip;
+	bool can_accept_input;
+	bool can_show_popup;
+};
+
 struct stage_director_news_host_session {
 	struct wl_client *client;
 	struct wl_resource *layer_role;
@@ -43,6 +60,12 @@ struct stage_director_news_host_session {
 	uintptr_t native_output_ref;
 	uint64_t epoch;
 	uint64_t last_epoch;
+	/* Monotonic even after CLOSE, unmap or native resource destruction. */
+	uint64_t geometry_revision;
+	uint64_t last_geometry_revision;
+	struct stage_director_rect observed_host;
+	struct stage_director_rect observed_output;
+	bool geometry_valid;
 	bool initialized;
 	bool candidate;
 	/* Called after native refs have been invalidated, including disconnect. */
@@ -68,6 +91,25 @@ bool stage_director_news_host_session_record_native_candidate(
 	struct wl_resource *host_surface,
 	uintptr_t native_host_ref, uintptr_t native_output_ref,
 	uint64_t epoch);
+
+/* Only a fresh native compositor observation may update this candidate.
+ * Repeated identical bounds are idempotent; changed bounds advance revision.
+ * No QML/IPC setter and no permission to paint, launch, or receive input. */
+bool stage_director_news_host_session_update_geometry(
+	struct stage_director_news_host_session *session,
+	uintptr_t current_host_ref, uintptr_t current_client_ref,
+	uintptr_t current_output_ref, uint64_t current_epoch,
+	struct stage_director_rect host, struct stage_director_rect output);
+
+struct stage_director_news_host_geometry_snapshot
+stage_director_news_host_session_geometry_snapshot(
+	const struct stage_director_news_host_session *session,
+	uintptr_t current_host_ref, uintptr_t current_client_ref,
+	uintptr_t current_output_ref, uint64_t current_epoch);
+
+bool stage_director_news_host_session_geometry_current(
+	const struct stage_director_news_host_session *session,
+	const struct stage_director_news_host_geometry_snapshot *snapshot);
 
 /* Incoming request must belong to the exact candidate Wayland connection.
  * Re-check scene/host/output generation separately before any later action. */

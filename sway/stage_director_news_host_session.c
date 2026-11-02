@@ -60,6 +60,10 @@ void stage_director_news_host_session_invalidate(
 	session->native_host_ref = 0;
 	session->native_output_ref = 0;
 	session->epoch = 0;
+	session->geometry_revision = 0;
+	session->geometry_valid = false;
+	memset(&session->observed_host, 0, sizeof(session->observed_host));
+	memset(&session->observed_output, 0, sizeof(session->observed_output));
 	session->candidate = false;
 	/* last_epoch is intentionally retained to refuse stale replays. */
 	if (was_candidate && session->on_revoked) {
@@ -118,6 +122,92 @@ bool stage_director_news_host_session_record_native_candidate(
 	wl_resource_add_destroy_listener(layer_role, &session->role_destroy);
 	wl_resource_add_destroy_listener(host_surface, &session->surface_destroy);
 	return true;
+}
+
+
+/* Only called after a compositor-owned native layer/peer observation.
+ * A matching rectangle remains CANDIDATE ONLY, not a clip/input credential. */
+static bool same_rect(struct stage_director_rect a,
+		struct stage_director_rect b) {
+	return a.x == b.x && a.y == b.y &&
+		a.width == b.width && a.height == b.height;
+}
+
+bool stage_director_news_host_session_update_geometry(
+		struct stage_director_news_host_session *session,
+		uintptr_t current_host_ref, uintptr_t current_client_ref,
+		uintptr_t current_output_ref, uint64_t current_epoch,
+		struct stage_director_rect host, struct stage_director_rect output) {
+	if (!session || !session->initialized || !session->candidate ||
+			!current_host_ref || current_host_ref != session->native_host_ref ||
+			!current_client_ref ||
+			current_client_ref != (uintptr_t)session->client ||
+			!current_output_ref ||
+			current_output_ref != session->native_output_ref ||
+			!current_epoch || current_epoch != session->epoch ||
+			!stage_director_rect_valid(host) ||
+			!stage_director_rect_valid(output) ||
+			!stage_director_rect_contains(output, host)) {
+		return false;
+	}
+	if (session->geometry_valid &&
+			same_rect(session->observed_host, host) &&
+			same_rect(session->observed_output, output)) {
+		return true;
+	}
+	if (session->last_geometry_revision == UINT64_MAX) {
+		return false; /* Never wrap into a stale snapshot's revision. */
+	}
+	session->last_geometry_revision++;
+	session->geometry_revision = session->last_geometry_revision;
+	session->observed_host = host;
+	session->observed_output = output;
+	session->geometry_valid = true;
+	return true;
+}
+
+struct stage_director_news_host_geometry_snapshot
+stage_director_news_host_session_geometry_snapshot(
+		const struct stage_director_news_host_session *session,
+		uintptr_t current_host_ref, uintptr_t current_client_ref,
+		uintptr_t current_output_ref, uint64_t current_epoch) {
+	struct stage_director_news_host_geometry_snapshot out = {0};
+	if (!session || !session->initialized || !session->candidate ||
+			!session->geometry_valid || !session->geometry_revision ||
+			!current_host_ref || current_host_ref != session->native_host_ref ||
+			!current_client_ref ||
+			current_client_ref != (uintptr_t)session->client ||
+			!current_output_ref ||
+			current_output_ref != session->native_output_ref ||
+			!current_epoch || current_epoch != session->epoch) {
+		return out;
+	}
+	out.candidate_only = true;
+	out.epoch = current_epoch;
+	out.revision = session->geometry_revision;
+	out.native_host_ref = current_host_ref;
+	out.native_client_ref = current_client_ref;
+	out.native_output_ref = current_output_ref;
+	out.host = session->observed_host;
+	out.output = session->observed_output;
+	return out; /* Permission flags deliberately remain false. */
+}
+
+bool stage_director_news_host_session_geometry_current(
+		const struct stage_director_news_host_session *session,
+		const struct stage_director_news_host_geometry_snapshot *snapshot) {
+	if (!snapshot || !snapshot->candidate_only || !snapshot->revision ||
+			snapshot->can_launch || snapshot->can_clip ||
+			snapshot->can_accept_input || snapshot->can_show_popup) {
+		return false;
+	}
+	const struct stage_director_news_host_geometry_snapshot now =
+		stage_director_news_host_session_geometry_snapshot(session,
+			snapshot->native_host_ref, snapshot->native_client_ref,
+			snapshot->native_output_ref, snapshot->epoch);
+	return now.candidate_only && now.revision == snapshot->revision &&
+		same_rect(now.host, snapshot->host) &&
+		same_rect(now.output, snapshot->output);
 }
 
 struct stage_director_news_host_session_probe

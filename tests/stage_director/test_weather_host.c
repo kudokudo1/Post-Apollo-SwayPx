@@ -32,9 +32,16 @@ static void check_no_authority(
 
 static void test_exact_host_and_hostile_namespace(void) {
 	struct stage_director_weather_host_observation s = baseline();
-	check_no_authority(stage_director_weather_host_probe(&s),
-		SD_WEATHER_HOST_CANDIDATE_ONLY, true);
+	struct stage_director_weather_host_result first =
+		stage_director_weather_host_probe(&s);
+	check_no_authority(first, SD_WEATHER_HOST_CANDIDATE_ONLY, true);
+	assert(first.host.x == s.host.x && first.host.width == s.host.width);
+	assert(first.output.y == s.output.y &&
+		first.output.height == s.output.height);
 	s.layer_namespace = "quickshell";
+	struct stage_director_weather_host_result rejected =
+		stage_director_weather_host_probe(&s);
+	assert(rejected.host.width == 0 && rejected.output.height == 0);
 	check_no_authority(stage_director_weather_host_probe(&s),
 		SD_WEATHER_HOST_WRONG_NAMESPACE, false);
 	s.layer_namespace = "post-apollo-weather-station-evil";

@@ -94,10 +94,60 @@ int main(void) {
 		SD_NEWS_HOST_SESSION_STALE);
 	denied(probe(&state, watch_a, 0x10, 0x20, 2),
 		SD_NEWS_HOST_SESSION_STALE);
+
+	/* Paired host starts without geometry or browser permission. */
+	struct stage_director_news_host_geometry_snapshot empty =
+		stage_director_news_host_session_geometry_snapshot(
+			&state, 0x10, (uintptr_t)a, 0x20, 1);
+	assert(!empty.candidate_only && empty.revision == 0);
+	assert(!stage_director_news_host_session_geometry_current(&state, &empty));
+	const struct stage_director_rect host1 = {100, 50, 600, 400};
+	const struct stage_director_rect host2 = {150, 70, 620, 420};
+	const struct stage_director_rect output = {0, 0, 1920, 1080};
+	assert(!stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)b, 0x20, 1, host1, output));
+	assert(!stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x21, 1, host1, output));
+	assert(!stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 2, host1, output));
+	assert(stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 1, host1, output));
+	struct stage_director_news_host_geometry_snapshot first =
+		stage_director_news_host_session_geometry_snapshot(
+			&state, 0x10, (uintptr_t)a, 0x20, 1);
+	assert(first.candidate_only && first.revision == 1);
+	assert(!first.can_launch && !first.can_clip &&
+		!first.can_accept_input && !first.can_show_popup);
+	assert(stage_director_news_host_session_geometry_current(&state, &first));
+	assert(stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 1, host1, output));
+	assert(state.geometry_revision == 1);
+	assert(stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 1, host2, output));
+	assert(state.geometry_revision == 2);
+	assert(!stage_director_news_host_session_geometry_current(&state, &first));
+	struct stage_director_news_host_geometry_snapshot second =
+		stage_director_news_host_session_geometry_snapshot(
+			&state, 0x10, (uintptr_t)a, 0x20, 1);
+	assert(second.revision == 2 && second.host.x == 150);
+	assert(stage_director_news_host_session_geometry_current(&state, &second));
+	second.can_clip = true;
+	assert(!stage_director_news_host_session_geometry_current(&state, &second));
+	second.can_clip = false;
+	assert(!stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 1,
+		(struct stage_director_rect){1800, 0, 600, 400}, output));
+	assert(state.geometry_revision == 2);
+	assert(!stage_director_news_host_session_geometry_snapshot(
+		&state, 0x10, (uintptr_t)b, 0x20, 1).candidate_only);
+	assert(!stage_director_news_host_session_geometry_snapshot(
+		&state, 0x10, (uintptr_t)a, 0x20, 2).candidate_only);
 	stage_director_news_host_session_host_lost(&state, 0x99);
 	assert(state.candidate); /* wrong host cannot revoke */
 	stage_director_news_host_session_host_lost(&state, 0x10);
 	assert(!state.candidate);
+	assert(!stage_director_news_host_session_geometry_current(&state, &second));
+	assert(state.geometry_revision == 0 && state.last_geometry_revision == 2);
 	denied(probe(&state, watch_a, 0x10, 0x20, 1),
 		SD_NEWS_HOST_SESSION_EMPTY);
 	assert(!stage_director_news_host_session_record_native_candidate(
@@ -106,6 +156,10 @@ int main(void) {
 	/* wl_resource destruction automatically invalidates the native candidate. */
 	assert(stage_director_news_host_session_record_native_candidate(
 		&state, role_a, surface_a, 0x10, 0x20, 2));
+	assert(stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 2, host1, output));
+	assert(state.geometry_revision == 3);
+	assert(!stage_director_news_host_session_geometry_current(&state, &second));
 	wl_resource_destroy(role_a);
 	assert(!state.candidate && state.last_epoch == 2);
 	role_a = new_resource(a);
@@ -128,7 +182,7 @@ int main(void) {
 	close(b_fd);
 	wl_display_destroy(display);
 	puts("SD_NEWS_HOST_SESSION: real Wayland resource/client lifetime, "
-		"foreign denial, host/output/epoch checks, revocation and zero "
+		"foreign denial, host geometry revisions, stale denial, and zero "
 		"authority PASS");
 	return 0;
 }
