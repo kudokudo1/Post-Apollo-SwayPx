@@ -462,10 +462,9 @@ void stage_director_ci_scene_probe_quarantine_chrome_sibling(
 		return;
 	}
 	ci_sibling_actor = view;
-	/* Do not change Chrome's initial XDG mapping handshake. After the
-	 * real window has mapped, remove it from tiling, then suppress its
-	 * entire compositor scene before the test screenshot. */
-	container_set_floating(view->container, true);
+	/* The sibling was inserted directly into the floating workspace before
+	 * the normal tile layout, avoiding any original-actor resize/reflow.
+	 * After the native map hook, keep all its scene descendants disabled. */
 	wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
 	wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_QUARANTINED "
 		"native_cgroup=1 whole_container_scene_disabled=1 "
