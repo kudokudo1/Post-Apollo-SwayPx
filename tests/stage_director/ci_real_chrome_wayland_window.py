@@ -546,6 +546,90 @@ def verify_multi_chrome_sibling_cycles(e, temp, swaymsg, ipc, grim,
             path.unlink(missing_ok=True)
 
 
+def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
+                                       root, original_id, sibling_id,
+                                       baseline_ppm):
+    """CI native seat focus: allow original, deny exact hidden Chrome sibling.
+
+    This is Sway seat/IPC focus proof, NOT actual key presses, pointer
+    events or Wayland subsurface focus. The renderer is still CI-only.
+    """
+    if (e.get("CI") != "true" or e.get("GITHUB_ACTIONS") != "true" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_FOCUS_CUSTODY") != "1" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT") != "1" or
+            not original_id or not sibling_id or original_id == sibling_id):
+        raise RuntimeError("BLOCKED_CHROME_FOCUS_OUTSIDE_EXACT_CI")
+    log_path = Path(e["XDG_RUNTIME_DIR"]) / "sway.log"
+    log_before = log_path.read_text(encoding="utf-8", errors="replace")
+    marker_start = len(log_before)
+    active = members(root)
+
+    def view_state():
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        native = {n["id"]: n for n in native_xdg_toplevels(tree)
+                  if n.get("shell") == "xdg_shell" and
+                  n.get("pid") in active and proc_start(n["pid"]) is not None}
+        if original_id not in native or sibling_id not in native:
+            raise RuntimeError("FAIL_FOCUS_NATIVE_XDG_IDENTITY_DISAPPEARED")
+        return tree, native
+
+    def focus(command_id):
+        cmd = f"[con_id={command_id}] focus"
+        result = json.loads(call(
+            swaymsg, "-s", ipc, "-r", "-t", "command", cmd, timeout=20))
+        if not (isinstance(result, list) and len(result) == 1 and
+                result[0].get("success") is True):
+            raise RuntimeError("FAIL_FOCUS_NATIVE_IPC_COMMAND_REJECTED " +
+                               repr(result))
+
+    # Explicit positive control: the real visible Chrome actor must be
+    # focusable through the very same exact-id IPC command.
+    focus(original_id)
+    tree, nodes = view_state()
+    if not nodes[original_id].get("focused"):
+        raise RuntimeError("FAIL_FOCUS_VISIBLE_CHROME_POSITIVE_CONTROL")
+    if nodes[sibling_id].get("focused"):
+        raise RuntimeError("FAIL_FOCUS_HIDDEN_SIBLING_ALREADY_FOCUSED")
+    initial_rect = nodes[original_id].get("rect")
+
+    # Negative attempt: Sway command may succeed syntactically, but
+    # native seat/keyboard focus MUST remain with the original actor.
+    focus(sibling_id)
+    tree, nodes = view_state()
+    if (not nodes[original_id].get("focused") or
+            nodes[sibling_id].get("focused") or
+            nodes[original_id].get("rect") != initial_rect):
+        raise RuntimeError("FAIL_FOCUS_HIDDEN_CHROME_STOLE_SEAT")
+    log = log_path.read_text(encoding="utf-8", errors="replace")[marker_start:]
+    if ("SD_CI_CHROME_SIBLING_FOCUS_DENIED" not in log or
+            "source=seat_container" not in log):
+        raise RuntimeError("FAIL_FOCUS_COMPOSITOR_DENIAL_NOT_OBSERVED " +
+                           log[-3000:])
+    photo = temp / "sd-ci-chrome-hidden-focus-denied.ppm"
+    tree_file = temp / "sd-ci-chrome-hidden-focus-denied-tree.json"
+    tree_file.write_text(json.dumps(tree), encoding="utf-8")
+    call(grim, "-t", "ppm", str(photo), timeout=25)
+    call(grim, "-t", "png",
+         str(temp / "sd-ci-chrome-hidden-focus-denied.png"), timeout=25)
+    # The same real screenshot confinement check must remain valid after
+    # attempting to raise/focus the invisible floating Chrome sibling.
+    baseline_tree = temp / "sd-ci-chrome-sibling-before-tree.json"
+    report = call(
+        sys.executable,
+        "tests/stage_director/assert_real_chrome_sibling_discovery.py",
+        str(baseline_ppm), str(photo), str(baseline_tree),
+        str(tree_file), str(original_id), "--require-contained", timeout=30)
+    print(report, flush=True)
+    if "SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS" not in report:
+        raise RuntimeError("FAIL_FOCUS_SIBLING_REENABLED_VISIBLE_SCENE")
+    print("SD_CI_CHROME_FOCUS_CUSTODY: result=PASS "
+          "native_ipc_focus_attempt=1 hidden_sibling_denied=1 "
+          "visible_actor_positive=1 original_keyboard_focus_retained=1 "
+          "original_geometry_stable=1 sampled_scene_clear=1 "
+          "pointer_events=UNTESTED real_keypress=UNTESTED "
+          "authority=NONE", flush=True)
+
+
 def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                                      unit, root, snapshot, actor,
                                      crop_ppm, profile):
@@ -664,6 +748,12 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
               "real_chrome_executable=1 native_cgroup=1 "
               "kernel_starttime=1 confinement=UNVERIFIED authority=NONE",
               flush=True)
+        if e.get("STAGE_DIRECTOR_CI_CHROME_FOCUS_CUSTODY") == "1":
+            if len(latest) != 1:
+                raise RuntimeError("FAIL_FOCUS_EXACT_ONE_HIDDEN_SIBLING")
+            verify_chrome_native_focus_custody(
+                e, temp, swaymsg, ipc, grim, root, original_id,
+                latest[0]["id"], crop_ppm)
         all_extra_ids = {n["id"] for n in latest}
         if e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") == "1":
             all_extra_ids |= verify_multi_chrome_sibling_cycles(
