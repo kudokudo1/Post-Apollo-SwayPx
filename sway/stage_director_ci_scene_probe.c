@@ -10,6 +10,7 @@
 #include <wayland-server-core.h>
 #include "sway/stage_director_process_evidence.h"
 #include <scenefx/types/fx/blur_data.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 #include "sway/tree/container.h"
@@ -481,11 +482,15 @@ bool stage_director_ci_scene_probe_reject_chrome_focus(
 bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
 		struct wlr_surface *surface) {
 	if (!surface) return false;
+	/* Real wl_subsurface children inherit input authority from the root.
+	 * XDG popups are separate roots and remain a distinct policy boundary. */
+	struct wlr_surface *root_surface = wlr_surface_get_root_surface(surface);
+	if (!root_surface) return false;
 	for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
 		struct sway_view *sibling = ci_sibling_actors[i];
 		if (!sibling || !sibling->container ||
 				sibling->container->node.destroying ||
-				sibling->surface != surface) continue;
+				sibling->surface != root_surface) continue;
 		wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_FOCUS_DENIED "
 			"slot=%zu source=seat_direct_root_surface "
 			"focus_state_unchanged=1 authority=NONE result=PASS", i);
@@ -497,14 +502,22 @@ bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
 /* Observes the exact wlroots delivery path after keyboard/pointer routing.
  * This is evidence, not a substitute for focus control. Only the native
  * root surfaces are classified; all descendants remain OTHER/UNVERIFIED. */
-static const char *ci_native_input_root_target(struct wlr_surface *surface) {
+static const char *ci_native_input_root_target(struct wlr_surface *surface,
+		bool *descendant) {
+	*descendant = false;
 	if (!surface) return "NONE";
-	if (ci_render_actor && ci_render_actor->surface == surface) {
+	/* Native wl_subsurface parent tree, NOT arbitrary XDG popup ancestry.
+	 * May return NULL on destroyed trees in older wlroots; that is
+	 * UNKNOWN, never automatically classified safe. */
+	struct wlr_surface *root_surface = wlr_surface_get_root_surface(surface);
+	if (!root_surface) return "UNKNOWN_DESTROYED_TREE";
+	*descendant = root_surface != surface;
+	if (ci_render_actor && ci_render_actor->surface == root_surface) {
 		return "MAIN";
 	}
 	for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
 		struct sway_view *sibling = ci_sibling_actors[i];
-		if (sibling && sibling->surface == surface) {
+		if (sibling && sibling->surface == root_surface) {
 			return "HIDDEN_SIBLING";
 		}
 	}
@@ -515,10 +528,12 @@ void stage_director_ci_scene_probe_record_input_delivery(
 		struct wlr_surface *surface, bool is_keyboard) {
 	const char *enabled = getenv("STAGE_DIRECTOR_CI_CHROME_REAL_INPUT");
 	if (!enabled || strcmp(enabled, "1") != 0 || !ci_render_actor) return;
+	bool descendant = false;
+	const char *target = ci_native_input_root_target(surface, &descendant);
 	wlr_log(WLR_INFO, "SD_CI_NATIVE_INPUT_DELIVERED "
-		"kind=%s target=%s root_only=1 authority=NONE",
-		is_keyboard ? "KEYBOARD" : "POINTER",
-		ci_native_input_root_target(surface));
+		"kind=%s target=%s root_only=0 descendant=%d "
+		"subsurface_root_resolved=1 authority=NONE",
+		is_keyboard ? "KEYBOARD" : "POINTER", target, descendant);
 }
 
 /* At the actual seat_pointer_notify_button -> wlroots notification.
@@ -528,9 +543,12 @@ void stage_director_ci_scene_probe_record_pointer_button_delivery(
 		struct wlr_surface *surface, bool pressed) {
 	const char *enabled = getenv("STAGE_DIRECTOR_CI_CHROME_REAL_BUTTON");
 	if (!enabled || strcmp(enabled, "1") != 0 || !ci_render_actor) return;
+	bool descendant = false;
+	const char *target = ci_native_input_root_target(surface, &descendant);
 	wlr_log(WLR_INFO, "SD_CI_NATIVE_BUTTON_DELIVERED "
-		"state=%s target=%s root_only=1 authority=NONE",
-		pressed ? "PRESS" : "RELEASE", ci_native_input_root_target(surface));
+		"state=%s target=%s root_only=0 descendant=%d "
+		"subsurface_root_resolved=1 authority=NONE",
+		pressed ? "PRESS" : "RELEASE", target, descendant);
 }
 
 void stage_director_ci_scene_probe_quarantine_chrome_sibling(
