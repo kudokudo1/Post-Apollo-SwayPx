@@ -158,7 +158,7 @@ static bool actual_pointer_button(struct context *ctx, uint32_t x,
 	zwlr_virtual_pointer_v1_destroy(ptr);
 	printf("SD_CI_VIRTUAL_INPUT_SENT kind=%s x=%u y=%u "
 		"dest_x=%u dest_y=%u button=BTN_LEFT press=1 release=1 "
-		"same_native_pointer=1 authority=NONE\\n",
+		"same_native_pointer=1 authority=NONE\n",
 		drag ? "GRAB" : "BUTTON", x, y, dest_x, dest_y);
 	return true;
 }
