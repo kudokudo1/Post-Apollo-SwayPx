@@ -420,6 +420,33 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
 	return match;
 }
 
+/* Any actual XDG popup is placed under root->layers.popup by Sway's
+ * xdg_shell.c, not under the CI-clipped browser content. In the isolated
+ * Chrome pixel experiment NO popup has an authenticated paint/seat owner.
+ * Refuse creation before the independent global scene tree is allocated.
+ * This intentionally does not attempt to transform popup coordinates.
+ *
+ * The exact native Chrome wl_client, Linux PID/starttime and service cgroup
+ * are re-observed for every call. Unrelated applications are unchanged.
+ */
+bool stage_director_ci_scene_probe_reject_chrome_popup(
+		struct sway_view *view) {
+	if (!view) return false;
+	/* A popup can be requested BEFORE the screenshot selector chooses
+	 * the main Chrome window. Exact native wl_client/cgroup membership is
+	 * sufficient to deny it. Once selected, losing credentials on SIGKILL
+	 * must also never grant a global popup scene escape. */
+	pid_t peer = -1;
+	const bool current = ci_real_chrome_process(view, &peer);
+	const bool selected = view == ci_render_actor;
+	if (!selected && !current) return false;
+	wlr_log(WLR_INFO, "SD_CI_CHROME_POPUP_DENIED "
+		"selected_native_actor=%d current_cgroup=%d pid=%ld "
+		"global_popup_tree=BLOCKED authority=NONE result=PASS",
+		selected ? 1 : 0, current ? 1 : 0, (long)peer);
+	return true;
+}
+
 /* Applied once at XDG view_map, before the first container arrange.
  * Verify the source via kernel wl_client credentials and the exact private
  * CI service cgroup; never by app_id/title, request source ID, or IPC.
