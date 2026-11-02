@@ -54,13 +54,14 @@ jobs:
                             '"--privileged"', '"--network=host"',
                             "system(", "shell=True"):
               assert forbidden not in source, forbidden
-          # Only two direct Popen calls are permitted: unrelated FOOT
-          # border control and unrelated native XDG popup visual control.
+          # Only three direct Popen calls are permitted: unrelated FOOT,
+          # unrelated native XDG popup, and disposable real subsurface input control.
           # The actual Chrome executable and the same-cgroup popup witness
           # remain inside the exact network-isolated systemd service.
-          assert source.count("subprocess.Popen(") == 2
+          assert source.count("subprocess.Popen(") == 3
           assert 'actor = subprocess.Popen(' in source
           assert 'control = subprocess.Popen(' in source
+          assert 'child = subprocess.Popen([exe, "run"]' in source
           assert 'STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS' in source
           assert '"/usr/bin/bash",' in source
           assert '"--property=PrivateNetwork=yes"' in source
