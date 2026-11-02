@@ -426,6 +426,70 @@ def main() -> None:
                 print(multiple_report, flush=True)
                 if "SD_CI_CHROME_MULTI_MASK_PIXELS: result=PASS" not in multiple_report:
                     raise RuntimeError("FAIL_MULTI_MASK_SCREENSHOT_MARKER_MISSING")
+                if e.get("STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT") == "1":
+                    # The exact browser systemd service is disposable and
+                    # network-isolated, created by this harness, not a user's
+                    # Chrome process. Kill its whole cgroup *without* asking
+                    # Chrome to close gracefully. The compositor must unmap
+                    # the native XDG surface and release its CI scene state.
+                    marker_start = len((runtime / "sway.log").read_text(
+                        encoding="utf-8", errors="replace"))
+                    call("sudo", "-n", "systemctl", "kill",
+                         "--signal=SIGKILL", "--kill-whom=all", unit,
+                         timeout=20)
+                    print("SD_CI_CHROME_ABRUPT_SIGNAL: "
+                          "exact_test_service=1 signal=SIGKILL "
+                          "control_group=all source=CI_only", flush=True)
+                    clean_tree = None
+                    for _ in range(100):
+                        clean_tree = json.loads(call(
+                            swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                        still_mapped = any(
+                            n.get("pid") == client_pid
+                            for n in containers(clean_tree))
+                        still_alive = any(
+                            proc_start(p) == start
+                            for p, start in snapshot.items())
+                        still_in_group = bool(members(root))
+                        new_log = (runtime / "sway.log").read_text(
+                            encoding="utf-8", errors="replace")[marker_start:]
+                        restored = (
+                            "SD_CI_RENDER_PIXEL clip_restored_on_unmap=1"
+                            in new_log)
+                        if (not still_mapped and not still_alive and
+                                not still_in_group and restored):
+                            break
+                        time.sleep(0.1)
+                    else:
+                        raise RuntimeError(
+                            "FAIL_CHROME_ABORT_DID_NOT_REVOKE_SCENE "
+                            f"still_mapped={still_mapped} "
+                            f"still_alive={still_alive} "
+                            f"still_in_group={still_in_group} "
+                            f"restore_marker={restored} "
+                            + new_log[-3200:])
+                    # Screenshot is taken only AFTER the kernel-side SIGKILL,
+                    # the exact native Wayland unmap, and compositor restore.
+                    # Do not confuse process death with clearing stale pixels.
+                    time.sleep(0.35)
+                    after_kill_ppm = temp / "sd-chrome-abrupt-exit.ppm"
+                    after_kill_png = temp / "sd-chrome-abrupt-exit.png"
+                    after_kill_tree = temp / "sd-chrome-abrupt-exit-tree.json"
+                    call(grim, "-t", "ppm", str(after_kill_ppm), timeout=25)
+                    call(grim, "-t", "png", str(after_kill_png), timeout=25)
+                    after_kill_tree.write_text(
+                        json.dumps(clean_tree), encoding="utf-8")
+                    abort_report = call(
+                        sys.executable,
+                        "tests/stage_director/assert_real_chrome_abrupt_exit_pixels.py",
+                        str(temp / "sd-chrome-before.ppm"), str(third),
+                        str(after_kill_ppm), str(third_tree_path),
+                        str(after_kill_tree), str(client_pid), timeout=30)
+                    print(abort_report, flush=True)
+                    if ("SD_CI_CHROME_ABRUPT_EXIT_PIXELS: result=PASS"
+                            not in abort_report):
+                        raise RuntimeError(
+                            "FAIL_CHROME_ABORT_PIXEL_PROOF_MISSING")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]
