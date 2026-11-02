@@ -43,5 +43,7 @@ struct stage_director_weather_host_result stage_director_weather_host_probe(
 	}
 	result.status = SD_WEATHER_HOST_CANDIDATE_ONLY;
 	result.candidate_observed = true;
+	result.host = observation->host;
+	result.output = observation->output;
 	return result;
 }
