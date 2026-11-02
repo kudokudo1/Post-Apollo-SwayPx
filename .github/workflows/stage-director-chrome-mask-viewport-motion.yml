@@ -16,6 +16,8 @@ on:
       - 'tests/stage_director/assert_real_chrome_mask_shift_pixels.py'
       - 'tests/stage_director/assert_real_chrome_multi_mask_pixels.py'
       - 'tests/stage_director/assert_real_chrome_abrupt_exit_pixels.py'
+      - 'tests/stage_director/assert_real_chrome_pending_exit_pixels.py'
+      - 'docs/stage-director-chrome-pending-exit-20261102.md'
       - '.github/workflows/stage-director-chrome-mask-viewport-motion.yml'
       - 'docs/stage-director-chrome-mask-viewport-motion-20261102.md'
   workflow_dispatch:
@@ -42,6 +44,7 @@ jobs:
           mask=Path("tests/stage_director/assert_real_chrome_mask_shift_pixels.py").read_text()
           multiple=Path("tests/stage_director/assert_real_chrome_multi_mask_pixels.py").read_text()
           abrupt=Path("tests/stage_director/assert_real_chrome_abrupt_exit_pixels.py").read_text()
+          pending=Path("tests/stage_director/assert_real_chrome_pending_exit_pixels.py").read_text()
           test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" in mask
           assert "FAIL_NATIVE_CHROME_WINDOW_MOVED_OR_REPLACED" in mask
@@ -73,12 +76,21 @@ jobs:
           assert 'sd-chrome-abrupt-exit.ppm' in test
           assert 'sd-chrome-mask-third.ppm' in test
           assert 'b"PHASE3\\n"' in test
+          assert 'SD_CI_CHROME_MASK_PENDING_HELD' in p
+          assert 'SD_CI_CHROME_MASK_PENDING_REVOKED' in p
+          assert 'memcmp(bytes, "PENDING\\n", 8) != 0' in p
+          assert 'SD_CI_CHROME_PENDING_REQUEST_ABORT: result=PASS' in test
+          assert 'b"PENDING\\n"' in test
+          assert 'STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT' in test
+          assert 'FAIL_PENDING_STALE_CHROME_PIXELS_AFTER_SIGKILL' in pending
+          assert 'SD_CI_CHROME_PENDING_EXIT_PIXELS: result=PASS' in pending
           assert "STAGE_DIRECTOR_CI_BROWSER_MASK" in test
           assert 'os.O_CREAT | os.O_EXCL | os.O_WRONLY' in test
           assert 'sd-chrome-mask-shift.ppm' in test
           ast.parse(mask)
           ast.parse(multiple)
           ast.parse(abrupt)
+          ast.parse(pending)
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
           runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "default_border normal" in runtime
@@ -138,6 +150,10 @@ jobs:
   real-chrome-four-edge-pixels:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        exit_mode: [after-third-mask, pending-before-move]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -174,7 +190,11 @@ jobs:
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_BROWSER_MASK=1" >> "$GITHUB_ENV"
-          echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
+          if [[ "${{ matrix.exit_mode }}" == "pending-before-move" ]]; then
+            echo "STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT=1" >> "$GITHUB_ENV"
+          else
+            echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
+          fi
           echo "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
@@ -199,7 +219,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sd-ci-chrome-mask-viewport-motion-evidence
+          name: sd-ci-chrome-${{ matrix.exit_mode }}-evidence
           if-no-files-found: warn
           retention-days: 7
           path: |
@@ -216,11 +236,16 @@ jobs:
             ${{ runner.temp }}/sd-chrome-abrupt-exit.ppm
             ${{ runner.temp }}/sd-chrome-abrupt-exit.png
             ${{ runner.temp }}/sd-chrome-abrupt-exit-tree.json
+            ${{ runner.temp }}/sd-chrome-pending-held.ppm
+            ${{ runner.temp }}/sd-chrome-pending-held-tree.json
+            ${{ runner.temp }}/sd-chrome-pending-after-kill.ppm
+            ${{ runner.temp }}/sd-chrome-pending-after-kill.png
+            ${{ runner.temp }}/sd-chrome-pending-after-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
         run: |
           echo "Real Chrome stays at the same XDG ID/rectangle while isolated SceneFX mask advances 320x240 -> 400x300 -> 280x220, with a screenshot after every step." >> "$GITHUB_STEP_SUMMARY"
-          echo "After real Chrome has displayed the third mask, the CI-only exact browser service is SIGKILLed and native unmap plus pixel clearance are required." >> "$GITHUB_STEP_SUMMARY"
+          echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
