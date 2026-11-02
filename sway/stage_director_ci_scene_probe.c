@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include "sway/server.h"
 #include <string.h>
 #include <sys/types.h>
 #include <wayland-server-core.h>
@@ -27,6 +30,11 @@
 static struct sway_view *ci_render_actor;
 static struct wlr_box ci_render_clip;
 static struct wlr_box ci_render_geometry;
+/* The timer and request file are available exclusively in the independently
+ * compiled CI scene-probe binary, not the installed production compositor. */
+static struct wl_event_source *ci_mask_request_timer;
+static bool ci_mask_request_applied;
+
 
 /*
  * Diagnostic: wlroots' subsurface clip narrows the SOURCE rectangle, while
@@ -109,8 +117,10 @@ bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer
 	struct ci_dest_candidate probe = initial;
 	wlr_scene_node_for_each_buffer(&ci_render_actor->content_tree->node,
 		ci_match_render_dest, &probe);
-	if (!probe.found || ci_render_clip.width != 320 ||
-			ci_render_clip.height != 240) {
+	if (!probe.found ||
+			!((ci_render_clip.width == 320 && ci_render_clip.height == 240) ||
+				(ci_mask_request_applied && ci_render_clip.width == 400 &&
+				 ci_render_clip.height == 300))) {
 		return false;
 	}
 	wlr_scene_buffer_set_dest_size(buffer,
@@ -126,6 +136,11 @@ bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer
 
 void stage_director_ci_scene_probe_restore(struct sway_view *view) {
 	if (!view || ci_render_actor != view) return;
+	if (ci_mask_request_timer) {
+		wl_event_source_remove(ci_mask_request_timer);
+		ci_mask_request_timer = NULL;
+	}
+	ci_mask_request_applied = false;
 	ci_render_actor = NULL;
 	if (view->surface && view->content_tree && view->container &&
 			!view->container->node.destroying) {
@@ -415,6 +430,108 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
 	return true;
 }
 
+
+/*
+ * CI-only "host mask" transaction. A disposable runner agent creates a
+ * 0600, exact-name PHASE2 request after its first *actual screenshot*. The
+ * compositor polls on its own Wayland thread. It NEVER moves/resizes the
+ * Chrome XDG container or takes keyboard/pointer/focus authority.
+ */
+static int ci_browser_mask_request(void *data) {
+	struct sway_view *view = data;
+	if (!view || view != ci_render_actor || !view->surface ||
+			!view->content_tree || !view->container ||
+			view->container->node.destroying) {
+		ci_mask_request_timer = NULL;
+		return 0;
+	}
+	const char *runner = getenv("RUNNER_TEMP");
+	const char *run = getenv("GITHUB_RUN_ID");
+	const char *attempt = getenv("GITHUB_RUN_ATTEMPT");
+	const char *enabled = getenv("STAGE_DIRECTOR_CI_BROWSER_MASK");
+	pid_t peer = -1;
+	if (!enabled || strcmp(enabled, "1") != 0 ||
+			!runner || strcmp(runner, "/home/runner/work/_temp") != 0 ||
+			!ci_digits(run) || strlen(run) > 22 ||
+			(attempt && (!ci_digits(attempt) || strlen(attempt) > 8)) ||
+			!ci_real_chrome_process(view, &peer) ||
+			view->geometry.x != ci_render_geometry.x ||
+			view->geometry.y != ci_render_geometry.y ||
+			view->geometry.width != ci_render_geometry.width ||
+			view->geometry.height != ci_render_geometry.height) {
+		/* Fail closed: missing source ownership or unexpected window motion.
+		 * Restore the ordinary scene rather than retaining stale custody. */
+		stage_director_ci_scene_probe_restore(view);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_MASK_SOURCE_LOST result=FAIL");
+		return 0;
+	}
+	char request[320];
+	int length = snprintf(request, sizeof(request),
+		"%s/sd-chrome-mask-%s-%s.request",
+		runner, run, attempt ? attempt : "1");
+	if (length <= 0 || length >= (int)sizeof(request)) {
+		stage_director_ci_scene_probe_restore(view);
+		return 0;
+	}
+	int fd = open(request, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+	if (fd < 0) {
+		if (ci_mask_request_timer) {
+			wl_event_source_timer_update(ci_mask_request_timer, 100);
+		}
+		return 0;
+	}
+	struct stat st = {0};
+	char bytes[16] = {0};
+	ssize_t n = read(fd, bytes, sizeof(bytes));
+	bool safe = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) &&
+		st.st_uid == getuid() && st.st_nlink == 1 &&
+		(st.st_mode & 077) == 0 &&
+		n == 7 && memcmp(bytes, "PHASE2\n", 7) == 0;
+	close(fd);
+	if (!safe || ci_mask_request_applied || ci_render_clip.width != 320 ||
+			ci_render_clip.height != 240) {
+		stage_director_ci_scene_probe_restore(view);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_MASK_REQUEST_INVALID result=FAIL");
+		return 0;
+	}
+	/* Fixed, bounded CI host viewport. Same Chrome native XDG window,
+	 * same Linux cgroup; only the visible region is repositioned. */
+	const struct wlr_box phase2 = {
+		.x = view->geometry.x + 520,
+		.y = view->geometry.y + 240,
+		.width = 400,
+		.height = 300,
+	};
+	if (view->geometry.width < 1300 || view->geometry.height < 700 ||
+			phase2.x < view->geometry.x ||
+			phase2.y < view->geometry.y ||
+			phase2.x + phase2.width >
+				view->geometry.x + view->geometry.width ||
+			phase2.y + phase2.height >
+				view->geometry.y + view->geometry.height) {
+		stage_director_ci_scene_probe_restore(view);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_MASK_OUT_OF_BOUNDS result=FAIL");
+		return 0;
+	}
+	ci_render_clip = phase2;
+	ci_mask_request_applied = true;
+	wlr_scene_subsurface_tree_set_clip(
+		&view->content_tree->node, &ci_render_clip);
+	wlr_scene_node_for_each_buffer(&view->content_tree->node,
+		ci_normalize_root_buffer, NULL);
+	wlr_log(WLR_INFO, "SD_CI_CHROME_MASK_REBIND "
+		"same_native_actor=1 cgroup=1 pid=%ld "
+		"source_unchanged=1 window_geometry_unchanged=1 "
+		"clip=520,240 400x300 authority=NONE result=PASS",
+		(long)peer);
+	/* A one-shot request. This source was created only for this browser. */
+	if (ci_mask_request_timer) {
+		wl_event_source_remove(ci_mask_request_timer);
+		ci_mask_request_timer = NULL;
+	}
+	return 0;
+}
+
 static bool ci_real_chrome_pixel_probe(struct sway_view *view) {
 	static bool selected;
 	if (selected || ci_render_actor || !view || !view->content_tree ||
@@ -462,6 +579,21 @@ static bool ci_real_chrome_pixel_probe(struct sway_view *view) {
 	ci_render_actor = view;
 	ci_render_clip = crop;
 	ci_render_geometry = view->geometry;
+	const char *mask_mode = getenv("STAGE_DIRECTOR_CI_BROWSER_MASK");
+	if (mask_mode && strcmp(mask_mode, "1") == 0) {
+		ci_mask_request_applied = false;
+		if (!server.wl_event_loop || ci_mask_request_timer) {
+			stage_director_ci_scene_probe_restore(view);
+			return false;
+		}
+		ci_mask_request_timer = wl_event_loop_add_timer(
+			server.wl_event_loop, ci_browser_mask_request, view);
+		if (!ci_mask_request_timer ||
+				wl_event_source_timer_update(ci_mask_request_timer, 100) < 0) {
+			stage_director_ci_scene_probe_restore(view);
+			return false;
+		}
+	}
 	wlr_log(WLR_INFO, "SD_CI_CHROME_PIXEL_SCENE "
 		"native=1 cgroup=1 pid=%ld starttime_checked=1 "
 		"hit_test_crop=PASS viewport=320x240 "

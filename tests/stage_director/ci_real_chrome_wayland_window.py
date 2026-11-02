@@ -318,6 +318,63 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if e.get("STAGE_DIRECTOR_CI_BROWSER_MASK") == "1":
+                # CI host request (not Sway IPC, not Chrome external window
+                # movement). The compositor only accepts this exact one-time
+                # 0600 request from the disposable runner and revalidates
+                # its native Chrome wl_client and Linux cgroup independently.
+                request = temp / (
+                    "sd-chrome-mask-" + e["GITHUB_RUN_ID"] + "-" +
+                    e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
+                fd = os.open(request,
+                             os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                             getattr(os, "O_NOFOLLOW", 0), 0o600)
+                try:
+                    os.write(fd, b"PHASE2\n")
+                finally:
+                    os.close(fd)
+                evidence = False
+                try:
+                    for _ in range(100):
+                        lines = (runtime / "sway.log").read_text(
+                            encoding="utf-8", errors="replace")
+                        if ("SD_CI_CHROME_MASK_REBIND" in lines and
+                                "clip=520,240 400x300" in lines):
+                            evidence = True
+                            break
+                        if ("SD_CI_CHROME_MASK_SOURCE_LOST" in lines or
+                                "SD_CI_CHROME_MASK_REQUEST_INVALID" in lines):
+                            break
+                        time.sleep(0.1)
+                finally:
+                    request.unlink(missing_ok=True)
+                if not evidence:
+                    raise RuntimeError(
+                        "FAIL_MASK_SCENE_REQUEST_NOT_ACCEPTED " + lines[-4500:])
+                if proc_start(client_pid) != snapshot[client_pid] or (
+                        client_pid not in members(root)):
+                    raise RuntimeError("FAIL_BROWSER_PROCESS_IDENTITY_CHANGED")
+                # A second screenshot in the SAME compositor must show the
+                # new larger mask, old location black, and no outside pixels.
+                time.sleep(0.35)
+                second = temp / "sd-chrome-mask-shift.ppm"
+                call(grim, "-t", "ppm", str(second), timeout=25)
+                call(grim, "-t", "png",
+                     str(temp / "sd-chrome-mask-shift.png"), timeout=25)
+                shifted_tree = json.loads(call(
+                    swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                shifted_tree_file = temp / "sd-chrome-mask-shift-tree.json"
+                shifted_tree_file.write_text(
+                    json.dumps(shifted_tree), encoding="utf-8")
+                mask_report = call(
+                    sys.executable,
+                    "tests/stage_director/assert_real_chrome_mask_shift_pixels.py",
+                    str(temp / "sd-chrome-before.ppm"), str(crop_ppm),
+                    str(second), str(tree_path), str(shifted_tree_file),
+                    str(client_pid), timeout=30)
+                print(mask_report, flush=True)
+                if "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" not in mask_report:
+                    raise RuntimeError("FAIL_MASK_SCREENSHOT_MARKER_MISSING")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]
