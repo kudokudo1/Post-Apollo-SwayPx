@@ -70,7 +70,8 @@ jobs:
           assert xdg.count('wlr_xdg_popup_destroy(wlr_popup);') == 2
           assert xdg.count('#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE') >= 3
           assert 'stage_director_ci_scene_probe_reject_chrome_popup(' in native_header
-          assert 'view != ci_render_actor' in p
+          assert 'const bool selected = view == ci_render_actor;' in p
+          assert 'if (!selected && !current) return false;' in p
           assert 'SD_CI_CHROME_POPUP_DENIED' in p
           assert 'global_popup_tree=BLOCKED authority=NONE' in p
           assert 'return true;' in p
