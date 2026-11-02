@@ -464,6 +464,36 @@ bool stage_director_ci_scene_probe_is_chrome_sibling(struct sway_view *view) {
 	return ci_real_chrome_process(view, &peer);
 }
 
+/* Seat focus is independent of scene visibility in Sway. A disabled
+ * sibling scene must not allow an IPC focus command, automatic map focus,
+ * or a direct root-surface seat request to activate the native actor. */
+bool stage_director_ci_scene_probe_reject_chrome_focus(
+		struct sway_view *view) {
+	if (!view || !stage_director_ci_scene_probe_is_chrome_sibling(view)) {
+		return false;
+	}
+	wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_FOCUS_DENIED "
+		"native_cgroup=1 source=seat_container "
+		"focus_state_unchanged=1 authority=NONE result=PASS");
+	return true;
+}
+
+bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
+		struct wlr_surface *surface) {
+	if (!surface) return false;
+	for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
+		struct sway_view *sibling = ci_sibling_actors[i];
+		if (!sibling || !sibling->container ||
+				sibling->container->node.destroying ||
+				sibling->surface != surface) continue;
+		wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_FOCUS_DENIED "
+			"slot=%zu source=seat_direct_root_surface "
+			"focus_state_unchanged=1 authority=NONE result=PASS", i);
+		return true;
+	}
+	return false;
+}
+
 void stage_director_ci_scene_probe_quarantine_chrome_sibling(
 		struct sway_view *view) {
 	if (!stage_director_ci_scene_probe_is_chrome_sibling(view) ||

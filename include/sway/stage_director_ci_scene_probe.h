@@ -2,6 +2,7 @@
 #define _SWAY_STAGE_DIRECTOR_CI_SCENE_PROBE_H
 #include <stdbool.h>
 struct sway_view;
+struct wlr_surface;
 struct wlr_scene_buffer;
 /* Available only to an explicitly test-enabled compositor binary. */
 /* CI-only: override *one verified actor* to a borderless Sway container,
@@ -24,6 +25,14 @@ bool stage_director_ci_scene_probe_is_chrome_sibling(
  * separate output/decoration paint before renderer presentation. */
 void stage_director_ci_scene_probe_quarantine_chrome_sibling(
 	struct sway_view *view);
+/* CI-only seat gate: reject a kernel/cgroup-verified hidden native Chrome
+ * sibling BEFORE keyboard/activation/focus stack changes. */
+bool stage_director_ci_scene_probe_reject_chrome_focus(
+	struct sway_view *view);
+/* CI-only direct-surface gate for tracked native sibling root surfaces.
+ * Nested surface focus is separately unverified. */
+bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
+	struct wlr_surface *surface);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);

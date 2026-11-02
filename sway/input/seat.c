@@ -33,6 +33,9 @@
 #include "sway/tree/container.h"
 #include "sway/tree/root.h"
 #include "sway/tree/view.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/tree/workspace.h"
 
 static void seat_device_destroy(struct sway_seat_device *seat_device) {
@@ -1128,6 +1131,15 @@ void seat_set_raw_focus(struct sway_seat *seat, struct sway_node *node) {
 }
 
 static void seat_set_workspace_focus(struct sway_seat *seat, struct sway_node *node) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* Must run before unfocus, focus stack mutation or keyboard enter.
+	 * This also blocks IPC criteria [con_id=...] focus, not only
+	 * initial application map activation. No production linkage. */
+	if (node && node->type == N_CONTAINER &&
+			node->sway_container && node->sway_container->view &&
+			stage_director_ci_scene_probe_reject_chrome_focus(
+				node->sway_container->view)) return;
+#endif
 	struct sway_node *last_focus = seat_get_focus(seat);
 	if (last_focus == node) {
 		return;
@@ -1282,6 +1294,13 @@ void seat_set_focus_workspace(struct sway_seat *seat,
 
 void seat_set_focus_surface(struct sway_seat *seat,
 		struct wlr_surface *surface, bool unfocus) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* Independent direct-root-surface entry, still before prior unfocus.
+	 * Subsurfaces need a separate parent-chain ownership test. */
+	if (stage_director_ci_scene_probe_reject_chrome_surface_focus(surface)) {
+		return;
+	}
+#endif
 	if (seat->has_focus && unfocus) {
 		struct sway_node *focus = seat_get_focus(seat);
 		seat_send_unfocus(focus, seat);
