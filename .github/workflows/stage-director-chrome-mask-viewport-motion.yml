@@ -175,6 +175,7 @@ jobs:
           assert 'FAIL_NATIVE_KEY_DELIVERY_TARGET' in test
           assert 'FAIL_NATIVE_POINTER_VISIBLE_POSITIVE' in test
           assert 'FAIL_NATIVE_POINTER_REACHED_HIDDEN_SIBLING' in test
+          virt_src=Path('tests/stage_director/ci_virtual_input_event.c').read_text()
           assert 'SD_CI_CHROME_BUTTON_GRAB: result=PASS' in test
           assert 'FAIL_NATIVE_BUTTON_GRAB_REACHED_HIDDEN_SIBLING' in test
           assert 'FAIL_NATIVE_BUTTON_VISIBLE_POSITIVE' in test
@@ -187,7 +188,7 @@ jobs:
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in native_header
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/keyboard.c').read_text()
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/seatop_default.c').read_text()
-          virt_src=Path('tests/stage_director/ci_virtual_input_event.c').read_text()
+
           virt_nix=Path('tests/stage_director/ci_virtual_input_event.nix').read_text()
           assert 'zwp_virtual_keyboard_v1_key(' in virt_src
           assert 'zwlr_virtual_pointer_v1_motion_absolute(' in virt_src
