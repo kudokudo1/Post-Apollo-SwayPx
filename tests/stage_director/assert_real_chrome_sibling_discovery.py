@@ -50,7 +50,8 @@ def main():
         result = []
         def walk(node):
             if isinstance(node, dict):
-                if node.get("type") == "con" and node.get("shell") == "xdg_shell":
+                if (node.get("type") in ("con", "floating_con") and
+                        node.get("shell") == "xdg_shell"):
                     result.append(node)
                 for key in ("nodes", "floating_nodes"):
                     for sub in node.get(key, []):
