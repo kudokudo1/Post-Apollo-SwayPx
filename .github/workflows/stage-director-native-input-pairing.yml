@@ -1,0 +1,60 @@
+name: Stage Director native Weather selection (disabled default)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/ci-real-watch-request-v0-20261031
+    paths:
+      - 'include/sway/stage_director.h'
+      - 'include/sway/stage_director_news_pairing.h'
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_news_pairing.c'
+      - 'sway/input/keyboard.c'
+      - 'sway/input/cursor.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_native_pairing_source_boundary.py'
+      - '.github/workflows/stage-director-native-input-pairing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pairing-source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pairing input gates and no client or IPC entry
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_native_pairing_source_boundary.py
+      - name: Preserve evidence scope
+        run: |
+          echo "Source boundary only: cannot prove hardware presence against unrestricted uinput or ptrace." >> "$GITHUB_STEP_SUMMARY"
+          echo "Feature disabled by default; no WATCH global, viewer launch or seat/scene authority." >> "$GITHUB_STEP_SUMMARY"
+
+  full-swaypx-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Nix on disposable CI runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary SwayPX with native pairing and no production activation
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$result/bin/sway"
+          echo "Ordinary SwayPX native selection binary linked: $result"
+          echo "Not installed, not launched; pairing defaults to disabled."

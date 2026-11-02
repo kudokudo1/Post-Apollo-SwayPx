@@ -1,0 +1,118 @@
+name: Stage Director real Chrome native Wayland actor (CI only)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/ci-real-chromium-cgroup-20261031
+    paths:
+      - 'tests/stage_director/ci_real_chrome_wayland_window.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-real-chrome-wayland-actor.yml'
+      - 'docs/stage-director-real-chrome-wayland-actor-20261031.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actor-source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove exact cgroup + native compositor observation, no authorization
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import ast
+          source=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
+          ast.parse(source)
+          harness=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          for line in (
+              'e.get("GITHUB_ACTIONS") != "true"',
+              'not str(runtime).startswith(str(temp) + "/")',
+              '"--property=PrivateNetwork=yes"',
+              '"--property=ProtectSystem=strict"',
+              '"--property=ProtectHome=read-only"',
+              '"--property=NoNewPrivileges=yes"',
+              '"--property=KillMode=control-group"',
+              '"--ozone-platform=wayland"',
+              '"--app=about:blank"',
+              'node.get("shell") == "xdg_shell"',
+              'pid in pids and proc_start(pid) == snapshot.get(pid)',
+              'SD_CI_REAL_CHROME_WAYLAND_WINDOW:',
+              'SD_CI_REAL_CHROME_WAYLAND_TEARDOWN:',
+              'private_profile_gone=1',
+          ):
+              assert line in source, line
+          assert "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND" in harness
+          for forbidden in ('"--no-sandbox"', '"--disable-setuid-sandbox"',
+                            '"--privileged"', '"--network=host"',
+                            "system(", "shell=True"):
+              assert forbidden not in source, forbidden
+          # The sole Popen is a disposable FOOT titlebar control. It is
+          # never the Chrome launcher; Chrome remains a restricted systemd
+          # service, with no process-sandbox bypass.
+          assert source.count("subprocess.Popen(") == 1
+          assert 'actor = subprocess.Popen(' in source
+          assert 'def verify_unrelated_titlebar(' in source
+          assert 'STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT' in source
+          for path in ("sway/stage_director.c",
+                       "sway/stage_director_weather_watch_protocol.c",
+                       "sway/stage_director_news_supervisor.c"):
+              assert "ci_real_chrome_wayland_window" not in Path(path).read_text()
+          print("SD_REAL_CHROME_WAYLAND_SOURCE: exact service cgroup "
+                "plus native XDG, Chrome-only fixture, no WATCH/scene authority PASS")
+          PY
+
+  real-chrome-on-isolated-wayland:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Check headless runner has real Chrome + systemd and no local desktop
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = true
+          test -r /sys/fs/cgroup/cgroup.controllers
+          test -x /opt/google/chrome/chrome
+          test -d /run/systemd/system
+          /opt/google/chrome/chrome --version
+      - name: Build actual production SwayPX (NO CI selector hook)
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          test -x "$prod/bin/swaymsg"
+          if grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$prod/bin/sway"; then
+            echo "FAIL: automated Weather selection hook linked into production" >&2
+            exit 1
+          fi
+          echo "CI_COMPOSITOR=$prod" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$prod/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Start disposable real headless SwayPX and verify Chrome maps native XDG
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Declare limits
+        if: always()
+        run: |
+          echo "Actual installed Chrome on GitHub Ubuntu, fixed about:blank, in a non-root systemd cgroup with private network, temporary profile and no explicit sandbox bypass." >> "$GITHUB_STEP_SUMMARY"
+          echo "The SwayPX compositor uses a separate private Wayland socket; a native mapped XDG client is cross-checked against systemd cgroup member PID+kernel starttime, not title or app_id." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production WATCH launch, browser seat/clip/focus/popup authority, Weather QML or operator desktop is changed; internal Chrome sandbox active status is not independently verified." >> "$GITHUB_STEP_SUMMARY"

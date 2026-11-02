@@ -1,0 +1,174 @@
+name: Stage Director viewport safety contracts
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/scene-registry-v1
+      - stage-director/weather-viewport-v1-preflight-20261024
+      - stage-director/weather-news-clip-backend-v1-20261024
+      - stage-director/weather-news-viewer-session-v0-20261024
+      - stage-director/weather-news-host-candidate-v0-20261025
+      - stage-director/weather-news-shadow-pairing-v0-20261026
+      - stage-director/weather-news-process-evidence-v0-20261026
+      - stage-director/weather-news-pidfd-custody-v0-20261026
+      - stage-director/weather-news-launch-plan-v0-20261026
+      - stage-director/news-supervised-helper-v0-20261026
+    paths:
+      - 'include/sway/stage_director*.h'
+      - 'sway/stage_director*.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/**'
+      - '.github/workflows/stage-director-viewport-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  viewport-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and execute standalone viewport policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            tests/stage_director/test_viewport.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Compile and execute guarded compositor clip policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            tests/stage_director/test_clip_policy.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Validate exact actor classification and shadow-only boundary
+        run: python3 tests/stage_director/test_observer_boundary.py
+      - name: Verify dormant compositor clip adapter authority
+        run: python3 tests/stage_director/test_clip_adapter_boundary.py
+      - name: Compile and test single NEWS viewer session lifecycle
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_viewer_session.c \
+            tests/stage_director/test_viewer_session.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Verify session implementation remains disconnected from SD0 and clip adapter
+        run: python3 tests/stage_director/test_viewer_session_boundary.py
+      - name: Compile and test Weather Station host candidate policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_weather_host.c \
+            tests/stage_director/test_weather_host.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Verify native layer observer does not activate a viewport
+        run: python3 tests/stage_director/test_weather_host_boundary.py
+      - name: Compile and test NEWS shadow scene candidate reconciliation
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_news_shadow.c \
+            tests/stage_director/test_news_shadow.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Assert active shadow hooks remain nonactuating
+        run: python3 tests/stage_director/test_news_shadow_boundary.py
+      - name: Test process lineage and restart evidence
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_evidence.c tests/stage_director/test_process_evidence.c -o /tmp/sd-process-test && /tmp/sd-process-test
+      - name: Test native Linux process metadata parser
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/stage_director_process_linux.c tests/stage_director/test_process_linux.c -o /tmp/sd-proc-linux-test && /tmp/sd-proc-linux-test
+      - name: Enforce nonactuating process evidence boundary
+        run: python3 tests/stage_director/test_process_evidence_boundary.py
+
+      - name: Test held Linux pidfd process identity and cleanup
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_news_custody.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/test_news_custody.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Verify pidfd custody never authorizes browser or scene
+        run: python3 tests/stage_director/test_news_custody_boundary.py
+
+      - name: Test fixed NEWS browser plan, source IDs and deny gates
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_news_launch_plan.c \
+            tests/stage_director/test_news_launch_plan.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Ensure no browser launch or compositor actuation from plan
+        run: python3 tests/stage_director/test_news_launch_boundary.py
+
+      - name: Build production supervisor without any spawn symbol
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -c \
+            sway/stage_director_news_supervisor.c -o "$output"
+          if nm -g "$output" | grep -q stage_director_news_supervisor_start_test_child; then
+            echo "FAIL: production supervisor exposes a test spawn function"
+            exit 1
+          fi
+          echo "Stage Director supervisor production spawn symbol absent: PASS"
+      - name: Run fixed harmless supervised child lifecycle
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -DSD_STAGE_DIRECTOR_TEST_HELPER -Iinclude \
+            sway/stage_director_news_supervisor.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/test_news_supervisor.c \
+            -o "$output"
+          "$output"
+      - name: Verify live NEWS hooks cannot invoke test helper
+        run: python3 tests/stage_director/test_news_supervisor_boundary.py
+
+      - name: Compile fractional pointer and popup boundary policy
+        run: |
+          set -euo pipefail
+          test_bin="$(mktemp)"
+          trap 'rm -f "$test_bin"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_news_containment.c \
+            tests/stage_director/test_news_containment.c \
+            -o "$test_bin"
+          "$test_bin"
+      - name: Enforce NEWS containment remains disconnected from live input dispatch
+        run: python3 tests/stage_director/test_news_containment_boundary.py

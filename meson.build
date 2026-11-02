@@ -29,6 +29,13 @@ add_project_arguments(
 	language: 'c',
 )
 
+if get_option('sd-ci-news-scene-probe')
+	add_project_arguments('-DSD_STAGE_DIRECTOR_CI_SCENE_PROBE=1', language: 'c')
+endif
+if get_option('sd-ci-real-weather-watch-layer')
+	add_project_arguments('-DSD_STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1', language: 'c')
+endif
+
 cc = meson.get_compiler('c')
 
 is_freebsd = host_machine.system().startswith('freebsd')

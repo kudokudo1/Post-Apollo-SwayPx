@@ -13,6 +13,7 @@ protocols = [
 	wl_protocol_dir / 'unstable/xdg-output/xdg-output-unstable-v1.xml',
 	'wlr-layer-shell-unstable-v1.xml',
 	'wlr-output-power-management-unstable-v1.xml',
+	'post-apollo-weather-watch-v1.xml',
 ]
 
 wl_protos_src = []
