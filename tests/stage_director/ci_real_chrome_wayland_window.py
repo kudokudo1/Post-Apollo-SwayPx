@@ -517,7 +517,19 @@ def main() -> None:
                  "/usr/bin/bash",
                  str(Path("tests/stage_director/ci_chrome_popup_service.sh").resolve()),
                  popup_exe, str(popup_request),
-             ] if popup_mode else []),
+             ] if popup_mode else [
+                 "--setenv=CI=true",
+                 "--setenv=GITHUB_ACTIONS=true",
+                 "--setenv=GITHUB_RUN_ID=" + e["GITHUB_RUN_ID"],
+                 "--setenv=GITHUB_RUN_ATTEMPT=" +
+                     e.get("GITHUB_RUN_ATTEMPT", "1"),
+                 "--setenv=RUNNER_TEMP=" + str(temp),
+                 "--setenv=STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1",
+                 "/usr/bin/bash",
+                 str(Path("tests/stage_director/ci_chrome_sibling_service.sh")
+                     .resolve()),
+                 str(sibling_request),
+             ] if sibling_mode else []),
              "/opt/google/chrome/chrome",
              "--ozone-platform=wayland",
              "--disable-gpu",
