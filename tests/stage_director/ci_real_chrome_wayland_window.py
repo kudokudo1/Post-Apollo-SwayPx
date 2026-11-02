@@ -44,6 +44,52 @@ def members(root: Path) -> set[int]:
     return pids
 
 
+def service_task_pressure(root):
+    """Read the kernel cgroup task count and cap, never infer from process count."""
+    stats = {}
+    for key in ("pids.current", "pids.max", "pids.events"):
+        try:
+            stats[key] = (root / key).read_text().strip()
+        except OSError:
+            stats[key] = "UNAVAILABLE"
+    return stats
+
+
+def assert_chrome_main_rect_stable(e, temp, swaymsg, ipc, root,
+                                   actor, snapshot):
+    """Bounded post-startup stabilization before touching the scene mask.
+
+    Exact XDG/PID/rect remains required; never silently reselect a window.
+    """
+    initial_id, initial_pid = actor["id"], actor["pid"]
+    initial_rect = actor.get("rect")
+    initial_start = snapshot[initial_pid]
+    for sample in range(16):
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        matches = [n for n in containers(tree)
+                   if n.get("id") == initial_id and
+                   n.get("pid") == initial_pid]
+        if (len(matches) != 1 or initial_pid not in members(root) or
+                proc_start(initial_pid) != initial_start):
+            raise RuntimeError(
+                "FAIL_CHROME_ACTOR_DISAPPEARED_WHILE_SETTLING "
+                "tasks=" + json.dumps(service_task_pressure(root)))
+        current_rect = matches[0].get("rect")
+        if current_rect != initial_rect:
+            (temp / "sd-ci-chrome-geometry-changed-tree.json").write_text(
+                json.dumps(tree), encoding="utf-8")
+            raise RuntimeError(
+                "FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK "
+                f"sample={sample} initial={initial_rect} "
+                f"current={current_rect} "
+                "tasks=" + json.dumps(service_task_pressure(root)))
+        time.sleep(0.15)
+    print("SD_CI_CHROME_NATIVE_RECT_SETTLED "
+          f"native_id={initial_id} pid={initial_pid} "
+          "samples=16 same_geometry=1 same_starttime=1 "
+          "authority=NONE result=PASS", flush=True)
+
+
 def containers(node):
     if isinstance(node, dict):
         if node.get("pid") and node.get("type") == "con":
@@ -549,7 +595,7 @@ def main() -> None:
              "--property=NoNewPrivileges=yes",
              "--property=IPAddressDeny=any",
              "--property=MemoryMax=1536M",
-             "--property=TasksMax=128",
+             "--property=TasksMax=256",
              "--property=KillMode=control-group",
              "--property=SendSIGKILL=yes",
              "--property=TimeoutStopSec=3s",
@@ -602,6 +648,8 @@ def main() -> None:
         root = Path("/sys/fs/cgroup" + relative)
         if not (root / "cgroup.procs").is_file():
             raise RuntimeError("BLOCKED_CGROUP_NOT_VISIBLE")
+        print("SD_CI_CHROME_SERVICE_TASK_PRESSURE at=start "
+              + json.dumps(service_task_pressure(root)), flush=True)
 
         actor = None
         count = 0
@@ -728,6 +776,11 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            # Chrome can asynchronously alter its initial native geometry
+            # after the first screenshot. Require a later stable rectangle
+            # before sending PHASE2 or a second-window request. No relaxation.
+            assert_chrome_main_rect_stable(
+                e, temp, swaymsg, ipc, root, actor, snapshot)
             if sibling_mode:
                 discover_chrome_second_toplevel(
                     e, temp, swaymsg, ipc, grim, unit, root, snapshot,
@@ -931,6 +984,9 @@ def main() -> None:
               "native_xdg_unmapped=1 cgroup_members=0 private_profile_gone=1 "
               "watch=OFF scene_clip=OFF input=OFF PASS", flush=True)
     finally:
+        if started and root and root.exists():
+            print("SD_CI_CHROME_SERVICE_TASK_PRESSURE at=cleanup "
+                  + json.dumps(service_task_pressure(root)), flush=True)
         if started:
             call("sudo", "-n", "systemctl", "stop", unit, check=False)
             call("sudo", "-n", "systemctl", "reset-failed",
