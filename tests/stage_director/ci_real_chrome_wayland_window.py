@@ -54,6 +54,17 @@ def containers(node):
             yield from containers(sub)
 
 
+def native_xdg_toplevels(node):
+    """Include Sway's floating_con roots, not just tiled 'con' nodes."""
+    if isinstance(node, dict):
+        if (node.get("type") in ("con", "floating_con") and
+                node.get("shell") == "xdg_shell" and node.get("pid")):
+            yield node
+        for kind in ("nodes", "floating_nodes"):
+            for child in node.get(kind, []):
+                yield from native_xdg_toplevels(child)
+
+
 def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
     """One ordinary native Wayland control proves borders aren't disabled globally."""
     if not foot.startswith("/nix/store/") or not Path(foot).is_file():
@@ -347,10 +358,10 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
         for _ in range(120):
             tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
             active = members(root)
-            originals = [n for n in containers(tree)
+            originals = [n for n in native_xdg_toplevels(tree)
                          if n.get("id") == original_id and
                          n.get("pid") == original_pid]
-            siblings = [n for n in containers(tree)
+            siblings = [n for n in native_xdg_toplevels(tree)
                         if n.get("id") != original_id and
                         n.get("shell") == "xdg_shell" and
                         n.get("pid") in active and
@@ -385,7 +396,7 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
         after_tree = temp / "sd-ci-chrome-sibling-after-tree.json"
         tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
         active = members(root)
-        latest = [n for n in containers(tree)
+        latest = [n for n in native_xdg_toplevels(tree)
                   if n.get("shell") == "xdg_shell" and
                   n.get("id") != original_id and n.get("pid") in active]
         if not latest:
@@ -421,7 +432,7 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
             if (not members(root) and not profile.parent.exists() and
                     all(proc_start(pid) != st
                         for pid, st in snapshot.items()) and
-                    not any(n.get("id") in ids for n in containers(left))):
+                    not any(n.get("id") in ids for n in native_xdg_toplevels(left))):
                 break
             time.sleep(0.1)
         else:
