@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <linux/input-event-codes.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
