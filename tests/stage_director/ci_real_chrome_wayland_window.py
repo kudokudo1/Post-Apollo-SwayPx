@@ -371,6 +371,16 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                                journal[-2500:])
         for node in siblings:
             snapshot[node["pid"]] = proc_start(node["pid"])
+        containment_mode = (
+            e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT") == "1")
+        if containment_mode:
+            log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+                encoding="utf-8", errors="replace")
+            if ("SD_CI_CHROME_SIBLING_QUARANTINED" not in log or
+                    "whole_container_scene_disabled=1" not in log):
+                raise RuntimeError(
+                    "FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED "
+                    + log[-3600:])
         time.sleep(0.4)
         after_tree = temp / "sd-ci-chrome-sibling-after-tree.json"
         tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
@@ -389,10 +399,14 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
             sys.executable,
             "tests/stage_director/assert_real_chrome_sibling_discovery.py",
             str(crop_ppm), str(shot), str(before_tree),
-            str(after_tree), str(original_id), timeout=30)
+            str(after_tree), str(original_id),
+            *(["--require-contained"] if containment_mode else []),
+            timeout=30)
         print(measured, flush=True)
-        if ("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: result=OBSERVED"
-                not in measured):
+        expected = ("SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS"
+                    if containment_mode else
+                    "SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: result=OBSERVED")
+        if expected not in measured:
             raise RuntimeError("FAIL_CHROME_SIBLING_PIXEL_PROOF_MISSING")
         print("SD_CI_CHROME_SECOND_NATIVE_XDG_DISCOVERED "
               f"initial_native_id={original_id} second_count={len(latest)} "
