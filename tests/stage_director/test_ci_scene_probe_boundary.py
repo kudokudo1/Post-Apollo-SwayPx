@@ -27,8 +27,9 @@ assert 'strcmp(enabled, "1")' in probe
 assert 'strcmp(title, "SD1-CI-DISPOSABLE-NOT-BROWSER")' in probe
 assert "wlr_scene_subsurface_tree_set_clip(" in probe
 # The post-layout gate now samples both outside edges independently. Keep
-# the exact count locked so added hit tests need deliberate CI review.
-assert probe.count("wlr_scene_node_at(") == 8
+# 12 distinct scene hit-test probes include the verified native Chrome crop.
+# Keep the count locked so further probes need deliberate CI review.
+assert probe.count("wlr_scene_node_at(") == 12
 assert "outside_right = wlr_scene_node_at(" in probe
 assert "outside_bottom = wlr_scene_node_at(" in probe
 assert "outside_right ? 1 : 0, outside_bottom ? 1 : 0" in probe

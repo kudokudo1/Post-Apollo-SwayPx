@@ -52,8 +52,15 @@ jobs:
           assert "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND" in harness
           for forbidden in ('"--no-sandbox"', '"--disable-setuid-sandbox"',
                             '"--privileged"', '"--network=host"',
-                            "system(", "shell=True", "subprocess.Popen"):
+                            "system(", "shell=True"):
               assert forbidden not in source, forbidden
+          # The sole Popen is a disposable FOOT titlebar control. It is
+          # never the Chrome launcher; Chrome remains a restricted systemd
+          # service, with no process-sandbox bypass.
+          assert source.count("subprocess.Popen(") == 1
+          assert 'actor = subprocess.Popen(' in source
+          assert 'def verify_unrelated_titlebar(' in source
+          assert 'STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT' in source
           for path in ("sway/stage_director.c",
                        "sway/stage_director_weather_watch_protocol.c",
                        "sway/stage_director_news_supervisor.c"):
