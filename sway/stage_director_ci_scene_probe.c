@@ -501,7 +501,7 @@ static int ci_browser_mask_request(void *data) {
 	 * observes the compositor, then deletes it before creating PHASE3.
 	 * Holding PHASE2 must never cause a spurious replay or restoration. */
 	if (ci_mask_request_applied && !ci_mask_third_applied &&
-			memcmp(bytes, "PHASE2\\n", 7) == 0) {
+			memcmp(bytes, "PHASE2\n", 7) == 0) {
 		if (ci_mask_request_timer) {
 			wl_event_source_timer_update(ci_mask_request_timer, 100);
 		}
@@ -509,11 +509,11 @@ static int ci_browser_mask_request(void *data) {
 	}
 	const bool phase2 = !ci_mask_request_applied &&
 		!ci_mask_third_applied &&
-		memcmp(bytes, "PHASE2\\n", 7) == 0 &&
+		memcmp(bytes, "PHASE2\n", 7) == 0 &&
 		ci_render_clip.width == 320 && ci_render_clip.height == 240;
 	const bool phase3 = ci_mask_request_applied &&
 		!ci_mask_third_applied &&
-		memcmp(bytes, "PHASE3\\n", 7) == 0 &&
+		memcmp(bytes, "PHASE3\n", 7) == 0 &&
 		ci_render_clip.width == 400 && ci_render_clip.height == 300;
 	if (!phase2 && !phase3) {
 		stage_director_ci_scene_probe_restore(view);
