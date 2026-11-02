@@ -8,6 +8,8 @@ on:
     paths:
       - 'include/sway/stage_director_news_host_session.h'
       - 'sway/stage_director_news_host_session.c'
+      - 'include/sway/stage_director_news_viewport_candidate.h'
+      - 'sway/stage_director_news_viewport_candidate.c'
       - 'sway/stage_director_viewport.c'
       - 'sway/stage_director_weather_host.c'
       - 'include/sway/stage_director_weather_host.h'
@@ -48,6 +50,15 @@ jobs:
           stage = Path("sway/stage_director.c").read_text()
           pairing = Path("sway/stage_director_news_host_session.c").read_text()
           header = Path("include/sway/stage_director_news_host_session.h").read_text()
+          interior = Path("sway/stage_director_news_viewport_candidate.c").read_text()
+          assert "'stage_director_news_viewport_candidate.c'," in meson
+          assert "stage_director_news_host_session_geometry_snapshot(" in interior
+          assert "stage_director_news_host_session_geometry_current(" in interior
+          assert "stage_director_viewport_plan(&geometry)" in interior
+          for denied_call in ("wl_global_create(", "posix_spawn(", "fork(",
+                              "execve(", "system(", "wlr_scene_",
+                              "wlr_seat_", "seat_set_focus(", "wl_client_create("):
+              assert denied_call not in interior, denied_call
           for src in ("stage_director_news_host_session.c",
                       "stage_director_news_request_peer.c"):
               assert f"'{src}'," in meson, src
@@ -87,6 +98,7 @@ jobs:
             sway/stage_director_news_request_peer.c \
             sway/stage_director_news_host_session.c \
             sway/stage_director_viewport.c \
+            sway/stage_director_news_viewport_candidate.c \
             tests/stage_director/test_news_host_session.c \
             -o "$RUNNER_TEMP/stage-director-native-host-session" \
             $(pkg-config --libs wayland-server)
