@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <wayland-server.h>
 #include "sway/stage_director_news_host_session.h"
+#include "sway/stage_director_news_viewport_candidate.h"
 
 static void no_authority(struct stage_director_news_host_session_probe p) {
 	assert(!p.operator_watch_authenticated);
@@ -134,6 +135,61 @@ int main(void) {
 	second.can_clip = true;
 	assert(!stage_director_news_host_session_geometry_current(&state, &second));
 	second.can_clip = false;
+	/* Candidate-only inner NEWS area: geometry must match the current
+	 * exact native host revision and fit inside both host and actor. */
+	struct stage_director_news_viewport_candidate_request inner = {
+		.epoch = 1,
+		.host_geometry_revision = second.revision,
+		.native_host_ref = 0x10,
+		.native_host_client_ref = (uintptr_t)a,
+		.native_output_ref = 0x20,
+		.native_inner_surface_ref = 0x300,
+		.inner_native_observation = true,
+		.host_mapped = true,
+		.actor_mapped = true,
+		.output_active = true,
+		.actor_identity_verified = true,
+		.inner_global = {200, 100, 320, 240},
+		.actor_global = {100, 50, 850, 700},
+	};
+	struct stage_director_news_viewport_candidate_result candidate =
+		stage_director_news_viewport_candidate_probe(&state, &inner);
+	assert(candidate.status == SD_NEWS_VIEWPORT_GEOMETRY_CANDIDATE_ONLY);
+	assert(candidate.geometry_candidate && candidate.actor_local_crop.x == 100);
+	assert(candidate.actor_local_crop.y == 50);
+	assert(candidate.actor_local_crop.width == 320 &&
+		candidate.actor_local_crop.height == 240);
+	assert(!candidate.can_launch && !candidate.can_render &&
+		!candidate.can_clip && !candidate.can_accept_input &&
+		!candidate.can_show_popup);
+	inner.host_geometry_revision = first.revision;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_STALE_HOST);
+	inner.host_geometry_revision = second.revision;
+	inner.native_host_client_ref = (uintptr_t)b;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_NO_HOST);
+	inner.native_host_client_ref = (uintptr_t)a;
+	inner.inner_native_observation = false;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_INNER_UNOBSERVED);
+	inner.inner_native_observation = true;
+	inner.native_inner_surface_ref = 0x10;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_INNER_UNOBSERVED);
+	inner.native_inner_surface_ref = 0x300;
+	inner.inner_global.x = 800;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_INVALID_GEOMETRY);
+	inner.inner_global.x = 200;
+	inner.actor_global.width = 50;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_INVALID_GEOMETRY);
+	inner.actor_global.width = 850;
+	inner.actor_identity_verified = false;
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_INVALID_GEOMETRY);
+	inner.actor_identity_verified = true;
 	assert(!stage_director_news_host_session_update_geometry(
 		&state, 0x10, (uintptr_t)a, 0x20, 1,
 		(struct stage_director_rect){1800, 0, 600, 400}, output));
@@ -148,6 +204,8 @@ int main(void) {
 	assert(!state.candidate);
 	assert(!stage_director_news_host_session_geometry_current(&state, &second));
 	assert(state.geometry_revision == 0 && state.last_geometry_revision == 2);
+	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
+		SD_NEWS_VIEWPORT_NO_HOST);
 	denied(probe(&state, watch_a, 0x10, 0x20, 1),
 		SD_NEWS_HOST_SESSION_EMPTY);
 	assert(!stage_director_news_host_session_record_native_candidate(
