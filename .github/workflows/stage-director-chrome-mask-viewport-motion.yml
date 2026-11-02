@@ -15,6 +15,8 @@ on:
       - 'sway/input/seatop_default.c'
       - 'tests/stage_director/ci_virtual_input_event.c'
       - 'tests/stage_director/ci_virtual_input_event.nix'
+      - 'tests/stage_director/ci_subsurface_input_witness.c'
+      - 'tests/stage_director/ci_subsurface_input_witness.nix'
       - 'tests/stage_director/protocols/virtual-keyboard-unstable-v1.xml'
       - 'tests/stage_director/protocols/wlr-virtual-pointer-unstable-v1.xml'
       - 'include/sway/stage_director_ci_scene_probe.h'
@@ -185,6 +187,17 @@ jobs:
           assert 'zwlr_virtual_pointer_v1_button(' in virt_src
           assert 'same_native_pointer=1' in virt_src
           assert 'SD_CI_NATIVE_INPUT_DELIVERED' in p
+          assert 'wlr_surface_get_root_surface(surface)' in p
+          assert 'root_surface != surface' in p
+          assert 'sibling->surface != root_surface' in p
+          assert 'SD_CI_NATIVE_SUBSURFACE_INPUT_OWNER: result=PASS' in test
+          assert 'FAIL_NATIVE_SUBSURFACE_ROOT_RESOLUTION' in test
+          subsurface_src=Path('tests/stage_director/ci_subsurface_input_witness.c').read_text()
+          subsurface_nix=Path('tests/stage_director/ci_subsurface_input_witness.nix').read_text()
+          assert 'wl_subcompositor_get_subsurface(' in subsurface_src
+          assert 'SD_CI_SUBSURFACE_RECEIPT kind=ENTER owner=' in subsurface_src
+          assert 'BLOCKED_SUBSURFACE_WITNESS_NOT_ISOLATED' in subsurface_src
+          assert 'wayland-scanner client-header' in subsurface_nix
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in native_header
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/keyboard.c').read_text()
           assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/seatop_default.c').read_text()
@@ -287,7 +300,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus, chrome-real-input, chrome-button-grab]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus, chrome-real-input, chrome-button-grab, chrome-subsurface-owner]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -354,17 +367,20 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
-          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" ]]; then
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT=1" >> "$GITHUB_ENV"
             if [[ "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
               echo "STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING=1" >> "$GITHUB_ENV"
-            elif [[ "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" ]]; then
+            elif [[ "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
               echo "STAGE_DIRECTOR_CI_CHROME_FOCUS_CUSTODY=1" >> "$GITHUB_ENV"
-              if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" ]]; then
+              if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
                 echo "STAGE_DIRECTOR_CI_CHROME_REAL_INPUT=1" >> "$GITHUB_ENV"
-                if [[ "${{ matrix.exit_mode }}" == "chrome-button-grab" ]]; then
+                if [[ "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
                   echo "STAGE_DIRECTOR_CI_CHROME_REAL_BUTTON=1" >> "$GITHUB_ENV"
+                fi
+                if [[ "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
+                  echo "STAGE_DIRECTOR_CI_CHROME_SUBSURFACE=1" >> "$GITHUB_ENV"
                 fi
               fi
             fi
@@ -389,10 +405,15 @@ jobs:
             test -x "$popup/bin/sd-ci-xdg-popup-witness"
             echo "STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS=$popup/bin/sd-ci-xdg-popup-witness" >> "$GITHUB_ENV"
           fi
-          if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" ]]; then
+          if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
             injector="$(nix build --impure --expr 'import ./tests/stage_director/ci_virtual_input_event.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
             test -x "$injector/bin/sd-ci-virtual-input-event"
             echo "STAGE_DIRECTOR_TEST_VIRTUAL_INPUT=$injector/bin/sd-ci-virtual-input-event" >> "$GITHUB_ENV"
+          fi
+          if [[ "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
+            child="$(nix build --impure --expr 'import ./tests/stage_director/ci_subsurface_input_witness.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+            test -x "$child/bin/sd-ci-subsurface-input-witness"
+            echo "STAGE_DIRECTOR_TEST_SUBSURFACE_WITNESS=$child/bin/sd-ci-subsurface-input-witness" >> "$GITHUB_ENV"
           fi
       - name: Boot actual headless SwayPX, Chrome and verify four-edge rendered pixels
         run: |
@@ -450,6 +471,8 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied.ppm
             ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied.png
             ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied-tree.json
+            ${{ runner.temp }}/sd-ci-native-subsurface-witness.log
+            ${{ runner.temp }}/sd-ci-subsurface-positive.png
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -462,5 +485,6 @@ jobs:
           echo "The chrome-multi-toplevel job requires two extra simultaneous Chrome XDG roots, exact close/reopen and three real screenshots." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-hidden-focus job attempts Sway IPC native focus on a real invisible Chrome sibling, requires native seat refusal and unchanged original focus; no actual keys or pointer tested in that lane." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-real-input lane uses actual Wayland virtual keyboard KEY_A and virtual-pointer motion with exact compositor root-surface delivery markers." >> "$GITHUB_STEP_SUMMARY"
-          echo "The chrome-button-grab lane extends this with real BTN_LEFT click and same-device press-drag-release through hidden sibling coordinates, requiring visible main delivery and no hidden root recipient. It does not prove nested popup/subsurface or all grab ownership paths." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-button-grab lane extends this with real BTN_LEFT click and same-device press-drag-release through hidden sibling coordinates." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-subsurface-owner lane uses a native unrelated wl_subsurface under a real XDG parent and verifies actual client pointer/button receipt plus compositor root attribution. It does not prove a Chrome executable created that descendant or XDG popup ancestry." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
