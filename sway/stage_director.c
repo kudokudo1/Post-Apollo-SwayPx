@@ -278,6 +278,16 @@ bool stage_director_news_pairing_select_at(
 			(uintptr_t)host->output, epoch)) {
 		return false;
 	}
+	/* Only native observed OUTER Weather layer bounds are recorded.
+	 * The inner NEWS pane remains unknown, with no rendering authority. */
+	if (!peer.host.candidate_observed ||
+			!stage_director_news_host_session_update_geometry(
+				&weather_host_session, peer.native_layer_ref,
+				peer.native_client_ref, peer.native_output_ref,
+				epoch, peer.host.host, peer.host.output)) {
+		stage_director_news_pairing_clear_host();
+		return false;
+	}
 	if (!stage_director_weather_watch_protocol_publish()) {
 		stage_director_news_pairing_clear_host();
 		return false;
@@ -844,8 +854,26 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 		if (!peer.native_peer_candidate ||
 				peer.native_layer_ref != (uintptr_t)surface ||
 				peer.native_output_ref != weather_host_session.native_output_ref ||
-				peer.native_client_ref != (uintptr_t)weather_host_session.client) {
+				peer.native_client_ref != (uintptr_t)weather_host_session.client ||
+				!peer.host.candidate_observed) {
 			stage_director_news_pairing_clear_host();
+		} else {
+			const uint64_t before = weather_host_session.geometry_revision;
+			if (!stage_director_news_host_session_update_geometry(
+					&weather_host_session, peer.native_layer_ref,
+					peer.native_client_ref, peer.native_output_ref,
+					weather_host_session.epoch,
+					peer.host.host, peer.host.output)) {
+				stage_director_news_pairing_clear_host();
+			} else if (before != weather_host_session.geometry_revision) {
+				sway_log(SWAY_INFO, "[stage-director][SD1][HOST_GEOMETRY] "
+					"revised epoch=%" PRIu64 " revision=%" PRIu64
+					" outer=%d,%d %dx%d browser=OFF authority=NONE",
+					weather_host_session.epoch,
+					weather_host_session.geometry_revision,
+					peer.host.host.x, peer.host.host.y,
+					peer.host.host.width, peer.host.host.height);
+			}
 		}
 	}
 	observe_layer(surface, "commit", false);
