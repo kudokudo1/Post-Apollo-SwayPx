@@ -33,9 +33,13 @@ def high_outside(ppm):
 
 
 def main():
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 7):
         raise SystemExit("usage: sibling_discovery.py crop.ppm after.ppm "
-                         "before-tree.json after-tree.json original-id")
+                         "before-tree.json after-tree.json original-id "
+                         "[--require-contained]")
+    strict = len(sys.argv) == 7 and sys.argv[6] == "--require-contained"
+    if len(sys.argv) == 7 and not strict:
+        raise ValueError("BLOCKED_UNKNOWN_CHROME_SIBLING_ASSERTION_MODE")
     before, total = high_outside(sys.argv[1])
     after, _ = high_outside(sys.argv[2])
     original_id = int(sys.argv[5])
@@ -71,11 +75,21 @@ def main():
           f"new_bright_outside={changed} sampled_outside={total} "
           f"original_geometry_changed={int(shifted)} result={observation}",
           flush=True)
-    print("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: "
-          f"result=OBSERVED second_native_xdg={len(extras)} "
-          f"pixel_classification={observation} "
-          "containment=UNVERIFIED actor=CHROME_EXECUTABLE "
-          "authority=NONE", flush=True)
+    if strict:
+        if changed != 0 or after != before:
+            raise ValueError("FAIL_CHROME_SIBLING_UNCONTAINED_REAL_PIXELS")
+        if shifted:
+            raise ValueError("FAIL_CHROME_SIBLING_REARRANGED_ORIGINAL")
+        print("SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS "
+              "second_real_xdg=1 original_geometry_stable=1 "
+              "sampled_bright_outside=0 full_container_quarantined=1 "
+              "authority=NONE", flush=True)
+    else:
+        print("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: "
+              f"result=OBSERVED second_native_xdg={len(extras)} "
+              f"pixel_classification={observation} "
+              "containment=UNVERIFIED actor=CHROME_EXECUTABLE "
+              "authority=NONE", flush=True)
 
 
 if __name__ == "__main__":
