@@ -375,6 +375,57 @@ def main() -> None:
                 print(mask_report, flush=True)
                 if "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" not in mask_report:
                     raise RuntimeError("FAIL_MASK_SCREENSHOT_MARKER_MISSING")
+                # A second sequential request in the SAME isolated compositor.
+                # The previous PHASE2 request has been unlinked before this
+                # O_EXCL 0600 file is created, so an old file cannot replay.
+                fd = os.open(request,
+                             os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                             getattr(os, "O_NOFOLLOW", 0), 0o600)
+                try:
+                    os.write(fd, b"PHASE3\n")
+                finally:
+                    os.close(fd)
+                third_evidence = False
+                try:
+                    for _ in range(100):
+                        lines = (runtime / "sway.log").read_text(
+                            encoding="utf-8", errors="replace")
+                        if ("SD_CI_CHROME_MASK_REBIND_PHASE3" in lines and
+                                "clip=1040,560 280x220" in lines):
+                            third_evidence = True
+                            break
+                        if ("SD_CI_CHROME_MASK_SOURCE_LOST" in lines or
+                                "SD_CI_CHROME_MASK_REQUEST_INVALID" in lines):
+                            break
+                        time.sleep(0.1)
+                finally:
+                    request.unlink(missing_ok=True)
+                if not third_evidence:
+                    raise RuntimeError(
+                        "FAIL_THIRD_MASK_REQUEST_NOT_ACCEPTED " + lines[-4500:])
+                if proc_start(client_pid) != snapshot[client_pid] or (
+                        client_pid not in members(root)):
+                    raise RuntimeError("FAIL_BROWSER_PROCESS_IDENTITY_CHANGED_PHASE3")
+                time.sleep(0.35)
+                third = temp / "sd-chrome-mask-third.ppm"
+                call(grim, "-t", "ppm", str(third), timeout=25)
+                call(grim, "-t", "png",
+                     str(temp / "sd-chrome-mask-third.png"), timeout=25)
+                third_tree = json.loads(call(
+                    swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                third_tree_path = temp / "sd-chrome-mask-third-tree.json"
+                third_tree_path.write_text(
+                    json.dumps(third_tree), encoding="utf-8")
+                multiple_report = call(
+                    sys.executable,
+                    "tests/stage_director/assert_real_chrome_multi_mask_pixels.py",
+                    str(temp / "sd-chrome-before.ppm"), str(crop_ppm),
+                    str(second), str(third), str(tree_path),
+                    str(shifted_tree_file), str(third_tree_path),
+                    str(client_pid), timeout=30)
+                print(multiple_report, flush=True)
+                if "SD_CI_CHROME_MULTI_MASK_PIXELS: result=PASS" not in multiple_report:
+                    raise RuntimeError("FAIL_MULTI_MASK_SCREENSHOT_MARKER_MISSING")
         call("sudo", "-n", "systemctl", "stop", unit)
         for _ in range(100):
             survivors = [p for p, st in snapshot.items() if proc_start(p) == st]

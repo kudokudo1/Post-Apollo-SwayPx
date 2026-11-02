@@ -14,6 +14,7 @@ on:
       - 'tests/stage_director/ci_real_chrome_wayland_window.py'
       - 'tests/stage_director/assert_real_chrome_clip_pixels.py'
       - 'tests/stage_director/assert_real_chrome_mask_shift_pixels.py'
+      - 'tests/stage_director/assert_real_chrome_multi_mask_pixels.py'
       - '.github/workflows/stage-director-chrome-mask-viewport-motion.yml'
       - 'docs/stage-director-chrome-mask-viewport-motion-20261102.md'
   workflow_dispatch:
@@ -38,6 +39,7 @@ jobs:
           p=Path("sway/stage_director_ci_scene_probe.c").read_text()
           pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
           mask=Path("tests/stage_director/assert_real_chrome_mask_shift_pixels.py").read_text()
+          multiple=Path("tests/stage_director/assert_real_chrome_multi_mask_pixels.py").read_text()
           test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" in mask
           assert "FAIL_NATIVE_CHROME_WINDOW_MOVED_OR_REPLACED" in mask
@@ -51,11 +53,21 @@ jobs:
           assert 'ci_real_chrome_process(view, &peer)' in p
           assert 'SD_CI_CHROME_MASK_REBIND' in p
           assert 'ci_mask_request_timer' in p
-          assert 'phase2.width' in p
+          assert 'const struct wlr_box phase2_rect' in p
+          assert 'const struct wlr_box phase3_rect' in p
+          assert 'SD_CI_CHROME_MASK_REBIND_PHASE3' in p
+          assert 'memcmp(bytes, "PHASE3\\n", 7) == 0' in p
+          assert 'ci_mask_third_applied' in p
+          assert 'SD_CI_CHROME_MULTI_MASK_PIXELS: result=PASS' in multiple
+          assert 'FAIL_STALE_CHROME_PIXELS_PREVIOUS_MASKS' in multiple
+          assert 'FAIL_THIRD_CHROME_MASK_FOUR_EDGE_LEAK' in multiple
+          assert 'sd-chrome-mask-third.ppm' in test
+          assert 'b"PHASE3\\n"' in test
           assert "STAGE_DIRECTOR_CI_BROWSER_MASK" in test
           assert 'os.O_CREAT | os.O_EXCL | os.O_WRONLY' in test
           assert 'sd-chrome-mask-shift.ppm' in test
           ast.parse(mask)
+          ast.parse(multiple)
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
           runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "default_border normal" in runtime
@@ -186,10 +198,13 @@ jobs:
             ${{ runner.temp }}/sd-chrome-mask-shift.ppm
             ${{ runner.temp }}/sd-chrome-mask-shift.png
             ${{ runner.temp }}/sd-chrome-mask-shift-tree.json
+            ${{ runner.temp }}/sd-chrome-mask-third.ppm
+            ${{ runner.temp }}/sd-chrome-mask-third.png
+            ${{ runner.temp }}/sd-chrome-mask-third-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
         run: |
-          echo "Real Chrome remains mapped at the same XDG ID/rectangle while a private, CI-only host request moves and expands only its SceneFX mask from 320x240 to 400x300." >> "$GITHUB_STEP_SUMMARY"
+          echo "Real Chrome stays at the same XDG ID/rectangle while isolated SceneFX mask advances 320x240 -> 400x300 -> 280x220, with a screenshot after every step." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
