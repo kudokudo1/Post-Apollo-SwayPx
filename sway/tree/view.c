@@ -956,6 +956,12 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	 * without modifying config->border or any other mapped Wayland view.
 	 * This code is absent from the ordinary SwayPX binary. */
 	(void)stage_director_ci_scene_probe_borderless_verified_actor(view);
+	/* Extra native Chrome toplevels otherwise retile and displace the
+	 * first clipped actor. Only the exact cgroup's CI sibling is floated
+	 * before normal Sway arrangement; unrelated applications unchanged. */
+	if (stage_director_ci_scene_probe_is_chrome_sibling(view)) {
+		container_set_floating(view->container, true);
+	}
 #endif
 
 	if (config->popup_during_fullscreen == POPUP_LEAVE &&
