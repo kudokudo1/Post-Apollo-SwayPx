@@ -19,6 +19,10 @@ on:
       - 'tests/stage_director/assert_real_chrome_multi_mask_pixels.py'
       - 'tests/stage_director/assert_real_chrome_abrupt_exit_pixels.py'
       - 'tests/stage_director/assert_real_chrome_pending_exit_pixels.py'
+      - 'tests/stage_director/ci_xdg_popup_witness.c'
+      - 'tests/stage_director/ci_xdg_popup_witness.nix'
+      - 'tests/stage_director/ci_chrome_popup_service.sh'
+      - 'tests/stage_director/assert_real_xdg_popup_witness_pixels.py'
       - 'docs/stage-director-chrome-pending-exit-20261102.md'
       - '.github/workflows/stage-director-chrome-mask-viewport-motion.yml'
       - 'docs/stage-director-chrome-mask-viewport-motion-20261102.md'
@@ -49,6 +53,10 @@ jobs:
           multiple=Path("tests/stage_director/assert_real_chrome_multi_mask_pixels.py").read_text()
           abrupt=Path("tests/stage_director/assert_real_chrome_abrupt_exit_pixels.py").read_text()
           pending=Path("tests/stage_director/assert_real_chrome_pending_exit_pixels.py").read_text()
+          popup_client=Path("tests/stage_director/ci_xdg_popup_witness.c").read_text()
+          popup_service=Path("tests/stage_director/ci_chrome_popup_service.sh").read_text()
+          popup_pixels=Path("tests/stage_director/assert_real_xdg_popup_witness_pixels.py").read_text()
+          popup_nix=Path("tests/stage_director/ci_xdg_popup_witness.nix").read_text()
           test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" in mask
           assert "FAIL_NATIVE_CHROME_WINDOW_MOVED_OR_REPLACED" in mask
@@ -109,6 +117,20 @@ jobs:
           ast.parse(multiple)
           ast.parse(abrupt)
           ast.parse(pending)
+          ast.parse(popup_pixels)
+          assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
+          assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
+          assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
+          assert 'sd-ci-popup-witness' in popup_client
+          assert 'SD_CI_NATIVE_POPUP_DENIAL_PIXELS: result=PASS' in popup_pixels
+          assert 'FAIL_NATIVE_POPUP_POSITIVE_CONTROL_NOT_RENDERED' in popup_pixels
+          assert 'FAIL_NATIVE_POPUP_GLOBAL_ROOT_PIXEL_ESCAPE' in popup_pixels
+          assert 'sd-ci-xdg-popup-$GITHUB_RUN_ID' in popup_service
+          assert '"$witness" emit &' in popup_service
+          assert 'pkgs.wayland-protocols' in popup_nix
+          assert 'STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS' in test
+          assert 'verify_native_popup_witness(' in test
+          assert 'SD_CI_XDG_POPUP_NATIVE_EVENT: result=PASS' in test
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
           runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "default_border normal" in runtime
@@ -171,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -215,6 +237,9 @@ jobs:
           echo "STAGE_DIRECTOR_CI_BROWSER_MASK=1" >> "$GITHUB_ENV"
           if [[ "${{ matrix.exit_mode }}" == "pending-before-move" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT=1" >> "$GITHUB_ENV"
+          elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
+            echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
+            echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           fi
@@ -231,6 +256,11 @@ jobs:
           foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
           test -x "$foot/bin/foot"
           echo "STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          if [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
+            popup="$(nix build --impure --expr 'import ./tests/stage_director/ci_xdg_popup_witness.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+            test -x "$popup/bin/sd-ci-xdg-popup-witness"
+            echo "STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS=$popup/bin/sd-ci-xdg-popup-witness" >> "$GITHUB_ENV"
+          fi
       - name: Boot actual headless SwayPX, Chrome and verify four-edge rendered pixels
         run: |
           set -euo pipefail
@@ -264,6 +294,11 @@ jobs:
             ${{ runner.temp }}/sd-chrome-pending-after-kill.ppm
             ${{ runner.temp }}/sd-chrome-pending-after-kill.png
             ${{ runner.temp }}/sd-chrome-pending-after-tree.json
+            ${{ runner.temp }}/sd-ci-native-popup-control.log
+            ${{ runner.temp }}/sd-ci-native-popup-positive.ppm
+            ${{ runner.temp }}/sd-ci-native-popup-positive.png
+            ${{ runner.temp }}/sd-ci-native-popup-denied.ppm
+            ${{ runner.temp }}/sd-ci-native-popup-denied.png
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -271,5 +306,5 @@ jobs:
           echo "Real Chrome stays at the same XDG ID/rectangle while isolated SceneFX mask advances 320x240 -> 400x300 -> 280x220, with a screenshot after every step." >> "$GITHUB_STEP_SUMMARY"
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
-          echo "Both top-level and nested XDG popups from the selected CI Chrome actor are refused before Sway's global popup scene insertion. Actual Chrome popup emission is NOT yet demonstrated by this job." >> "$GITHUB_STEP_SUMMARY"
+          echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
