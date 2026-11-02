@@ -9,7 +9,7 @@ in pkgs.stdenv.mkDerivation {
   dontUnpack = true;
   strictDeps = true;
   nativeBuildInputs = [ pkgs.pkg-config pkgs.wayland-scanner ];
-  buildInputs = [ pkgs.wayland pkgs.xkbcommon ];
+  buildInputs = [ pkgs.wayland pkgs.libxkbcommon ];
   buildPhase = ''
     runHook preBuild
     wayland-scanner client-header ${./protocols/virtual-keyboard-unstable-v1.xml} virtual-keyboard-unstable-v1-client-protocol.h
