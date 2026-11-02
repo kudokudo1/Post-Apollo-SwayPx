@@ -431,16 +431,19 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
  */
 bool stage_director_ci_scene_probe_reject_chrome_popup(
 		struct sway_view *view) {
-	if (!view || view != ci_render_actor) return false;
-	/* A previously selected browser may lose process credentials during
-	 * crash/unmap. NEVER convert that loss into permission to attach to
-	 * the global popup scene. Selected actor stays denied until restore. */
+	if (!view) return false;
+	/* A popup can be requested BEFORE the screenshot selector chooses
+	 * the main Chrome window. Exact native wl_client/cgroup membership is
+	 * sufficient to deny it. Once selected, losing credentials on SIGKILL
+	 * must also never grant a global popup scene escape. */
 	pid_t peer = -1;
 	const bool current = ci_real_chrome_process(view, &peer);
+	const bool selected = view == ci_render_actor;
+	if (!selected && !current) return false;
 	wlr_log(WLR_INFO, "SD_CI_CHROME_POPUP_DENIED "
-		"selected_native_actor=1 current_cgroup=%d pid=%ld "
+		"selected_native_actor=%d current_cgroup=%d pid=%ld "
 		"global_popup_tree=BLOCKED authority=NONE result=PASS",
-		current ? 1 : 0, (long)peer);
+		selected ? 1 : 0, current ? 1 : 0, (long)peer);
 	return true;
 }
 
