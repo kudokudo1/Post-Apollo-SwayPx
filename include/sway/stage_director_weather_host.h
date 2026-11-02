@@ -43,6 +43,9 @@ enum stage_director_weather_host_status {
 struct stage_director_weather_host_result {
 	enum stage_director_weather_host_status status;
 	bool candidate_observed;
+	/* OUTER host geometry only: not the NEWS interior, not authority. */
+	struct stage_director_rect host;
+	struct stage_director_rect output;
 	/* Classifying a namespace NEVER verifies a trusted launch/session. */
 	bool owner_verified;
 	bool can_bind_viewer;
