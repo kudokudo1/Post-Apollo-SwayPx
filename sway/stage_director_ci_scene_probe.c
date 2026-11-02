@@ -451,7 +451,7 @@ static int ci_browser_mask_request(void *data) {
 	const char *enabled = getenv("STAGE_DIRECTOR_CI_BROWSER_MASK");
 	pid_t peer = -1;
 	if (!enabled || strcmp(enabled, "1") != 0 ||
-			!runner || strncmp(runner, "/home/runner/work/_temp", 22) != 0 ||
+			!runner || strcmp(runner, "/home/runner/work/_temp") != 0 ||
 			!ci_digits(run) || strlen(run) > 22 ||
 			(attempt && (!ci_digits(attempt) || strlen(attempt) > 8)) ||
 			!ci_real_chrome_process(view, &peer) ||
