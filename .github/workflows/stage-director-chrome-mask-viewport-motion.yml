@@ -7,6 +7,8 @@ on:
       - stage-director/chrome-per-view-decoration-20261031
     paths:
       - 'sway/stage_director_ci_scene_probe.c'
+      - 'sway/desktop/xdg_shell.c'
+      - 'include/sway/stage_director_ci_scene_probe.h'
       - 'sway/tree/view.c'
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'tests/stage_director/headless_sway_smoke.sh'
@@ -40,6 +42,8 @@ jobs:
           from pathlib import Path
           import ast
           p=Path("sway/stage_director_ci_scene_probe.c").read_text()
+          xdg=Path("sway/desktop/xdg_shell.c").read_text()
+          native_header=Path("include/sway/stage_director_ci_scene_probe.h").read_text()
           pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
           mask=Path("tests/stage_director/assert_real_chrome_mask_shift_pixels.py").read_text()
           multiple=Path("tests/stage_director/assert_real_chrome_multi_mask_pixels.py").read_text()
@@ -58,6 +62,19 @@ jobs:
           assert 'ci_real_chrome_process(view, &peer)' in p
           assert 'SD_CI_CHROME_MASK_REBIND' in p
           assert 'ci_mask_request_timer' in p
+          # Sway normally puts real XDG popups in a global root scene tree,
+          # separate from the browser content that CI's mask clips.
+          assert 'root->layers.popup' in xdg
+          assert 'popup_create(wlr_popup, popup->view' in xdg
+          assert xdg.count('stage_director_ci_scene_probe_reject_chrome_popup(') == 2
+          assert xdg.count('wlr_xdg_popup_destroy(wlr_popup);') == 2
+          assert xdg.count('#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE') >= 3
+          assert 'stage_director_ci_scene_probe_reject_chrome_popup(' in native_header
+          assert 'view != ci_render_actor' in p
+          assert 'SD_CI_CHROME_POPUP_DENIED' in p
+          assert 'global_popup_tree=BLOCKED authority=NONE' in p
+          assert 'return true;' in p
+          assert 'ci_real_chrome_process(view, &peer)' in p
           assert 'const struct wlr_box phase2_rect' in p
           assert 'const struct wlr_box phase3_rect' in p
           assert 'SD_CI_CHROME_MASK_REBIND_PHASE3' in p
@@ -177,6 +194,10 @@ jobs:
             echo "FAIL: per-actor test-only decoration policy linked into production" >&2
             exit 1
           fi
+          if grep -aFq 'SD_CI_CHROME_POPUP_DENIED' "$prod/bin/sway"; then
+            echo "FAIL: test-only Chrome popup denial leaked into normal production" >&2
+            exit 1
+          fi
           echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
       - name: Compile test-only compositor and screenshot client separately
         run: |
@@ -185,6 +206,7 @@ jobs:
           test -x "$ci/bin/sway"
           test -x "$ci/bin/swaymsg"
           grep -aFq 'SD_CI_CHROME_PIXEL_SCENE' "$ci/bin/sway"
+          grep -aFq 'SD_CI_CHROME_POPUP_DENIED' "$ci/bin/sway"
           echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
@@ -248,4 +270,5 @@ jobs:
           echo "Real Chrome stays at the same XDG ID/rectangle while isolated SceneFX mask advances 320x240 -> 400x300 -> 280x220, with a screenshot after every step." >> "$GITHUB_STEP_SUMMARY"
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
+          echo "Both top-level and nested XDG popups from the selected CI Chrome actor are refused before Sway's global popup scene insertion. Actual Chrome popup emission is NOT yet demonstrated by this job." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
