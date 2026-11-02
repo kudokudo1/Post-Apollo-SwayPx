@@ -33,6 +33,10 @@ bool stage_director_ci_scene_probe_reject_chrome_focus(
  * Nested surface focus is separately unverified. */
 bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
 	struct wlr_surface *surface);
+/* CI-only instrumentation at wlroots event delivery boundaries.
+ * Reports actual focused/target surface; never grants input authority. */
+void stage_director_ci_scene_probe_record_input_delivery(
+	struct wlr_surface *surface, bool is_keyboard);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
