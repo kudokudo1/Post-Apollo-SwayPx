@@ -509,7 +509,7 @@ static int ci_browser_mask_request(void *data) {
 	 * held request. This is NOT an interrupted in-progress scene mutation. */
 	const char *pending_mode = getenv("STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT");
 	if (pending_mode && strcmp(pending_mode, "1") == 0) {
-		if (n != 8 || memcmp(bytes, "PENDING\\n", 8) != 0 ||
+		if (n != 8 || memcmp(bytes, "PENDING\n", 8) != 0 ||
 				ci_mask_request_applied || ci_mask_third_applied ||
 				ci_render_clip.width != 320 || ci_render_clip.height != 240) {
 			stage_director_ci_scene_probe_restore(view);
