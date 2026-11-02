@@ -54,11 +54,17 @@ jobs:
                             '"--privileged"', '"--network=host"',
                             "system(", "shell=True"):
               assert forbidden not in source, forbidden
-          # The sole Popen is a disposable FOOT titlebar control. It is
-          # never the Chrome launcher; Chrome remains a restricted systemd
-          # service, with no process-sandbox bypass.
-          assert source.count("subprocess.Popen(") == 1
+          # Only two direct Popen calls are permitted: unrelated FOOT
+          # border control and unrelated native XDG popup visual control.
+          # The actual Chrome executable and the same-cgroup popup witness
+          # remain inside the exact network-isolated systemd service.
+          assert source.count("subprocess.Popen(") == 2
           assert 'actor = subprocess.Popen(' in source
+          assert 'control = subprocess.Popen(' in source
+          assert 'STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS' in source
+          assert '"/usr/bin/bash",' in source
+          assert '"--property=PrivateNetwork=yes"' in source
+          assert 'ci_chrome_popup_service.sh' in source
           assert 'def verify_unrelated_titlebar(' in source
           assert 'STAGE_DIRECTOR_TEST_DECOR_CONTROL_FOOT' in source
           for path in ("sway/stage_director.c",

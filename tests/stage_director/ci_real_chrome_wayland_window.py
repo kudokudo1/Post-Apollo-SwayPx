@@ -222,6 +222,107 @@ def verify_pending_mask_exit(e, temp, runtime, swaymsg, ipc, grim,
         request.unlink(missing_ok=True)
 
 
+
+def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
+                                root, crop_ppm):
+    """Real xdg_popup positive/negative control in one CI compositor.
+
+    CONTROL: unrelated runner cgroup can paint magenta through global popup.
+    DENIAL: same witness in exact Chrome service cgroup cannot paint magenta.
+    This does NOT mean the actual Chrome executable emitted an XDG popup.
+    """
+    witness = e.get("STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS", "")
+    if (e.get("CI") != "true" or e.get("GITHUB_ACTIONS") != "true" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS") != "1" or
+            not witness.startswith("/nix/store/") or
+            not Path(witness).is_file()):
+        raise RuntimeError("BLOCKED_NATIVE_POPUP_WITNESS_OUTSIDE_CI")
+    control_log = temp / "sd-ci-native-popup-control.log"
+    with control_log.open("w", encoding="utf-8") as output:
+        control = subprocess.Popen(
+            [witness, "emit"], stdout=output, stderr=subprocess.STDOUT)
+        try:
+            for _ in range(100):
+                report = control_log.read_text(encoding="utf-8")
+                if "SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED" in report:
+                    break
+                if control.poll() is not None:
+                    raise RuntimeError(
+                        "FAIL_NATIVE_POPUP_POSITIVE_CONTROL_EXITED " + report)
+                time.sleep(0.1)
+            else:
+                raise RuntimeError(
+                    "FAIL_NATIVE_POPUP_POSITIVE_CONTROL_UNMAPPED " +
+                    control_log.read_text(encoding="utf-8"))
+            time.sleep(0.3)
+            positive = temp / "sd-ci-native-popup-positive.ppm"
+            call(grim, "-t", "ppm", str(positive), timeout=25)
+            call(grim, "-t", "png",
+                 str(temp / "sd-ci-native-popup-positive.png"), timeout=25)
+            print("SD_CI_NATIVE_POPUP_CONTROL_PROTOCOL_LOG:\n" +
+                  control_log.read_text(encoding="utf-8"), flush=True)
+        finally:
+            if control.poll() is None:
+                control.terminate()
+            try:
+                control.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                control.kill()
+                control.wait(timeout=3)
+    time.sleep(0.35)
+    request = temp / ("sd-ci-xdg-popup-" + e["GITHUB_RUN_ID"] + "-" +
+                      e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
+    marker_start = len((runtime / "sway.log").read_text(
+        encoding="utf-8", errors="replace"))
+    fd = os.open(request, os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                 getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.write(fd, b"POPUP\n")
+    finally:
+        os.close(fd)
+    try:
+        observed = False
+        for _ in range(120):
+            new_log = (runtime / "sway.log").read_text(
+                encoding="utf-8", errors="replace")[marker_start:]
+            if ("SD_CI_CHROME_POPUP_DENIED" in new_log and
+                    "current_cgroup=1" in new_log):
+                observed = True
+                break
+            if not members(root):
+                break
+            time.sleep(0.1)
+        if not observed:
+            raise RuntimeError("FAIL_NATIVE_POPUP_GLOBAL_DENIAL_NOT_OBSERVED "
+                               + new_log[-4400:])
+        journal = call("sudo", "-n", "journalctl", "-u", unit,
+                       "-n", "100", "--no-pager", check=False, timeout=20)
+        if ("SD_CI_XDG_POPUP_SAME_CGROUP_WITNESS_STARTED" not in journal or
+                "SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT" not in journal):
+            raise RuntimeError(
+                "FAIL_NATIVE_POPUP_REAL_PROTOCOL_REQUEST_NOT_PROVEN " +
+                journal[-4300:])
+        # No visually pink popup may appear outside the browser content.
+        time.sleep(0.35)
+        denied = temp / "sd-ci-native-popup-denied.ppm"
+        call(grim, "-t", "ppm", str(denied), timeout=25)
+        call(grim, "-t", "png",
+             str(temp / "sd-ci-native-popup-denied.png"), timeout=25)
+        report = call(sys.executable,
+                      "tests/stage_director/assert_real_xdg_popup_witness_pixels.py",
+                      str(crop_ppm), str(positive), str(denied), timeout=30)
+        print(report, flush=True)
+        if "SD_CI_NATIVE_POPUP_DENIAL_PIXELS: result=PASS" not in report:
+            raise RuntimeError("FAIL_NATIVE_POPUP_SCREENSHOT_PROOF_MISSING")
+        print("SD_CI_XDG_POPUP_NATIVE_EVENT: result=PASS "
+              "separate_unrelated_popup_rendered=1 "
+              "same_chrome_service_cgroup_emitter=1 "
+              "root_popup_creation_denied=1 real_pixels=1 "
+              "browser_executable_popup=UNTESTED authority=NONE", flush=True)
+    finally:
+        request.unlink(missing_ok=True)
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -267,6 +368,14 @@ def main() -> None:
     started = False
     root: Path | None = None
     snapshot: dict[int, int] = {}
+    popup_mode = e.get("STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS") == "1"
+    popup_exe = e.get("STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS", "")
+    popup_request = temp / (
+        "sd-ci-xdg-popup-" + e["GITHUB_RUN_ID"] + "-" +
+        e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
+    if popup_mode and (not popup_exe.startswith("/nix/store/") or
+                       not Path(popup_exe).is_file()):
+        raise RuntimeError("BLOCKED_NATIVE_POPUP_WITNESS_UNBUILT")
     try:
         # The runner's Chrome has its own distro/AppArmor policy (whether
         # the internal sandbox is ACTIVE remains unverified). The service
@@ -294,6 +403,18 @@ def main() -> None:
              "--setenv=XDG_RUNTIME_DIR=" + str(runtime),
              "--setenv=WAYLAND_DISPLAY=" + e["WAYLAND_DISPLAY"],
              "--setenv=XDG_SESSION_TYPE=wayland",
+             *([
+                 "--setenv=CI=true",
+                 "--setenv=GITHUB_ACTIONS=true",
+                 "--setenv=GITHUB_RUN_ID=" + e["GITHUB_RUN_ID"],
+                 "--setenv=GITHUB_RUN_ATTEMPT=" +
+                     e.get("GITHUB_RUN_ATTEMPT", "1"),
+                 "--setenv=RUNNER_TEMP=" + str(temp),
+                 "--setenv=STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1",
+                 "/usr/bin/bash",
+                 str(Path("tests/stage_director/ci_chrome_popup_service.sh").resolve()),
+                 popup_exe, str(popup_request),
+             ] if popup_mode else []),
              "/opt/google/chrome/chrome",
              "--ozone-platform=wayland",
              "--disable-gpu",
@@ -439,6 +560,9 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if popup_mode:
+                verify_native_popup_witness(
+                    e, temp, runtime, grim, unit, snapshot, root, crop_ppm)
             if e.get("STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT") == "1":
                 verify_pending_mask_exit(
                     e, temp, runtime, swaymsg, ipc, grim, unit, root,
