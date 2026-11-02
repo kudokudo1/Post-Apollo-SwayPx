@@ -33,12 +33,17 @@ def high_outside(ppm):
 
 
 def main():
-    if len(sys.argv) not in (6, 7):
+    if len(sys.argv) not in (6, 7, 9):
         raise SystemExit("usage: sibling_discovery.py crop.ppm after.ppm "
                          "before-tree.json after-tree.json original-id "
-                         "[--require-contained]")
-    strict = len(sys.argv) == 7 and sys.argv[6] == "--require-contained"
-    if len(sys.argv) == 7 and not strict:
+                         "[--require-contained [--require-extras 2]]")
+    strict = len(sys.argv) >= 7 and sys.argv[6] == "--require-contained"
+    require_extras = 1
+    if len(sys.argv) == 9:
+        if not strict or sys.argv[7:9] != ["--require-extras", "2"]:
+            raise ValueError("BLOCKED_UNKNOWN_CHROME_SIBLING_ASSERTION_MODE")
+        require_extras = 2
+    elif len(sys.argv) == 7 and not strict:
         raise ValueError("BLOCKED_UNKNOWN_CHROME_SIBLING_ASSERTION_MODE")
     before, total = high_outside(sys.argv[1])
     after, _ = high_outside(sys.argv[2])
@@ -66,8 +71,9 @@ def main():
     if original_id not in latest:
         raise ValueError("FAIL_SIBLING_ORIGINAL_REMOVED")
     extras = [n for k, n in latest.items() if k != original_id]
-    if not extras:
-        raise ValueError("FAIL_SIBLING_NO_NEW_NATIVE_XDG_WINDOW")
+    if len(extras) < require_extras:
+        raise ValueError("FAIL_SIBLING_INSUFFICIENT_NATIVE_XDG_WINDOWS "
+                         f"required={require_extras} observed={len(extras)}")
     shifted = prior[original_id].get("rect") != latest[original_id].get("rect")
     changed = max(0, after - before)
     observation = "VISIBLE_OUTSIDE_MASK" if changed > 0 else "NO_OUTSIDE_BRIGHT_PIXELS"
@@ -82,8 +88,9 @@ def main():
         if shifted:
             raise ValueError("FAIL_CHROME_SIBLING_REARRANGED_ORIGINAL")
         print("SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS "
-              "second_real_xdg=1 original_geometry_stable=1 "
-              "sampled_bright_outside=0 full_container_quarantined=1 "
+              f"extra_real_xdg={len(extras)} "
+              "original_geometry_stable=1 sampled_bright_outside=0 "
+              "full_container_quarantined=1 "
               "authority=NONE", flush=True)
     else:
         print("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: "
