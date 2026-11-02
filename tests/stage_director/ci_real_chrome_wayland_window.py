@@ -638,6 +638,64 @@ def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
             "source=seat_container" not in log):
         raise RuntimeError("FAIL_FOCUS_COMPOSITOR_DENIAL_NOT_OBSERVED " +
                            log[-3000:])
+    if e.get("STAGE_DIRECTOR_CI_CHROME_REAL_INPUT") == "1":
+        exe = e.get("STAGE_DIRECTOR_TEST_VIRTUAL_INPUT", "")
+        if (not exe.startswith("/nix/store/") or
+                not Path(exe).is_file() or
+                e.get("CI") != "true" or
+                e.get("GITHUB_ACTIONS") != "true"):
+            raise RuntimeError("BLOCKED_NATIVE_VIRTUAL_INPUT_NOT_PINNED")
+        if "SD_CI_CHROME_SIBLING_QUARANTINED" not in log_before:
+            raise RuntimeError("FAIL_VIRTUAL_INPUT_NO_HIDDEN_CHROME_SCENE")
+        original_rect = nodes[original_id].get("rect") or {}
+        sibling_rect = nodes[sibling_id].get("rect") or {}
+        # Existing SceneFX clip = local geometry x+96..416, y+96..336.
+        # Choose real compositor coordinates clearly inside that crop.
+        main_x = int(original_rect["x"]) + 160
+        main_y = int(original_rect["y"]) + 160
+        sibling_x = int(sibling_rect["x"]) + int(sibling_rect["width"]) // 2
+        sibling_y = int(sibling_rect["y"]) + int(sibling_rect["height"]) // 2
+        if not (0 <= main_x < 1920 and 0 <= main_y < 1080 and
+                0 <= sibling_x < 1920 and 0 <= sibling_y < 1080):
+            raise RuntimeError("BLOCKED_NATIVE_INPUT_COORDINATES_OUT_OF_OUTPUT")
+        def send(*args):
+            print(call(exe, *args, timeout=15), flush=True)
+        pos = len(log_path.read_text(encoding="utf-8", errors="replace"))
+        send("keyboard")
+        key_log = log_path.read_text(
+            encoding="utf-8", errors="replace")[pos:]
+        if ("SD_CI_NATIVE_INPUT_DELIVERED kind=KEYBOARD target=MAIN" not in
+                key_log or
+                "kind=KEYBOARD target=HIDDEN_SIBLING" in key_log):
+            raise RuntimeError(
+                "FAIL_NATIVE_KEY_DELIVERY_TARGET " + key_log[-2700:])
+        pos = len(log_path.read_text(encoding="utf-8", errors="replace"))
+        send("pointer", str(main_x), str(main_y))
+        main_pointer_log = log_path.read_text(
+            encoding="utf-8", errors="replace")[pos:]
+        if ("SD_CI_NATIVE_INPUT_DELIVERED kind=POINTER target=MAIN"
+                not in main_pointer_log):
+            raise RuntimeError("FAIL_NATIVE_POINTER_VISIBLE_POSITIVE " +
+                               main_pointer_log[-2700:])
+        pos = len(log_path.read_text(encoding="utf-8", errors="replace"))
+        send("pointer", str(sibling_x), str(sibling_y))
+        sibling_pointer_log = log_path.read_text(
+            encoding="utf-8", errors="replace")[pos:]
+        if "kind=POINTER target=HIDDEN_SIBLING" in sibling_pointer_log:
+            raise RuntimeError("FAIL_NATIVE_POINTER_REACHED_HIDDEN_SIBLING")
+        # Return actual cursor to the visible, clipped Chrome region
+        # before the independent scene screenshot pixel check.
+        send("pointer", str(main_x), str(main_y))
+        post_tree, post_nodes = view_state()
+        if (not post_nodes[original_id].get("focused") or
+                post_nodes[sibling_id].get("focused") or
+                post_nodes[original_id].get("rect") != initial_rect):
+            raise RuntimeError("FAIL_VIRTUAL_INPUT_CHANGED_NATIVE_SEAT_OR_GEOMETRY")
+        print("SD_CI_CHROME_REAL_INPUT: result=PASS "
+              "native_virtual_keyboard=1 native_virtual_pointer=1 "
+              "visible_keyboard_target=MAIN hidden_keyboard_target=NONE "
+              "visible_pointer_target=MAIN hidden_pointer_target=NOT_SIBLING "
+              "exact_native_xdg=1 authority=NONE", flush=True)
     photo = temp / "sd-ci-chrome-hidden-focus-denied.ppm"
     tree_file = temp / "sd-ci-chrome-hidden-focus-denied-tree.json"
     tree_file.write_text(json.dumps(tree), encoding="utf-8")
