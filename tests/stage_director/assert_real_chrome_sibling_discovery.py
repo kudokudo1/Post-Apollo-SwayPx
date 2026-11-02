@@ -40,9 +40,10 @@ def main():
     strict = len(sys.argv) >= 7 and sys.argv[6] == "--require-contained"
     require_extras = 1
     if len(sys.argv) == 9:
-        if not strict or sys.argv[7:9] != ["--require-extras", "2"]:
+        if (not strict or sys.argv[7] != "--require-extras" or
+                sys.argv[8] not in ("1", "2")):
             raise ValueError("BLOCKED_UNKNOWN_CHROME_SIBLING_ASSERTION_MODE")
-        require_extras = 2
+        require_extras = int(sys.argv[8])
     elif len(sys.argv) == 7 and not strict:
         raise ValueError("BLOCKED_UNKNOWN_CHROME_SIBLING_ASSERTION_MODE")
     before, total = high_outside(sys.argv[1])
