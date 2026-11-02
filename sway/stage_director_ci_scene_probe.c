@@ -29,7 +29,13 @@
  */
 static struct sway_view *ci_render_actor;
 /* One second native Chrome XDG window in a disposable CI test only. */
-static struct sway_view *ci_sibling_actor;
+/* Explicit bound: CI-only test fixtures never admit unlimited siblings.
+ * Every retained native view must be re-disabled after each layout pass.
+ * Slots are reclaimed on view unmap, including close/reopen. */
+#define CI_CHROME_SIBLING_SLOTS 8
+static struct sway_view *ci_sibling_actors[CI_CHROME_SIBLING_SLOTS];
+static unsigned ci_sibling_added;
+static unsigned ci_sibling_revoked;
 static struct wlr_box ci_render_clip;
 static struct wlr_box ci_render_geometry;
 /* The timer and request file are available exclusively in the independently
@@ -141,10 +147,17 @@ bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer
 }
 
 void stage_director_ci_scene_probe_restore(struct sway_view *view) {
-	if (view && ci_sibling_actor == view) {
-		ci_sibling_actor = NULL;
-		wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_UNMAPPED pointer_revoked=1 authority=NONE");
-		return;
+	if (view) {
+		for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
+			if (ci_sibling_actors[i] != view) continue;
+			ci_sibling_actors[i] = NULL;
+			++ci_sibling_revoked;
+			wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_UNMAPPED "
+				"slot=%zu pointer_revoked=1 added=%u revoked=%u "
+				"authority=NONE result=PASS",
+				i, ci_sibling_added, ci_sibling_revoked);
+			return;
+		}
 	}
 	if (!view || ci_render_actor != view) return;
 	if (ci_mask_request_timer) {
@@ -276,11 +289,13 @@ static void ci_draw_node(struct wlr_scene_node *node, int depth,
 void stage_director_ci_scene_probe_post_layout(void) {
 	/* Sway's layout transactions can re-enable a window's scene.
 	 * Reapply this isolated CI-only full-container quarantine. */
-	if (ci_sibling_actor && ci_sibling_actor->container &&
-			!ci_sibling_actor->container->node.destroying &&
-			ci_sibling_actor->container->scene_tree) {
+	for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
+		struct sway_view *sibling = ci_sibling_actors[i];
+		if (!sibling || !sibling->container ||
+				sibling->container->node.destroying ||
+				!sibling->container->scene_tree) continue;
 		wlr_scene_node_set_enabled(
-			&ci_sibling_actor->container->scene_tree->node, false);
+			& sibling->container->scene_tree->node, false);
 	}
 	struct sway_view *view = ci_render_actor;
 	if (!view || !view->surface || !view->content_tree || !view->container ||
@@ -453,22 +468,35 @@ void stage_director_ci_scene_probe_quarantine_chrome_sibling(
 		struct sway_view *view) {
 	if (!stage_director_ci_scene_probe_is_chrome_sibling(view) ||
 			!view->container || !view->container->scene_tree) return;
-	if (ci_sibling_actor && ci_sibling_actor != view) {
-		/* A third window is not admitted by this limited CI experiment.
-		 * Fail closed for its scene too, without replacing the held pointer. */
-		wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
-		wlr_log(WLR_ERROR, "SD_CI_CHROME_EXTRA_TOPLEVEL_DENIED "
-			"third_native_actor=1 scene_disabled=1 authority=NONE");
+	/* Idempotent: observe_container can call us repeatedly for one view. */
+	size_t vacant = CI_CHROME_SIBLING_SLOTS;
+	for (size_t i = 0; i < CI_CHROME_SIBLING_SLOTS; ++i) {
+		if (ci_sibling_actors[i] == view) {
+			wlr_scene_node_set_enabled(
+				&view->container->scene_tree->node, false);
+			return;
+		}
+		if (!ci_sibling_actors[i] && vacant == CI_CHROME_SIBLING_SLOTS) {
+			vacant = i;
+		}
+	}
+	/* This bounded fixture must never quietly call a ninth untracked scene
+	 * 'contained'. Disable it now, and record an explicit CI failure.
+	 * A larger population requires a separately reviewed capacity contract. */
+	wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
+	if (vacant == CI_CHROME_SIBLING_SLOTS) {
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_SIBLING_CAPACITY_EXCEEDED "
+			"limit=%d scene_disabled_once=1 verification=FAIL authority=NONE",
+			CI_CHROME_SIBLING_SLOTS);
 		return;
 	}
-	ci_sibling_actor = view;
-	/* The sibling was inserted directly into the floating workspace before
-	 * the normal tile layout, avoiding any original-actor resize/reflow.
-	 * After the native map hook, keep all its scene descendants disabled. */
-	wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
+	ci_sibling_actors[vacant] = view;
+	++ci_sibling_added;
 	wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_QUARANTINED "
 		"native_cgroup=1 whole_container_scene_disabled=1 "
-		"production=OFF authority=NONE result=PASS");
+		"slot=%zu added=%u revoked=%u production=OFF "
+		"authority=NONE result=PASS",
+		vacant, ci_sibling_added, ci_sibling_revoked);
 }
 
 /* Any actual XDG popup is placed under root->layers.popup by Sway's

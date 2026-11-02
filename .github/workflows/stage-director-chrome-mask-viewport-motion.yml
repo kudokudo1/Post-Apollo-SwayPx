@@ -153,6 +153,18 @@ jobs:
           assert 'assert_chrome_main_rect_stable(' in test
           assert '"--property=TasksMax=256"' in test
           assert 'FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK' in test
+          assert 'CI_CHROME_SIBLING_SLOTS 8' in p
+          assert 'ci_sibling_actors[CI_CHROME_SIBLING_SLOTS]' in p
+          assert 'SD_CI_CHROME_SIBLING_CAPACITY_EXCEEDED' in p
+          assert 'ci_sibling_actors[i] = NULL;' in p
+          assert '++ci_sibling_revoked;' in p
+          assert 'SD_CI_CHROME_MULTI_SIBLING_LIFECYCLE: result=PASS' in test
+          assert 'FAIL_MULTI_CHROME_SCENE_SLOT_LIFECYCLE' in test
+          assert 'STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING' in sibling_shell
+          assert 'stages=3' in sibling_shell
+          assert 'SIBLING$stage' in sibling_shell
+          assert '--require-extras' in sibling_check
+          assert 'FAIL_SIBLING_INSUFFICIENT_NATIVE_XDG_WINDOWS' in sibling_check
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
@@ -228,7 +240,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -280,9 +292,12 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
-          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" ]]; then
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT=1" >> "$GITHUB_ENV"
+            if [[ "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
+              echo "STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING=1" >> "$GITHUB_ENV"
+            fi
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           fi
@@ -348,6 +363,15 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-sibling-after-tree.json
             ${{ runner.temp }}/sd-ci-chrome-sibling-failed-tree.json
             ${{ runner.temp }}/sd-ci-chrome-geometry-changed-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-multi-two-open.ppm
+            ${{ runner.temp }}/sd-ci-chrome-multi-two-open.png
+            ${{ runner.temp }}/sd-ci-chrome-multi-two-open-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-multi-after-close.ppm
+            ${{ runner.temp }}/sd-ci-chrome-multi-after-close.png
+            ${{ runner.temp }}/sd-ci-chrome-multi-after-close-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-multi-reopened.ppm
+            ${{ runner.temp }}/sd-ci-chrome-multi-reopened.png
+            ${{ runner.temp }}/sd-ci-chrome-multi-reopened-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -356,5 +380,6 @@ jobs:
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
-          echo "The chrome-second-toplevel matrix job now requires a real Chrome-generated second native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry. Source and screenshot proof remain separate." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-second-toplevel matrix job requires a real Chrome-generated native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-multi-toplevel job separately requires two extra simultaneous Chrome XDG roots, a native close followed by a different reopened native XDG root, scene-slot unmap revocation and three real screenshots. It does not claim continuous transient-frame or input/focus containment." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
