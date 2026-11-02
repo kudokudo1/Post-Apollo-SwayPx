@@ -382,7 +382,7 @@ def main() -> None:
                              os.O_CREAT | os.O_EXCL | os.O_WRONLY |
                              getattr(os, "O_NOFOLLOW", 0), 0o600)
                 try:
-                    os.write(fd, b"PHASE3\\n")
+                    os.write(fd, b"PHASE3\n")
                 finally:
                     os.close(fd)
                 third_evidence = False
