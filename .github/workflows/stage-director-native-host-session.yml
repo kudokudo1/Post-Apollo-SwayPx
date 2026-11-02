@@ -8,6 +8,8 @@ on:
     paths:
       - 'include/sway/stage_director_news_host_session.h'
       - 'sway/stage_director_news_host_session.c'
+      - 'include/sway/stage_director_news_viewport_candidate.h'
+      - 'sway/stage_director_news_viewport_candidate.c'
       - 'sway/stage_director_viewport.c'
       - 'sway/stage_director_weather_host.c'
       - 'include/sway/stage_director_weather_host.h'
