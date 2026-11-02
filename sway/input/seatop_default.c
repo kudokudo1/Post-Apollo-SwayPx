@@ -12,6 +12,9 @@
 #include "sway/layers.h"
 #include "sway/output.h"
 #include "sway/server.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/scene_descriptor.h"
 #include "sway/tree/view.h"
 #include "sway/tree/workspace.h"
@@ -615,6 +618,9 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	if (surface) {
 		if (seat_is_input_allowed(seat, surface)) {
 			wlr_seat_pointer_notify_enter(seat->wlr_seat, surface, sx, sy);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+			stage_director_ci_scene_probe_record_input_delivery(surface, false);
+#endif
 			wlr_seat_pointer_notify_motion(seat->wlr_seat, time_msec, sx, sy);
 		}
 	} else {
@@ -1113,6 +1119,9 @@ static void handle_rebase(struct sway_seat *seat, uint32_t time_msec) {
 	if (surface) {
 		if (seat_is_input_allowed(seat, surface) && !cursor->hidden) {
 			wlr_seat_pointer_notify_enter(seat->wlr_seat, surface, sx, sy);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+			stage_director_ci_scene_probe_record_input_delivery(surface, false);
+#endif
 			wlr_seat_pointer_notify_motion(seat->wlr_seat, time_msec, sx, sy);
 		}
 	} else {
