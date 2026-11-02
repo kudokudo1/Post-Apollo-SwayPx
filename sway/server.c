@@ -63,6 +63,8 @@
 #include "sway/input/input-manager.h"
 #include "sway/output.h"
 #include "sway/server.h"
+#include "sway/stage_director_weather_watch_protocol.h"
+#include "sway/stage_director.h"
 #include "sway/input/cursor.h"
 #include "sway/tree/root.h"
 #include "sway/tree/workspace.h"
@@ -134,6 +136,17 @@ static bool is_privileged(const struct wl_global *global) {
 
 static bool filter_global(const struct wl_client *client,
 		const struct wl_global *global, void *data) {
+	/*
+	 * The private WATCH global appears only after native pairing. Filter
+	 * discovery by the selected wl_client, then recheck independently in
+	 * bind and request handlers. Never fall through to generic unsandboxed
+	 * protocol privileges for this control surface.
+	 */
+	if (stage_director_weather_watch_protocol_is_global(global)) {
+		return stage_director_news_watch_selected_client(
+			(struct wl_client *)client);
+	}
+
 #if WLR_HAS_XWAYLAND
 	struct wlr_xwayland *xwayland = server.xwayland.wlr_xwayland;
 	if (xwayland && global == xwayland->shell_v1->global) {
@@ -254,6 +267,7 @@ bool server_init(struct sway_server *server) {
 	server->wl_event_loop = wl_display_get_event_loop(server->wl_display);
 
 	wl_display_set_global_filter(server->wl_display, filter_global, NULL);
+	stage_director_weather_watch_protocol_init(server->wl_display);
 	wl_display_set_default_max_buffer_size(server->wl_display, 1024 * 1024);
 
 	if (!wlr_fixes_create(server->wl_display, 1)) {
@@ -718,6 +732,7 @@ bool server_init(struct sway_server *server) {
 }
 
 void server_fini(struct sway_server *server) {
+	stage_director_weather_watch_protocol_finish();
 	// remove listeners
 	wl_list_remove(&server->renderer_lost.link);
 	wl_list_remove(&server->new_output.link);

@@ -35,6 +35,9 @@
 #include "sway/tree/arrange.h"
 #include "sway/tree/container.h"
 #include "sway/tree/root.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/tree/view.h"
 #include "sway/tree/workspace.h"
 
@@ -329,7 +332,17 @@ void output_configure_scene(struct sway_output *output, struct wlr_scene_node *n
 
 		int content_width = closest_con->animation_state.current_content_width;
 		int content_height = closest_con->animation_state.current_content_height;
-		wlr_scene_buffer_set_dest_size(buffer, MAX(content_width, 0), MAX(content_height, 0));
+		/* Per-frame default destination wins over post-layout changes unless
+		 * the isolated NEWS CI actor explicitly reserves its crop. Production
+		 * is unchanged: SD_STAGE_DIRECTOR_CI_SCENE_PROBE defaults OFF. */
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+		if (!stage_director_ci_scene_probe_preserve_dest(buffer)) {
+#endif
+			wlr_scene_buffer_set_dest_size(buffer,
+				MAX(content_width, 0), MAX(content_height, 0));
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+		}
+#endif
 	} else if (node->type == WLR_SCENE_NODE_BLUR && closest_con) {
 		struct wlr_scene_blur *blur = wlr_scene_blur_from_node(node);
 

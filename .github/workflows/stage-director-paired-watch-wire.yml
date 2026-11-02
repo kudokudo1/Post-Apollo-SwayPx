@@ -1,0 +1,124 @@
+name: Stage Director paired Weather WATCH protocol (zero authority)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/native-input-pairing-v0-20261031
+    paths:
+      - 'protocols/post-apollo-weather-watch-v1.xml'
+      - 'protocols/meson.build'
+      - 'include/sway/stage_director.h'
+      - 'include/sway/stage_director_weather_watch_protocol.h'
+      - 'include/sway/stage_director_news_host_session.h'
+      - 'sway/meson.build'
+      - 'sway/server.c'
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_weather_watch_protocol.c'
+      - 'sway/stage_director_news_host_session.c'
+      - 'tests/stage_director/test_private_weather_watch_wire.c'
+      - '.github/workflows/stage-director-paired-watch-wire.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-paired-wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Wayland protocol scanner and native libraries
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y libwayland-dev libwayland-bin pkg-config
+      - name: Verify origin, lifetime, zero-authority and build boundaries
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          xml = Path("protocols/post-apollo-weather-watch-v1.xml").read_text()
+          prot = Path("sway/stage_director_weather_watch_protocol.c").read_text()
+          sd = Path("sway/stage_director.c").read_text()
+          server = Path("sway/server.c").read_text()
+          session = Path("sway/stage_director_news_host_session.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert '<request name="watch">' in xml
+          assert '<request name="close"/>' in xml
+          assert '<request name="destroy" type="destructor"/>' in xml
+          assert 'type="string"' in xml
+          assert 'wl_global_create(' in prot
+          assert 'stage_director_news_watch_selected_client(client)' in prot
+          assert 'stage_director_news_watch_probe_request(resource)' in prot
+          assert 'request_epoch_current(client, resource)' in prot
+          assert 'stage_director_news_watch_current_epoch(client)' in prot
+          assert 'binding->pairing_epoch' in prot
+          assert 'destroy_binding' in prot
+          assert 'wl_client_post_implementation_error(' in prot
+          assert 'stage_director_weather_watch_protocol_is_global(global)' in server
+          assert 'stage_director_news_watch_selected_client(' in server
+          assert 'stage_director_weather_watch_protocol_publish()' in sd
+          assert 'stage_director_news_host_session_probe_request(' in sd
+          assert 'stage_director_news_host_session_on_revoked(' in sd
+          assert 'session->on_revoked(session->on_revoked_data);' in session
+          assert "'stage_director_weather_watch_protocol.c'," in meson
+          assert "'post-apollo-weather-watch-v1.xml'," in Path("protocols/meson.build").read_text()
+          # No code paths may spawn a browser or authorize compositor mutation.
+          for forbidden in ('posix_spawn(', 'fork(', 'execve(', 'system(',
+                            'wlr_scene_', 'wlr_seat_', 'can_launch = true',
+                            'can_clip = true', 'can_accept_input = true'):
+              assert forbidden not in prot, forbidden
+          for file in ('sway/ipc-server.c', 'sway/commands.c'):
+              s = Path(file).read_text()
+              assert 'stage_director_weather_watch_protocol_publish(' not in s
+              assert 'stage_director_news_pairing_select_at(' not in s
+          print("SD_WATCH_ORIGIN_BOUNDARY: dynamic private global, native "
+                "request checks, revoke hooks, no launch/scene/seat PASS")
+          PY
+      - name: Generate production protocol bindings and compile
+        run: |
+          set -euo pipefail
+          xml=protocols/post-apollo-weather-watch-v1.xml
+          wayland-scanner server-header "$xml" "$RUNNER_TEMP/post-apollo-weather-watch-v1-protocol.h"
+          wayland-scanner client-header "$xml" "$RUNNER_TEMP/post-apollo-weather-watch-v1-client-protocol.h"
+          wayland-scanner private-code "$xml" "$RUNNER_TEMP/weather-watch-protocol.c"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -pthread \
+            -Iinclude -I"$RUNNER_TEMP" \
+            $(pkg-config --cflags wayland-server wayland-client) \
+            sway/stage_director_weather_watch_protocol.c \
+            "$RUNNER_TEMP/weather-watch-protocol.c" \
+            tests/stage_director/test_private_weather_watch_wire.c \
+            -o "$RUNNER_TEMP/private-weather-watch-wire" \
+            $(pkg-config --libs wayland-server wayland-client)
+      - name: Run private real-socket/guessed-bind test
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/private-weather-watch-wire"
+      - name: State non-authorizing evidence
+        if: always()
+        run: |
+          echo "Native protocol test does not authenticate physical gesture, perform a Qt bridge, launch a browser or grant compositor input/render authority." >> "$GITHUB_STEP_SUMMARY"
+
+  full-swaypx-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile normal SwayPX with generated private protocol
+        run: |
+          set -euo pipefail
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$result/bin/sway"
+          echo "Verified ordinary SwayPX compiled: $result"
+          echo "Not deployed and all WATCH, browser, rendering and input authority remain off."

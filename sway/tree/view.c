@@ -28,6 +28,10 @@
 #include "sway/output.h"
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/server.h"
 #include "sway/sway_text_node.h"
 #include "sway/tree/arrange.h"
@@ -947,6 +951,13 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 		view_set_tiled(view, true);
 	}
 
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* A specific, kernel-matched CI Chrome wl_client may be borderless,
+	 * without modifying config->border or any other mapped Wayland view.
+	 * This code is absent from the ordinary SwayPX binary. */
+	(void)stage_director_ci_scene_probe_borderless_verified_actor(view);
+#endif
+
 	if (config->popup_during_fullscreen == POPUP_LEAVE &&
 			container->pending.workspace &&
 			container->pending.workspace->fullscreen &&
@@ -998,9 +1009,12 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	} else if ((class = view_get_class(view)) != NULL) {
 		wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel, class);
 	}
+
+	stage_director_view_mapped(view);
 }
 
 void view_unmap(struct sway_view *view) {
+	stage_director_view_unmapped(view);
 	wl_signal_emit_mutable(&view->events.unmap, view);
 
 	view->executed_criteria->length = 0;
@@ -1134,6 +1148,8 @@ void view_update_app_id(struct sway_view *view) {
 	if (view->ext_foreign_toplevel) {
 		update_ext_foreign_toplevel(view);
 	}
+
+	stage_director_view_identity_changed(view);
 }
 
 void view_update_title(struct sway_view *view, bool force) {
@@ -1186,6 +1202,8 @@ void view_update_title(struct sway_view *view, bool force) {
 	if (view->ext_foreign_toplevel) {
 		update_ext_foreign_toplevel(view);
 	}
+
+	stage_director_view_identity_changed(view);
 }
 
 bool view_is_visible(struct sway_view *view) {

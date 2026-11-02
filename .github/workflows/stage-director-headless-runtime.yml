@@ -1,0 +1,241 @@
+name: Stage Director isolated headless SwayPX runtime smoke
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/isolated-full-build-v0-20261026
+      - stage-director/headless-runtime-smoke-20261026
+      - stage-director/scenefx-software-headless-v0-20261026
+      - stage-director/ci-udmabuf-access-v0-20261026
+      - stage-director/news-native-actor-smoke-v0-20261026
+      - stage-director/ci-mapped-move-pixel-probe-20261027
+      - stage-director/ci-scenefx-render-pass-trace-20261027
+      - stage-director/news-frame-policy-contract-20261027
+      - stage-director/ci-native-wayland-client-credentials-20261027
+      - stage-director/ci-native-news-pidfd-lifetime-20261027
+      - stage-director/ci-native-child-lineage-20261027
+      - stage-director/weather-native-host-wayland-peer-20261031
+      - stage-director/news-scene-clip-probe-ci-v0-20261026
+    paths:
+      - 'sway/**'
+      - 'include/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - 'tests/stage_director/ci_udmabuf_smoke.sh'
+      - 'tests/stage_director/ci_native_news_actor_smoke.sh'
+      - 'tests/stage_director/ci_native_news_pidfd_witness.c'
+      - 'tests/stage_director/ci_native_child_lineage_witness.c'
+      - 'tests/stage_director/ci_real_layer_host.c'
+      - 'tests/stage_director/ci_real_layer_host.nix'
+      - 'tests/stage_director/ci_real_layer_host_smoke.sh'
+      - 'tests/stage_director/assert_native_news_actor.py'
+      - 'tests/stage_director/test_ci_scene_probe_boundary.py'
+      - 'tests/stage_director/assert_news_render_pixels.py'
+      - 'tests/stage_director/compare_news_reallocated_pixels.py'
+      - 'tests/stage_director/compare_news_cold_pixels.py'
+      - 'tests/stage_director/compare_news_moved_pixels.py'
+      - 'tests/stage_director/compare_news_opacity_pixels.py'
+      - 'tests/stage_director/compare_news_background_pixels.py'
+      - 'tests/stage_director/ci_scenefx_render_trace.py'
+      - 'tests/stage_director/ci_scenefx_render_trace.nix'
+      - 'tests/stage_director/test_ci_render_pixel_boundary.py'
+      - 'meson_options.txt'
+      - '.github/workflows/stage-director-headless-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage-director-headless-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm source-pinned software EGL render branch
+        run: |
+          set -euo pipefail
+          echo "Pinned SceneFX revision 26200c5 includes WLR_RENDERER_FORCE_SOFTWARE"
+          echo "The test script selects that SceneFX software EGL branch on this disposable runner."
+      - name: Install Nix on isolated runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile full SwayPX, no deployment
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/swaypx-headless-store-path.txt"
+          output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
+          test -x "$output/bin/sway"
+      - name: Build CI-only wlroots scene probe separately from normal SwayPX
+        run: |
+          set -euo pipefail
+          python3 tests/stage_director/test_ci_scene_probe_boundary.py
+          python3 tests/stage_director/test_ci_render_pixel_boundary.py
+          # Separate pinned SceneFX derivation with CI-only scene+GLES
+          # telemetry. The ordinary compositor was already compiled above.
+          # Source contract: -Dsd-ci-news-scene-probe=true remains required
+          # inside ci_scenefx_render_trace.nix; this workflow cannot bypass it.
+          probe="$(nix build --impure --expr 'import ./tests/stage_director/ci_scenefx_render_trace.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$probe/bin/sway"
+          echo "$probe" > "$RUNNER_TEMP/swaypx-headless-store-path.txt"
+          echo "STAGE_DIRECTOR_CI_SCENE_PROBE=1" >> "$GITHUB_ENV"
+          echo "Built a distinct, test-only compositor; default package remains unchanged."
+      - name: Resolve Mesa EGL vendor and software drivers from the locked Nixpkgs
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          echo "Pinned Mesa output: $mesa"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Prepare one native Wayland actor from pinned Nixpkgs
+        run: |
+          set -euo pipefail
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
+          test -x "$foot/bin/foot"
+          test -x "$compositor/bin/swaymsg"
+          # Guard against running an unexpectedly stale binary whose
+          # source-level observer was present only in the checkout.
+          if ! grep -aFq '[stage-director][SD1][NEWS_HOST_PEER]' "$compositor/bin/sway"; then
+            echo "FAIL: CI compositor binary lacks compiled native host peer observer" >&2
+            exit 1
+          fi
+          echo "SD_CI_LAYER_HOST_BINARY peer_observer_linked=1 authority=NONE"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          # Standalone CI-only program: a held kernel pidfd for the exact
+          # already-mapped disposable Wayland peer, never a browser launcher.
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_news_custody.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/ci_native_news_pidfd_witness.c \
+            -o "$RUNNER_TEMP/sd1-pidfd-witness"
+          test -x "$RUNNER_TEMP/sd1-pidfd-witness"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_evidence.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/ci_native_child_lineage_witness.c \
+            -o "$RUNNER_TEMP/sd1-child-lineage-witness"
+          test -x "$RUNNER_TEMP/sd1-child-lineage-witness"
+          echo "STAGE_DIRECTOR_TEST_CHILD_LINEAGE_WITNESS=$RUNNER_TEMP/sd1-child-lineage-witness" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_CHILD_LINEAGE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_PIDFD_WITNESS=$RUNNER_TEMP/sd1-pidfd-witness" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_PIDFD_WITNESS=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_PROBE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FX_PASS_TRACE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_FRAME_DEST_OVERRIDE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_RENDER_NORMALIZE=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_PIXEL_TEST=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_OUTPUT_REALLOC=0" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_MOVE_PIXEL=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_OPACITY_PIXEL=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_BACKGROUND_REFRESH=1" >> "$GITHUB_ENV"
+          # Build the real minimal wlr-layer-shell client using the pinned
+          # protocol XML and the same locked Nixpkgs as the test compositor.
+          # It maps three disposable SHM surfaces, no Qt/GTK/NEWS browser.
+          layer="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_layer_host.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$layer/bin/sd-ci-real-layer-host"
+          echo "STAGE_DIRECTOR_TEST_LAYER_HOST=$layer/bin/sd-ci-real-layer-host" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_REAL_LAYER_HOST=1" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "The disposable actor uses a spoofable app_id as a candidate only."
+      - name: Compare two independently started CI compositors with fail-closed pixels
+        run: |
+          set -euo pipefail
+          output="$(tail -n 1 "$RUNNER_TEMP/swaypx-headless-store-path.txt")"
+          # Separate compositor processes and separate graphics/output allocations.
+          # Do not issue the live-mode-change command that faults Mesa llvmpipe.
+          STAGE_DIRECTOR_CI_COLD_STAGE=initial STAGE_DIRECTOR_CI_COLD_SIZE=1920x1080 \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+          STAGE_DIRECTOR_CI_COLD_STAGE=fresh STAGE_DIRECTOR_CI_COLD_SIZE=1888x1056 \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$output/bin/sway"
+
+          compare_result=0
+          move_result=0
+          opacity_result=0
+          background_result=0
+          background_pixel_result=0
+          restored_pixel_result=0
+          python3 tests/stage_director/compare_news_background_pixels.py \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-background-refreshed.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" \
+            "$RUNNER_TEMP/stage-director-background-refreshed-tree.json" || background_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-background-refreshed.ppm" \
+            "$RUNNER_TEMP/stage-director-background-refreshed-tree.json" || background_pixel_result=$?
+          moved_pixel_result=0
+          python3 tests/stage_director/compare_news_opacity_pixels.py \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-zero.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" \
+            "$RUNNER_TEMP/stage-director-opacity-zero-tree.json" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" || opacity_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-opacity-one.ppm" \
+            "$RUNNER_TEMP/stage-director-opacity-one-tree.json" || restored_pixel_result=$?
+          initial_result=0
+          fresh_result=0
+          python3 tests/stage_director/compare_news_moved_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" || move_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-moved.ppm" \
+            "$RUNNER_TEMP/stage-director-moved-tree.json" || moved_pixel_result=$?
+          python3 tests/stage_director/compare_news_cold_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" \
+            "$RUNNER_TEMP/stage-director-cold-fresh-tree.json" || compare_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-initial.log" \
+            "$RUNNER_TEMP/stage-director-cold-initial.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-initial-tree.json" || initial_result=$?
+          python3 tests/stage_director/assert_news_render_pixels.py \
+            "$RUNNER_TEMP/stage-director-cold-fresh.log" \
+            "$RUNNER_TEMP/stage-director-cold-fresh.ppm" \
+            "$RUNNER_TEMP/stage-director-cold-fresh-tree.json" || fresh_result=$?
+          if [[ "$compare_result" -ne 0 || "$move_result" -ne 0 || "$opacity_result" -ne 0 || "$background_result" -ne 0 || "$moved_pixel_result" -ne 0 || "$restored_pixel_result" -ne 0 || "$background_pixel_result" -ne 0 || "$initial_result" -ne 0 || "$fresh_result" -ne 0 ]]; then
+            echo "FAIL: cold_comparison=$compare_result moved_comparison=$move_result opacity=$opacity_result background=$background_result moved_pixel=$moved_pixel_result restored_pixel=$restored_pixel_result background_pixel=$background_pixel_result initial_pixel=$initial_result fresh_pixel=$fresh_result" >&2
+            exit 1
+          fi
+          echo "Stage Director two independent native-render pixel captures: PASS"
+      - name: Publish isolated pixel screenshot for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-director-news-ci-pixel-screenshot
+          path: ${{ runner.temp }}/stage-director-render-evidence*.png
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: State smoke-test limits
+        if: always()
+        run: |
+          echo "## Stage Director // Headless runtime" >> "$GITHUB_STEP_SUMMARY"
+          echo "This runs the built compositor using WLR_BACKENDS=headless on a disposable runner." >> "$GITHUB_STEP_SUMMARY"
+          echo "It creates no NEWS/browser viewer and does not establish paint, popup or input containment." >> "$GITHUB_STEP_SUMMARY"
+          echo "The operator's live SwayFX and Quickshell are never touched." >> "$GITHUB_STEP_SUMMARY"

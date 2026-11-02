@@ -8,6 +8,10 @@
 #include "sway/animation_manager.h"
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include "sway/stage_director_ci_scene_probe.h"
+#endif
 #include "sway/desktop/idle_inhibit_v1.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
@@ -76,6 +80,18 @@ static void anim_update_callback(void *data) {
 
 	struct animation *animation = &con->animation_state.animation;
 
+	/*
+	 * A burst of closes can mark a container destroying while an older
+	 * move/resize animation is still queued. Never let that stale animation
+	 * touch the container again. Close animations are intentionally allowed:
+	 * transaction_destroy owns them until their completion callback frees the
+	 * container.
+	 */
+	if (con->node.destroying &&
+			animation->event != ANIMATION_EVENT_CLOSE) {
+		return;
+	}
+
 	int width;
 	int height;
 	int x;
@@ -124,7 +140,7 @@ static void anim_update_callback(void *data) {
 	bool title_bar = con_has_title_bar(con);
 	_arrange_container(con, width, height, x, y, title_bar, 0);
 	// refresh decorations for parent-managed title bars (tabbed/stacked)
-	if (!title_bar) {
+	if (!title_bar && !con->node.destroying) {
 		container_update(con);
 	}
 }
@@ -136,6 +152,9 @@ static void close_anim_complete_callback(void *data) {
 }
 
 static void _fade_container_update(struct sway_container *con, void *data) {
+	if (con->node.destroying) {
+		return;
+	}
 	// skip redundant update if the container is also being animated
 	if (con->animation_state.animation.initialized) {
 		return;
@@ -428,6 +447,8 @@ static void apply_container_state(struct sway_container *container,
 		if (view->surface) {
 			view_center_and_clip_surface(view);
 		}
+
+		stage_director_observe_container(container, "transaction");
 	}
 }
 
@@ -466,6 +487,9 @@ static void arrange_container(struct sway_container *con,
 
 static void arrange_inactive_child(struct sway_container *child,
 		int width, int height, int y_pos) {
+	if (child->node.destroying) {
+		return;
+	}
 	finish_animation(&child->animation_state.animation);
 	wlr_scene_node_set_position(&child->scene_tree->node, 0, y_pos);
 	child->animation_state.current_width = width;
@@ -497,6 +521,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int title_offset = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			bool activated = child == active;
 			int next_title_offset = round(w * i + w);
 
@@ -530,6 +557,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int y = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			bool activated = child == active;
 
 			arrange_title_bar(child, 0, y - title_height, width, title_bar_height);
@@ -552,6 +582,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int off = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			int cheight = child->current.height;
 
 			wlr_scene_node_set_enabled(&child->border.tree->node, true);
@@ -570,6 +603,9 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 		int off = 0;
 		for (int i = 0; i < children->length; i++) {
 			struct sway_container *child = children->items[i];
+			if (child->node.destroying) {
+				continue;
+			}
 			int cwidth = child->current.width;
 
 			wlr_scene_node_set_enabled(&child->border.tree->node, true);
@@ -791,6 +827,17 @@ static void _arrange_container(struct sway_container *con,
 
 static void arrange_container(struct sway_container *con,
 		int width, int height, int x, int y, bool title_bar, int gaps) {
+	/*
+	 * Destruction has its own animation path in transaction_destroy().
+	 * Do not start or retarget normal move/resize/open animations once a
+	 * container has entered teardown. Under rapid auto-kill/reflow bursts,
+	 * queued transactions may still contain an older snapshot of that
+	 * container.
+	 */
+	if (con->node.destroying) {
+		return;
+	}
+
 	if (!config->animation_duration_ms || !con->view
 			|| con->animation_state.seat_is_resizing
 			|| con->animation_state.seat_is_moving_float) {
@@ -915,6 +962,9 @@ static void arrange_fullscreen(struct wlr_scene_tree *tree,
 static void arrange_workspace_floating(struct sway_workspace *ws) {
 	for (int i = 0; i < ws->current.floating->length; i++) {
 		struct sway_container *floater = ws->current.floating->items[i];
+		if (floater->node.destroying) {
+			continue;
+		}
 		struct wlr_scene_tree *layer = root->layers.floating;
 
 		if (floater->current.fullscreen_mode != FULLSCREEN_NONE) {
@@ -960,6 +1010,9 @@ static void disable_workspace(struct sway_workspace *ws) {
 	// be shown.
 	for (int i = 0; i < ws->current.tiling->length; i++) {
 		struct sway_container *child = ws->current.tiling->items[i];
+		if (child->node.destroying) {
+			continue;
+		}
 
 		wlr_scene_node_reparent(&child->scene_tree->node, ws->layers.tiling);
 		disable_container(child);
@@ -967,6 +1020,9 @@ static void disable_workspace(struct sway_workspace *ws) {
 
 	for (int i = 0; i < ws->current.floating->length; i++) {
 		struct sway_container *floater = ws->current.floating->items[i];
+		if (floater->node.destroying) {
+			continue;
+		}
 		wlr_scene_node_reparent(&floater->scene_tree->node, root->layers.floating);
 		disable_container(floater);
 		wlr_scene_node_set_enabled(&floater->scene_tree->node, false);
@@ -1230,6 +1286,9 @@ static void transaction_progress(void) {
 	}
 	transaction_apply(server.queued_transaction);
 	arrange_root(root);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	stage_director_ci_scene_probe_post_layout();
+#endif
 	cursor_rebase_all();
 	transaction_destroy(server.queued_transaction);
 	start_animations();

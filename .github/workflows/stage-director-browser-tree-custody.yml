@@ -1,0 +1,108 @@
+name: Stage Director browser-like process tree custody (CI only)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/live-watch-lease-20261031
+    paths:
+      - 'sway/stage_director_news_supervisor.c'
+      - 'include/sway/stage_director_news_supervisor.h'
+      - 'tests/stage_director/ci_news_tree_actor.c'
+      - 'tests/stage_director/test_news_supervisor_tree.c'
+      - '.github/workflows/stage-director-browser-tree-custody.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-child-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check production paths cannot start the test child or grant authority
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          s=Path("sway/stage_director_news_supervisor.c").read_text()
+          h=Path("include/sway/stage_director_news_supervisor.h").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#ifdef SD_STAGE_DIRECTOR_TEST_TREE" in s
+          assert "#ifdef SD_STAGE_DIRECTOR_TEST_TREE" in h
+          assert "SD_STAGE_DIRECTOR_TEST_TREE" not in meson
+          assert "SD_CI_TREE_ACTOR_PATH" in s
+          assert "posix_spawnattr_setpgroup(&attr, 0)" in s
+          assert "getpgid(s->child_pid) != s->owned_pgid" in s
+          assert "now.start_time_ticks != s->child_start_ticks" in s
+          assert "now.uid != s->child_uid" in s
+          assert "kill(-s->owned_pgid, SIGTERM)" in s
+          assert "SYS_pidfd_send_signal" in s
+          assert "s->owned_pgid > 0 && !s->group_stop_sent" in s
+          for path in ("sway/stage_director.c",
+                       "sway/stage_director_weather_watch_protocol.c",
+                       "sway/ipc-server.c", "sway/commands.c"):
+              t=Path(path).read_text()
+              assert "stage_director_news_supervisor_start_test_tree(" not in t,path
+              assert "stage_director_news_supervisor_request_stop(" not in t,path
+          assert "can_launch_browser = false" in s
+          print("SD_CI_BROWSER_TREE_BOUNDARY: fixed test actor only, "
+                "no production spawn/IPC/Wayland browser authority PASS")
+          PY
+      - name: Compile fixed disposable actor and production supervisor with test-only group constructor
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            tests/stage_director/ci_news_tree_actor.c \
+            -o "$RUNNER_TEMP/sd-ci-tree-actor"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            "-DSD_STAGE_DIRECTOR_TEST_TREE=1" \
+            "-DSD_CI_TREE_ACTOR_PATH=\"$RUNNER_TEMP/sd-ci-tree-actor\"" \
+            -Iinclude sway/stage_director_news_supervisor.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/test_news_supervisor_tree.c \
+            -o "$RUNNER_TEMP/sd-ci-tree-supervisor"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -DSD_STAGE_DIRECTOR_TEST_HELPER=1 \
+            -Iinclude sway/stage_director_news_supervisor.c \
+            sway/stage_director_process_linux.c \
+            tests/stage_director/test_news_supervisor.c \
+            -o "$RUNNER_TEMP/sd-ci-legacy-supervisor"
+      - name: Prove actual child and grandchild receive group stop and are reaped
+        run: |
+          set -euo pipefail
+          timeout 25s "$RUNNER_TEMP/sd-ci-tree-supervisor"
+          timeout 20s "$RUNNER_TEMP/sd-ci-legacy-supervisor"
+      - name: Declare evidence limits
+        if: always()
+        run: |
+          echo "One directly spawned disposable group leader and one same-group descendant only; not Chromium, not a cgroup sandbox." >> "$GITHUB_STEP_SUMMARY"
+          echo "Detached/fork-and-setsid descendants and real browser sandbox/profile/process tree remain unverified." >> "$GITHUB_STEP_SUMMARY"
+
+  production-swaypx-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build normal SwayPX, which contains no process tree test launcher
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          if grep -aFq 'BLOCKED_NOT_DISPOSABLE_TREE_ACTOR' "$prod/bin/sway"; then
+            echo "FAIL: CI-only tree fixture leaked into normal compositor" >&2
+            exit 1
+          fi
+          echo "Ordinary SwayPX with guarded group stop compiled: $prod"
+          echo "No browser started or production WATCH launch activated."

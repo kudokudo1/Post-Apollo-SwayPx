@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="stage_director_ci_watch_request">
+  <!-- Disposable CI-only wire protocol. NOT registered in production SwayPX. -->
+  <interface name="stage_director_ci_watch_v1" version="1">
+    <description summary="non-authorizing WATCH request provenance test">
+      This interface is only instantiated in isolated test code to prove
+      an actual Wayland request arrives through a resource owned by one
+      wl_client. Neither matching a client nor a source key can grant
+      browser, scene, popup, keyboard or input authority.
+    </description>
+    <request name="watch">
+      <arg name="source_id" type="string"/>
+    </request>
+    <request name="close"/>
+  </interface>
+</protocol>
