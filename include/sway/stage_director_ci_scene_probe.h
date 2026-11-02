@@ -16,6 +16,14 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
  */
 bool stage_director_ci_scene_probe_reject_chrome_popup(
 	struct sway_view *view);
+/* CI only: early native cgroup test before the new Chrome sibling's
+ * workspace layout. No untrusted title, app_id or shell assertion. */
+bool stage_director_ci_scene_probe_is_chrome_sibling(
+	struct sway_view *view);
+/* CI only: suppress the *entire* sibling container's scene and any
+ * separate output/decoration paint before renderer presentation. */
+void stage_director_ci_scene_probe_quarantine_chrome_sibling(
+	struct sway_view *view);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
