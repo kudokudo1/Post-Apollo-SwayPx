@@ -11,6 +11,12 @@ on:
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'sway/tree/view.c'
       - 'sway/input/seat.c'
+      - 'sway/input/keyboard.c'
+      - 'sway/input/seatop_default.c'
+      - 'tests/stage_director/ci_virtual_input_event.c'
+      - 'tests/stage_director/ci_virtual_input_event.nix'
+      - 'tests/stage_director/protocols/virtual-keyboard-unstable-v1.xml'
+      - 'tests/stage_director/protocols/wlr-virtual-pointer-unstable-v1.xml'
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'tests/stage_director/headless_sway_smoke.sh'
       - 'tests/stage_director/ci_real_chrome_pixel_compositor.nix'
@@ -165,6 +171,21 @@ jobs:
           assert 'source=seat_direct_root_surface' in p
           assert 'SD_CI_CHROME_FOCUS_CUSTODY: result=PASS' in test
           assert 'FAIL_FOCUS_HIDDEN_CHROME_STOLE_SEAT' in test
+          assert 'SD_CI_CHROME_REAL_INPUT: result=PASS' in test
+          assert 'FAIL_NATIVE_KEY_DELIVERY_TARGET' in test
+          assert 'FAIL_NATIVE_POINTER_VISIBLE_POSITIVE' in test
+          assert 'FAIL_NATIVE_POINTER_REACHED_HIDDEN_SIBLING' in test
+          assert 'SD_CI_NATIVE_INPUT_DELIVERED' in p
+          assert 'stage_director_ci_scene_probe_record_input_delivery(' in native_header
+          assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/keyboard.c').read_text()
+          assert 'stage_director_ci_scene_probe_record_input_delivery(' in Path('sway/input/seatop_default.c').read_text()
+          virt_src=Path('tests/stage_director/ci_virtual_input_event.c').read_text()
+          virt_nix=Path('tests/stage_director/ci_virtual_input_event.nix').read_text()
+          assert 'zwp_virtual_keyboard_v1_key(' in virt_src
+          assert 'zwlr_virtual_pointer_v1_motion_absolute(' in virt_src
+          assert 'BLOCKED_VIRTUAL_INPUT_NON_CI' in virt_src
+          assert 'virtual-keyboard-unstable-v1.xml' in virt_nix
+          assert 'wlr-virtual-pointer-unstable-v1.xml' in virt_nix
           assert 'SD_CI_EARLY_IPC_RESPONSE_MISSED' in test
           assert 'SD_CI_EARLY_IPC_RECOVERED' in test
           assert 'FAIL_EARLY_IPC_RECOVERY_EXHAUSTED' in test
@@ -257,7 +278,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus, chrome-real-input]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -293,6 +314,10 @@ jobs:
             echo "FAIL: test-only sibling focus guard linked into production" >&2
             exit 1
           fi
+          if grep -aFq 'SD_CI_NATIVE_INPUT_DELIVERED' "$prod/bin/sway"; then
+            echo "FAIL: CI virtual-input observer linked into production" >&2
+            exit 1
+          fi
           echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
       - name: Compile test-only compositor and screenshot client separately
         run: |
@@ -304,6 +329,7 @@ jobs:
           grep -aFq 'SD_CI_CHROME_POPUP_DENIED' "$ci/bin/sway"
           grep -aFq 'SD_CI_CHROME_SIBLING_QUARANTINED' "$ci/bin/sway"
           grep -aFq 'SD_CI_CHROME_SIBLING_FOCUS_DENIED' "$ci/bin/sway"
+          grep -aFq 'SD_CI_NATIVE_INPUT_DELIVERED' "$ci/bin/sway"
           echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
@@ -314,13 +340,16 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
-          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" ]]; then
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT=1" >> "$GITHUB_ENV"
             if [[ "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
               echo "STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING=1" >> "$GITHUB_ENV"
-            elif [[ "${{ matrix.exit_mode }}" == "chrome-hidden-focus" ]]; then
+            elif [[ "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" ]]; then
               echo "STAGE_DIRECTOR_CI_CHROME_FOCUS_CUSTODY=1" >> "$GITHUB_ENV"
+              if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" ]]; then
+                echo "STAGE_DIRECTOR_CI_CHROME_REAL_INPUT=1" >> "$GITHUB_ENV"
+              fi
             fi
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
@@ -342,6 +371,11 @@ jobs:
             popup="$(nix build --impure --expr 'import ./tests/stage_director/ci_xdg_popup_witness.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
             test -x "$popup/bin/sd-ci-xdg-popup-witness"
             echo "STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS=$popup/bin/sd-ci-xdg-popup-witness" >> "$GITHUB_ENV"
+          fi
+          if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" ]]; then
+            injector="$(nix build --impure --expr 'import ./tests/stage_director/ci_virtual_input_event.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+            test -x "$injector/bin/sd-ci-virtual-input-event"
+            echo "STAGE_DIRECTOR_TEST_VIRTUAL_INPUT=$injector/bin/sd-ci-virtual-input-event" >> "$GITHUB_ENV"
           fi
       - name: Boot actual headless SwayPX, Chrome and verify four-edge rendered pixels
         run: |
@@ -409,5 +443,6 @@ jobs:
           echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-second-toplevel matrix job requires a real Chrome-generated native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-multi-toplevel job requires two extra simultaneous Chrome XDG roots, exact close/reopen and three real screenshots." >> "$GITHUB_STEP_SUMMARY"
-          echo "The chrome-hidden-focus job attempts Sway IPC native focus on a real invisible Chrome sibling, requires compositor seat focus refusal and unchanged focused original, and rechecks a real screenshot. It does NOT test physical keyboard events, pointer motion, nested surfaces or seat focus from external clients." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-hidden-focus job attempts Sway IPC native focus on a real invisible Chrome sibling, requires native seat refusal and unchanged original focus; no actual keys or pointer tested in that lane." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-real-input lane uses actual Wayland virtual keyboard KEY_A and virtual-pointer motion with exact compositor root-surface delivery markers, requiring visible Chrome delivery and no hidden sibling target. It does NOT verify arbitrary descendants/subsurfaces or production input authority." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
