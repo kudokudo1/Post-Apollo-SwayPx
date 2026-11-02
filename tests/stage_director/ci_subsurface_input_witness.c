@@ -23,6 +23,7 @@ struct state {
 	struct wl_shm *shm;
 	struct wl_seat *seat;
 	struct wl_pointer *pointer;
+	struct wl_surface *last_pointer_surface;
 	struct xdg_wm_base *wm;
 	struct wl_surface *parent, *child;
 	struct wl_subsurface *sub;
@@ -114,13 +115,19 @@ static void pointer_enter(void *data, struct wl_pointer *pointer,
 		uint32_t serial, struct wl_surface *surface, wl_fixed_t x, wl_fixed_t y) {
 	(void)pointer; (void)serial; (void)x; (void)y;
 	struct state *s=data;
+	s->last_pointer_surface=surface;
 	printf("SD_CI_SUBSURFACE_RECEIPT kind=ENTER owner=%s\n",
 		surface==s->child?"CHILD":surface==s->parent?"PARENT":"OTHER");
 	fflush(stdout);
 }
 static void pointer_leave(void *data, struct wl_pointer *ptr,
 		uint32_t serial, struct wl_surface *surface) {
-	(void)data; (void)ptr; (void)serial; (void)surface;
+	(void)ptr; (void)serial;
+	struct state *s=data;
+	if (s->last_pointer_surface == surface) s->last_pointer_surface=NULL;
+	printf("SD_CI_SUBSURFACE_RECEIPT kind=LEAVE owner=%s\n",
+		surface==s->child?"CHILD":surface==s->parent?"PARENT":"OTHER");
+	fflush(stdout);
 }
 static void pointer_motion(void *data, struct wl_pointer *ptr,
 		uint32_t time, wl_fixed_t x, wl_fixed_t y) {
@@ -128,9 +135,12 @@ static void pointer_motion(void *data, struct wl_pointer *ptr,
 }
 static void pointer_button(void *data, struct wl_pointer *ptr,
 		uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
-	(void)data; (void)ptr; (void)serial; (void)time; (void)button;
-	printf("SD_CI_SUBSURFACE_RECEIPT kind=BUTTON state=%s\n",
-		state==WL_POINTER_BUTTON_STATE_PRESSED?"PRESS":"RELEASE");
+	(void)ptr; (void)serial; (void)time; (void)button;
+	struct state *s=data;
+	printf("SD_CI_SUBSURFACE_RECEIPT kind=BUTTON state=%s owner=%s\n",
+		state==WL_POINTER_BUTTON_STATE_PRESSED?"PRESS":"RELEASE",
+		s->last_pointer_surface==s->child?"CHILD":
+		s->last_pointer_surface==s->parent?"PARENT":"NONE");
 	fflush(stdout);
 }
 static void pointer_axis(void *data, struct wl_pointer *ptr,
