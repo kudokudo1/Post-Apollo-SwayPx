@@ -123,7 +123,7 @@ def verify_pending_mask_exit(e, temp, runtime, swaymsg, ipc, grim,
                  os.O_CREAT | os.O_EXCL | os.O_WRONLY |
                  getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
-        os.write(fd, b"PENDING\\n")
+        os.write(fd, b"PENDING\n")
     finally:
         os.close(fd)
     try:
