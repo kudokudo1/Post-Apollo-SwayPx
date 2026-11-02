@@ -143,6 +143,10 @@ jobs:
           assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(view);' in p
           assert 'STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT' in test
           assert 'FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED' in test
+          assert 'service_task_pressure(root)' in test
+          assert 'assert_chrome_main_rect_stable(' in test
+          assert '"--property=TasksMax=256"' in test
+          assert 'FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK' in test
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
@@ -337,6 +341,7 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-sibling-before-tree.json
             ${{ runner.temp }}/sd-ci-chrome-sibling-after-tree.json
             ${{ runner.temp }}/sd-ci-chrome-sibling-failed-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-geometry-changed-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
