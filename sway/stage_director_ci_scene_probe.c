@@ -35,6 +35,7 @@ static struct wlr_box ci_render_geometry;
 static struct wl_event_source *ci_mask_request_timer;
 static bool ci_mask_request_applied;
 static bool ci_mask_third_applied;
+static bool ci_mask_pending_observed;
 
 
 /*
@@ -143,8 +144,13 @@ void stage_director_ci_scene_probe_restore(struct sway_view *view) {
 		wl_event_source_remove(ci_mask_request_timer);
 		ci_mask_request_timer = NULL;
 	}
+	if (ci_mask_pending_observed) {
+		wlr_log(WLR_INFO, "SD_CI_CHROME_MASK_PENDING_REVOKED "
+			"actor_unmapped=1 timer_removed=1 authority=NONE result=PASS");
+	}
 	ci_mask_request_applied = false;
 	ci_mask_third_applied = false;
+	ci_mask_pending_observed = false;
 	ci_render_actor = NULL;
 	if (view->surface && view->content_tree && view->container &&
 			!view->container->node.destroying) {
@@ -490,9 +496,40 @@ static int ci_browser_mask_request(void *data) {
 	ssize_t n = read(fd, bytes, sizeof(bytes));
 	const bool safe = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) &&
 		st.st_uid == getuid() && st.st_nlink == 1 &&
-		(st.st_mode & 077) == 0 && n == 7;
+		(st.st_mode & 077) == 0;
 	close(fd);
 	if (!safe) {
+		stage_director_ci_scene_probe_restore(view);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_MASK_REQUEST_INVALID result=FAIL");
+		return 0;
+	}
+	/* Explicit CI-only held request. The compositor acknowledges that a
+	 * request has reached its own event loop but does NOT change its clip.
+	 * A forced native actor unmap must remove this timer and revoke the
+	 * held request. This is NOT an interrupted in-progress scene mutation. */
+	const char *pending_mode = getenv("STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT");
+	if (pending_mode && strcmp(pending_mode, "1") == 0) {
+		if (n != 8 || memcmp(bytes, "PENDING\n", 8) != 0 ||
+				ci_mask_request_applied || ci_mask_third_applied ||
+				ci_render_clip.width != 320 || ci_render_clip.height != 240) {
+			stage_director_ci_scene_probe_restore(view);
+			wlr_log(WLR_ERROR,
+				"SD_CI_CHROME_MASK_PENDING_INVALID result=FAIL");
+			return 0;
+		}
+		if (!ci_mask_pending_observed) {
+			ci_mask_pending_observed = true;
+			wlr_log(WLR_INFO, "SD_CI_CHROME_MASK_PENDING_HELD "
+				"native_actor=1 cgroup=1 pid=%ld "
+				"clip_unchanged=320x240 authority=NONE result=PASS",
+				(long)peer);
+		}
+		if (ci_mask_request_timer) {
+			wl_event_source_timer_update(ci_mask_request_timer, 100);
+		}
+		return 0;
+	}
+	if (n != 7) {
 		stage_director_ci_scene_probe_restore(view);
 		wlr_log(WLR_ERROR, "SD_CI_CHROME_MASK_REQUEST_INVALID result=FAIL");
 		return 0;
@@ -628,6 +665,7 @@ static bool ci_real_chrome_pixel_probe(struct sway_view *view) {
 	if (mask_mode && strcmp(mask_mode, "1") == 0) {
 		ci_mask_request_applied = false;
 		ci_mask_third_applied = false;
+		ci_mask_pending_observed = false;
 		if (!server.wl_event_loop || ci_mask_request_timer) {
 			stage_director_ci_scene_probe_restore(view);
 			return false;

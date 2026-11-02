@@ -101,6 +101,127 @@ def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
     raise RuntimeError("FAIL_UNRELATED_CONTROL_STILL_MAPPED_AFTER_STOP")
 
 
+
+def verify_pending_mask_exit(e, temp, runtime, swaymsg, ipc, grim,
+                             unit, root, snapshot, client_pid, profile):
+    """CI-only held viewport request; SIGKILL before any mask mutation.
+
+    The compositor acknowledges receipt without applying a transition.
+    The exact owned Chrome unit is the *only* process this harness kills.
+    """
+    if (e.get("GITHUB_ACTIONS") != "true" or e.get("CI") != "true" or
+            e.get("STAGE_DIRECTOR_CI_BROWSER_MASK") != "1" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT") != "1" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT") == "1"):
+        raise RuntimeError("BLOCKED_PENDING_EXIT_OUTSIDE_EXACT_CI_MODE")
+    request = temp / (
+        "sd-chrome-mask-" + e["GITHUB_RUN_ID"] + "-" +
+        e.get("GITHUB_RUN_ATTEMPT", "1") + ".request")
+    log_path = runtime / "sway.log"
+    marker_start = len(log_path.read_text(encoding="utf-8", errors="replace"))
+    fd = os.open(request,
+                 os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                 getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.write(fd, b"PENDING\n")
+    finally:
+        os.close(fd)
+    try:
+        acknowledged = False
+        for _ in range(100):
+            new_log = log_path.read_text(
+                encoding="utf-8", errors="replace")[marker_start:]
+            if "SD_CI_CHROME_MASK_PENDING_HELD" in new_log:
+                acknowledged = True
+                break
+            if ("SD_CI_CHROME_MASK_PENDING_INVALID" in new_log or
+                    "SD_CI_CHROME_MASK_SOURCE_LOST" in new_log):
+                break
+            time.sleep(0.1)
+        if not acknowledged:
+            raise RuntimeError("FAIL_PENDING_NOT_ACKNOWLEDGED " +
+                               new_log[-3000:])
+        if "SD_CI_CHROME_MASK_REBIND" in new_log:
+            raise RuntimeError("FAIL_PENDING_MASK_ALREADY_APPLIED")
+        if (proc_start(client_pid) != snapshot[client_pid] or
+                client_pid not in members(root)):
+            raise RuntimeError("FAIL_PENDING_BROWSER_IDENTITY_LOST_EARLY")
+        # Sample while the compositor event loop is demonstrably holding
+        # the queued request. Its first crop must still be visible.
+        time.sleep(0.35)
+        held_ppm = temp / "sd-chrome-pending-held.ppm"
+        held_tree = temp / "sd-chrome-pending-held-tree.json"
+        call(grim, "-t", "ppm", str(held_ppm), timeout=25)
+        held_tree.write_text(json.dumps(json.loads(call(
+            swaymsg, "-s", ipc, "-r", "-t", "get_tree"))), encoding="utf-8")
+
+        call("sudo", "-n", "systemctl", "kill",
+             "--signal=SIGKILL", "--kill-whom=all", unit, timeout=20)
+        print("SD_CI_CHROME_PENDING_SIGNAL: exact_test_service=1 "
+              "signal=SIGKILL held_unapplied=1 source=CI_only", flush=True)
+        revoked = False
+        for _ in range(100):
+            last_log = log_path.read_text(
+                encoding="utf-8", errors="replace")[marker_start:]
+            clean_tree = json.loads(call(
+                swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            still_mapped = any(
+                node.get("pid") == client_pid for node in containers(clean_tree))
+            still_alive = any(
+                proc_start(pid) == ticks for pid, ticks in snapshot.items())
+            still_group = bool(members(root))
+            revoked = "SD_CI_CHROME_MASK_PENDING_REVOKED" in last_log
+            restored = ("SD_CI_RENDER_PIXEL clip_restored_on_unmap=1"
+                        in last_log)
+            if (revoked and restored and not still_mapped and
+                    not still_alive and not still_group):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError(
+                "FAIL_PENDING_CHROME_CUSTODY_NOT_REVOKED "
+                f"unmap={not still_mapped} alive={still_alive} "
+                f"cgroup={still_group} revoked={revoked} restored={restored} "
+                + last_log[-3000:])
+        # Deliberately leave the original pending request on disk as the
+        # timer would have polled again; it must now be removed on unmap.
+        time.sleep(0.35)
+        last_log = log_path.read_text(
+            encoding="utf-8", errors="replace")[marker_start:]
+        if "SD_CI_CHROME_MASK_REBIND" in last_log:
+            raise RuntimeError("FAIL_PENDING_MASK_APPLIED_AFTER_NATIVE_UNMAP")
+        after_ppm = temp / "sd-chrome-pending-after-kill.ppm"
+        after_png = temp / "sd-chrome-pending-after-kill.png"
+        after_tree = temp / "sd-chrome-pending-after-tree.json"
+        call(grim, "-t", "ppm", str(after_ppm), timeout=25)
+        call(grim, "-t", "png", str(after_png), timeout=25)
+        after_tree.write_text(json.dumps(clean_tree), encoding="utf-8")
+        result = call(
+            sys.executable,
+            "tests/stage_director/assert_real_chrome_pending_exit_pixels.py",
+            str(temp / "sd-chrome-before.ppm"), str(held_ppm),
+            str(after_ppm), str(held_tree), str(after_tree),
+            str(client_pid), timeout=30)
+        print(result, flush=True)
+        if "SD_CI_CHROME_PENDING_EXIT_PIXELS: result=PASS" not in result:
+            raise RuntimeError("FAIL_PENDING_SCREENSHOT_MARKER_MISSING")
+        call("sudo", "-n", "systemctl", "stop", unit, check=False)
+        for _ in range(100):
+            if (not profile.parent.exists() and not members(root) and
+                    all(proc_start(pid) != ticks
+                        for pid, ticks in snapshot.items())):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("FAIL_PENDING_PRIVATE_BROWSER_PROFILE_NOT_REMOVED")
+        print("SD_CI_CHROME_PENDING_REQUEST_ABORT: result=PASS "
+              "request_held_not_applied=1 native_unmap=1 "
+              "timer_revoked=1 process_cgroup_cleared=1 "
+              "post_kill_pixels_clear=1 authority=NONE", flush=True)
+    finally:
+        request.unlink(missing_ok=True)
+
+
 def main() -> None:
     e = os.environ
     runtime = Path(e.get("XDG_RUNTIME_DIR", "/missing"))
@@ -318,6 +439,11 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            if e.get("STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT") == "1":
+                verify_pending_mask_exit(
+                    e, temp, runtime, swaymsg, ipc, grim, unit, root,
+                    snapshot, client_pid, profile)
+                return
             if e.get("STAGE_DIRECTOR_CI_BROWSER_MASK") == "1":
                 # CI host request (not Sway IPC, not Chrome external window
                 # movement). The compositor only accepts this exact one-time
