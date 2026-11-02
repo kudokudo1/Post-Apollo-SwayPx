@@ -94,7 +94,11 @@ assert "if (!stage_director_ci_scene_probe_preserve_dest(buffer))" in output_sou
 assert output_source.count("#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE") >= 2
 assert 'strcmp(ci, "true")' in probe
 assert 'strcmp(enabled, "1")' in probe
-assert 'probe.found || ci_render_clip.width != 320' in probe
+# Both fixed CI mask phases must be explicitly bounded. This is NOT a
+# relaxation of the rendered-pixel assertions or native process custody.
+assert 'ci_render_clip.width == 320 && ci_render_clip.height == 240' in probe
+assert 'ci_mask_request_applied && ci_render_clip.width == 400' in probe
+assert 'ci_render_clip.height == 300' in probe
 assert "ci_render_actor->content_tree" in probe
 # Renderer telemetry is produced only by a separate, pinned CI derivation.
 trace_nix = read("tests/stage_director/ci_scenefx_render_trace.nix")
