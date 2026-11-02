@@ -168,9 +168,25 @@ static const struct wl_pointer_listener pointer_listener = {
 };
 static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
 	struct state *s=data;
+	/* The disposable event sender creates and destroys a virtual pointer for
+	 * each command. wl_seat can revoke POINTER capability between them.
+	 * An old wl_pointer resource is not an acceptable event-receipt witness:
+	 * release it on loss and bind a new pointer after capability returns. */
+	if (!(caps & WL_SEAT_CAPABILITY_POINTER) && s->pointer) {
+		wl_pointer_release(s->pointer);
+		s->pointer=NULL;
+		s->last_pointer_surface=NULL;
+		puts("SD_CI_SUBSURFACE_POINTER_CAPABILITY available=0 old_resource_released=1");
+		fflush(stdout);
+	}
 	if ((caps & WL_SEAT_CAPABILITY_POINTER) && !s->pointer) {
 		s->pointer=wl_seat_get_pointer(seat);
-		wl_pointer_add_listener(s->pointer,&pointer_listener,s);
+		if (wl_pointer_add_listener(s->pointer,&pointer_listener,s) != 0) {
+			fputs("FAIL_SUBSURFACE_POINTER_LISTENER_BIND\n",stderr);
+			exit(9);
+		}
+		puts("SD_CI_SUBSURFACE_POINTER_CAPABILITY available=1 resource_bound=1");
+		fflush(stdout);
 	}
 }
 static void seat_name(void *data, struct wl_seat *seat, const char *name) {
