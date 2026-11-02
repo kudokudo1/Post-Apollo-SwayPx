@@ -630,8 +630,29 @@ def verify_real_native_subsurface_ownership(e, temp, swaymsg, ipc, grim,
         pos = len(log_path.read_text(encoding="utf-8", errors="replace"))
         send("pointer", str(x), str(y))
         send("button", str(x), str(y))
+        # Independent parent-surface click: if both parent and child miss
+        # button receipts, a pre-notify target log is not receipt proof.
+        px, py = int(rect["x"]) + 130, int(rect["y"]) + 103
+        if not (0 <= px < 1920 and 0 <= py < 1080):
+            raise RuntimeError("BLOCKED_SUBSURFACE_PARENT_COORDS_OUTSIDE_OUTPUT")
+        send("button", str(px), str(py))
         events = log_path.read_text(
             encoding="utf-8", errors="replace")[pos:]
+        if ("kind=POINTER target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=PRESS target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=RELEASE target=OTHER root_only=0 descendant=1" not in
+                events):
+            print("SD_CI_SUBSURFACE_INPUT_DIAGNOSTIC "
+                  "child_root_resolution=FAIL " + events[-2600:],
+                  flush=True)
+        if ("SD_CI_NATIVE_BUTTON_RESULT state=PRESS serial_nonzero=1"
+                not in events or
+                "SD_CI_NATIVE_BUTTON_RESULT state=RELEASE serial_nonzero=1"
+                not in events):
+            raise RuntimeError("FAIL_SUBSURFACE_WLROOTS_BUTTON_NO_SERIAL " +
+                               events[-3500:])
         if ("kind=POINTER target=OTHER root_only=0 descendant=1" not in
                 events or
                 "state=PRESS target=OTHER root_only=0 descendant=1" not in
@@ -647,13 +668,16 @@ def verify_real_native_subsurface_ownership(e, temp, swaymsg, ipc, grim,
             clientlog = outpath.read_text(
                 encoding="utf-8", errors="replace")
             if ("kind=ENTER owner=CHILD" in clientlog and
-                    "kind=BUTTON state=PRESS" in clientlog and
-                    "kind=BUTTON state=RELEASE" in clientlog):
+                    "kind=BUTTON state=PRESS owner=CHILD" in clientlog and
+                    "kind=BUTTON state=RELEASE owner=CHILD" in clientlog and
+                    "kind=BUTTON state=PRESS owner=PARENT" in clientlog and
+                    "kind=BUTTON state=RELEASE owner=PARENT" in clientlog):
                 break
             time.sleep(0.10)
         else:
             raise RuntimeError("FAIL_REAL_SUBSURFACE_CLIENT_NO_RECEIPT " +
-                               clientlog[-2500:])
+                               "actual_client_log=" + clientlog[-2500:] +
+                               " native_wlroots=" + events[-2500:])
         call(grim, "-t", "png",
              str(temp / "sd-ci-subsurface-positive.png"), timeout=20)
         print("SD_CI_NATIVE_SUBSURFACE_INPUT_OWNER: result=PASS "
