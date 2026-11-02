@@ -139,8 +139,14 @@ jobs:
           assert 'stage_director_ci_scene_probe_is_chrome_sibling(' in native_header
           assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(' in p
           assert 'wlr_scene_node_set_enabled(&view->container->scene_tree->node, false)' in p
-          assert 'container_set_floating(view->container, true);' in p
+          view_map=Path('sway/tree/view.c').read_text()
+          assert 'const bool ci_chrome_sibling =' in view_map
+          assert 'stage_director_ci_scene_probe_is_chrome_sibling(view);' in view_map
+          assert 'workspace_add_floating(ws, container);' in view_map
+          assert 'container_floating_resize_and_center(container);' in view_map
+          assert 'view_set_tiled(view, false);' in view_map
           assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(view);' in p
+          assert 'container_set_floating(view->container, true);' not in p
           assert 'STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT' in test
           assert 'FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED' in test
           assert 'service_task_pressure(root)' in test
