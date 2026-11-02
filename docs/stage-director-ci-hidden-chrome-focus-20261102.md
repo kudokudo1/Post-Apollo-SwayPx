@@ -18,6 +18,8 @@ This narrow CI-only change links a native view focus guard through the preexisti
 
 The separate `chrome-hidden-focus` GitHub matrix job uses the **real Chrome executable**, exact disposable private service/profile and the previous second-window test. It requires both live native XDG IDs and kernel cgroup/proc identity. A Sway IPC focus command to the **visible** original native ID is a positive control; the same type of focus command to the hidden sibling ID must not move active native focus or geometry. The compositor must log its exact denied seat path, and a real screenshot after the attempt must retain zero sampled bright pixels outside the original viewport and stable original geometry.
 
+The initial PR-head Chrome screenshot CI run had two unrelated pre-browser startup IPC response failures: `swaymsg get_tree` could not receive an IPC response while the disposable compositor initialized, **before the Chrome session or focus test was launched**. Two independent retry attempts of the focus lane reproduced the same early failure. The unrelated titlebar control now performs at most **four explicitly logged get_tree retries**, and only for this pre-Chrome startup observation. Later browser geometry, Chrome PID/cgroup provenance, focus-negative, screenshot and teardown calls retain strict no-retry behavior. Exhaustion fails closed. The exact cause of the initial IPC responses is not yet verified, and adding a bounded retry does not represent a renderer/security fix.
+
 ## HOW TO USE
 
 Review PR checks > `Stage Director real Chrome stationary XDG moving mask (CI)` > `chrome-hidden-focus`. The screenshot `sd-ci-chrome-hidden-focus-denied.ppm/png` and Sway IPC tree are artifacts. No local Fedora/Quickshell work.
