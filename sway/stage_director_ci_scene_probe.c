@@ -28,6 +28,8 @@
  * standard Sway clipping. No process, seat, popup, or WATCH authority.
  */
 static struct sway_view *ci_render_actor;
+/* One second native Chrome XDG window in a disposable CI test only. */
+static struct sway_view *ci_sibling_actor;
 static struct wlr_box ci_render_clip;
 static struct wlr_box ci_render_geometry;
 /* The timer and request file are available exclusively in the independently
@@ -139,6 +141,11 @@ bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer
 }
 
 void stage_director_ci_scene_probe_restore(struct sway_view *view) {
+	if (view && ci_sibling_actor == view) {
+		ci_sibling_actor = NULL;
+		wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_UNMAPPED pointer_revoked=1 authority=NONE");
+		return;
+	}
 	if (!view || ci_render_actor != view) return;
 	if (ci_mask_request_timer) {
 		wl_event_source_remove(ci_mask_request_timer);
@@ -267,6 +274,14 @@ static void ci_draw_node(struct wlr_scene_node *node, int depth,
 }
 
 void stage_director_ci_scene_probe_post_layout(void) {
+	/* Sway's layout transactions can re-enable a window's scene.
+	 * Reapply this isolated CI-only full-container quarantine. */
+	if (ci_sibling_actor && ci_sibling_actor->container &&
+			!ci_sibling_actor->container->node.destroying &&
+			ci_sibling_actor->container->scene_tree) {
+		wlr_scene_node_set_enabled(
+			&ci_sibling_actor->container->scene_tree->node, false);
+	}
 	struct sway_view *view = ci_render_actor;
 	if (!view || !view->surface || !view->content_tree || !view->container ||
 			view->container->node.destroying) {
@@ -418,6 +433,42 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
 	fclose(fp);
 	if (match && peer_out) *peer_out = peer;
 	return match;
+}
+
+/* Distinct second native XDG root from the exact verified Chrome cgroup.
+ * No title, app_id, URL or client-provided string can enable quarantine.
+ * The flag exists ONLY on the isolated headless GitHub Actions compositor.
+ */
+bool stage_director_ci_scene_probe_is_chrome_sibling(struct sway_view *view) {
+	const char *enabled = getenv("STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT");
+	if (!enabled || strcmp(enabled, "1") != 0 ||
+			!ci_render_actor || !view || view == ci_render_actor) {
+		return false;
+	}
+	pid_t peer = -1;
+	return ci_real_chrome_process(view, &peer);
+}
+
+void stage_director_ci_scene_probe_quarantine_chrome_sibling(
+		struct sway_view *view) {
+	if (!stage_director_ci_scene_probe_is_chrome_sibling(view) ||
+			!view->container || !view->container->scene_tree) return;
+	if (ci_sibling_actor && ci_sibling_actor != view) {
+		/* A third window is not admitted by this limited CI experiment.
+		 * Fail closed for its scene too, without replacing the held pointer. */
+		wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
+		wlr_log(WLR_ERROR, "SD_CI_CHROME_EXTRA_TOPLEVEL_DENIED "
+			"third_native_actor=1 scene_disabled=1 authority=NONE");
+		return;
+	}
+	ci_sibling_actor = view;
+	/* The sibling was inserted directly into the floating workspace before
+	 * the normal tile layout, avoiding any original-actor resize/reflow.
+	 * After the native map hook, keep all its scene descendants disabled. */
+	wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
+	wlr_log(WLR_INFO, "SD_CI_CHROME_SIBLING_QUARANTINED "
+		"native_cgroup=1 whole_container_scene_disabled=1 "
+		"production=OFF authority=NONE result=PASS");
 }
 
 /* Any actual XDG popup is placed under root->layers.popup by Sway's
@@ -717,6 +768,7 @@ void stage_director_ci_scene_probe(struct sway_view *view) {
 	/* Separate isolated CI Chrome candidate, verified by native process
 	 * cgroup and kernel identity, never window title or app_id. */
 	(void)ci_real_chrome_pixel_probe(view);
+	stage_director_ci_scene_probe_quarantine_chrome_sibling(view);
 	static bool measured = false;
 	static bool child_reported = false;
 	if (!view || !view->surface || !view->content_tree ||

@@ -131,6 +131,28 @@ jobs:
           assert 'same_service_cgroup=1' in sibling_shell
           assert 'discover_chrome_second_toplevel(' in test
           assert 'FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG' in test
+          assert 'SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS' in sibling_check
+          assert 'FAIL_CHROME_SIBLING_UNCONTAINED_REAL_PIXELS' in sibling_check
+          assert 'FAIL_CHROME_SIBLING_REARRANGED_ORIGINAL' in sibling_check
+          assert 'SD_CI_CHROME_SIBLING_QUARANTINED' in p
+          assert 'stage_director_ci_scene_probe_is_chrome_sibling(' in p
+          assert 'stage_director_ci_scene_probe_is_chrome_sibling(' in native_header
+          assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(' in p
+          assert 'wlr_scene_node_set_enabled(&view->container->scene_tree->node, false)' in p
+          view_map=Path('sway/tree/view.c').read_text()
+          assert 'const bool ci_chrome_sibling =' in view_map
+          assert 'stage_director_ci_scene_probe_is_chrome_sibling(view);' in view_map
+          assert 'workspace_add_floating(ws, container);' in view_map
+          assert 'container_floating_resize_and_center(container);' in view_map
+          assert 'view_set_tiled(view, false);' in view_map
+          assert 'stage_director_ci_scene_probe_quarantine_chrome_sibling(view);' in p
+          assert 'container_set_floating(view->container, true);' not in p
+          assert 'STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT' in test
+          assert 'FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED' in test
+          assert 'service_task_pressure(root)' in test
+          assert 'assert_chrome_main_rect_stable(' in test
+          assert '"--property=TasksMax=256"' in test
+          assert 'FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK' in test
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
@@ -234,6 +256,10 @@ jobs:
             echo "FAIL: test-only Chrome popup denial leaked into normal production" >&2
             exit 1
           fi
+          if grep -aFq 'SD_CI_CHROME_SIBLING_QUARANTINED' "$prod/bin/sway"; then
+            echo "FAIL: test-only sibling quarantine linked into production" >&2
+            exit 1
+          fi
           echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
       - name: Compile test-only compositor and screenshot client separately
         run: |
@@ -243,6 +269,7 @@ jobs:
           test -x "$ci/bin/swaymsg"
           grep -aFq 'SD_CI_CHROME_PIXEL_SCENE' "$ci/bin/sway"
           grep -aFq 'SD_CI_CHROME_POPUP_DENIED' "$ci/bin/sway"
+          grep -aFq 'SD_CI_CHROME_SIBLING_QUARANTINED' "$ci/bin/sway"
           echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
@@ -255,6 +282,7 @@ jobs:
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
+            echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT=1" >> "$GITHUB_ENV"
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           fi
@@ -318,6 +346,8 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-second-toplevel.png
             ${{ runner.temp }}/sd-ci-chrome-sibling-before-tree.json
             ${{ runner.temp }}/sd-ci-chrome-sibling-after-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-sibling-failed-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-geometry-changed-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -326,5 +356,5 @@ jobs:
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
-          echo "The chrome-second-toplevel matrix job uses the actual Chrome executable and same private profile to discover a second native XDG toplevel and classify its real pixels. It is discovery, NOT containment verification." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-second-toplevel matrix job now requires a real Chrome-generated second native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry. Source and screenshot proof remain separate." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"

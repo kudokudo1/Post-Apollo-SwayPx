@@ -930,6 +930,20 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 			&view->foreign_destroy);
 
 	struct sway_container *container = view->container;
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* The exact disposable Chrome cgroup's SECOND native XDG root must
+	 * never join tiled workspace insertion: Sway would reflow the original
+	 * masked actor before our after-map scene quarantine can run.
+	 * This only chooses placement; the separate CI map hook still denies
+	 * the sibling's ENTIRE scene before final output composition. */
+	const bool ci_chrome_sibling =
+		stage_director_ci_scene_probe_is_chrome_sibling(view);
+	if (ci_chrome_sibling && ws) {
+		workspace_add_floating(ws, container);
+		container_floating_set_default_size(container);
+		container_floating_resize_and_center(container);
+	} else
+#endif
 	if (target_sibling) {
 		container_add_sibling(target_sibling, container, 1);
 	} else if (ws) {
@@ -941,6 +955,13 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 		view_update_csd_from_client(view, decoration);
 	}
 
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	if (ci_chrome_sibling && ws) {
+		view->container->pending.border = B_NONE;
+		view->container->pending.border_thickness = 0;
+		view_set_tiled(view, false);
+	} else
+#endif
 	if (view->impl->wants_floating && view->impl->wants_floating(view)) {
 		view->container->pending.border = config->floating_border;
 		view->container->pending.border_thickness = config->floating_border_thickness;

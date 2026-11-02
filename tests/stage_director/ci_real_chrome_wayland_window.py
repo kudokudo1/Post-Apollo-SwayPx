@@ -44,6 +44,52 @@ def members(root: Path) -> set[int]:
     return pids
 
 
+def service_task_pressure(root):
+    """Read the kernel cgroup task count and cap, never infer from process count."""
+    stats = {}
+    for key in ("pids.current", "pids.max", "pids.events"):
+        try:
+            stats[key] = (root / key).read_text().strip()
+        except OSError:
+            stats[key] = "UNAVAILABLE"
+    return stats
+
+
+def assert_chrome_main_rect_stable(e, temp, swaymsg, ipc, root,
+                                   actor, snapshot):
+    """Bounded post-startup stabilization before touching the scene mask.
+
+    Exact XDG/PID/rect remains required; never silently reselect a window.
+    """
+    initial_id, initial_pid = actor["id"], actor["pid"]
+    initial_rect = actor.get("rect")
+    initial_start = snapshot[initial_pid]
+    for sample in range(16):
+        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        matches = [n for n in containers(tree)
+                   if n.get("id") == initial_id and
+                   n.get("pid") == initial_pid]
+        if (len(matches) != 1 or initial_pid not in members(root) or
+                proc_start(initial_pid) != initial_start):
+            raise RuntimeError(
+                "FAIL_CHROME_ACTOR_DISAPPEARED_WHILE_SETTLING "
+                "tasks=" + json.dumps(service_task_pressure(root)))
+        current_rect = matches[0].get("rect")
+        if current_rect != initial_rect:
+            (temp / "sd-ci-chrome-geometry-changed-tree.json").write_text(
+                json.dumps(tree), encoding="utf-8")
+            raise RuntimeError(
+                "FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK "
+                f"sample={sample} initial={initial_rect} "
+                f"current={current_rect} "
+                "tasks=" + json.dumps(service_task_pressure(root)))
+        time.sleep(0.15)
+    print("SD_CI_CHROME_NATIVE_RECT_SETTLED "
+          f"native_id={initial_id} pid={initial_pid} "
+          "samples=16 same_geometry=1 same_starttime=1 "
+          "authority=NONE result=PASS", flush=True)
+
+
 def containers(node):
     if isinstance(node, dict):
         if node.get("pid") and node.get("type") == "con":
@@ -52,6 +98,17 @@ def containers(node):
             yield from containers(sub)
         for sub in node.get("floating_nodes", []):
             yield from containers(sub)
+
+
+def native_xdg_toplevels(node):
+    """Include Sway's floating_con roots, not just tiled 'con' nodes."""
+    if isinstance(node, dict):
+        if (node.get("type") in ("con", "floating_con") and
+                node.get("shell") == "xdg_shell" and node.get("pid")):
+            yield node
+        for kind in ("nodes", "floating_nodes"):
+            for child in node.get(kind, []):
+                yield from native_xdg_toplevels(child)
 
 
 def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
@@ -347,10 +404,10 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
         for _ in range(120):
             tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
             active = members(root)
-            originals = [n for n in containers(tree)
+            originals = [n for n in native_xdg_toplevels(tree)
                          if n.get("id") == original_id and
                          n.get("pid") == original_pid]
-            siblings = [n for n in containers(tree)
+            siblings = [n for n in native_xdg_toplevels(tree)
                         if n.get("id") != original_id and
                         n.get("shell") == "xdg_shell" and
                         n.get("pid") in active and
@@ -361,7 +418,35 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                 break
             time.sleep(0.1)
         else:
-            raise RuntimeError("FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG")
+            # Preserve the real IPC representation at the precise failure
+            # boundary; never infer an invisible native view from a log.
+            tree = json.loads(call(
+                swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            (temp / "sd-ci-chrome-sibling-failed-tree.json").write_text(
+                json.dumps(tree), encoding="utf-8")
+            flat = []
+            def inspect_node(node):
+                if isinstance(node, dict):
+                    if (node.get("pid") is not None or
+                            node.get("type") in ("con", "floating_con")):
+                        pid = node.get("pid")
+                        flat.append({
+                            "type": node.get("type"), "id": node.get("id"),
+                            "pid": pid, "shell": node.get("shell"),
+                            "cgroup": pid in members(root) if pid else False,
+                            "rect": node.get("rect")})
+                    for key in ("nodes", "floating_nodes"):
+                        for child in node.get(key, []):
+                            inspect_node(child)
+            inspect_node(tree)
+            log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+                encoding="utf-8", errors="replace")
+            raise RuntimeError(
+                "FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG "
+                "observed_tree=" + json.dumps(flat) +
+                " original_id=" + str(original_id) +
+                " sibling_quarantined=" +
+                str("SD_CI_CHROME_SIBLING_QUARANTINED" in log))
         if not originals or not siblings:
             raise RuntimeError("FAIL_CHROME_SIBLING_LOST_ORIGINAL_NATIVE_XDG")
         journal = call("sudo", "-n", "journalctl", "-u", unit,
@@ -371,11 +456,21 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                                journal[-2500:])
         for node in siblings:
             snapshot[node["pid"]] = proc_start(node["pid"])
+        containment_mode = (
+            e.get("STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT") == "1")
+        if containment_mode:
+            log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+                encoding="utf-8", errors="replace")
+            if ("SD_CI_CHROME_SIBLING_QUARANTINED" not in log or
+                    "whole_container_scene_disabled=1" not in log):
+                raise RuntimeError(
+                    "FAIL_CHROME_SIBLING_SCENE_QUARANTINE_NOT_OBSERVED "
+                    + log[-3600:])
         time.sleep(0.4)
         after_tree = temp / "sd-ci-chrome-sibling-after-tree.json"
         tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
         active = members(root)
-        latest = [n for n in containers(tree)
+        latest = [n for n in native_xdg_toplevels(tree)
                   if n.get("shell") == "xdg_shell" and
                   n.get("id") != original_id and n.get("pid") in active]
         if not latest:
@@ -389,10 +484,14 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
             sys.executable,
             "tests/stage_director/assert_real_chrome_sibling_discovery.py",
             str(crop_ppm), str(shot), str(before_tree),
-            str(after_tree), str(original_id), timeout=30)
+            str(after_tree), str(original_id),
+            *(["--require-contained"] if containment_mode else []),
+            timeout=30)
         print(measured, flush=True)
-        if ("SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: result=OBSERVED"
-                not in measured):
+        expected = ("SD_CI_CHROME_SECOND_TOPLEVEL_CONTAINMENT: result=PASS"
+                    if containment_mode else
+                    "SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC: result=OBSERVED")
+        if expected not in measured:
             raise RuntimeError("FAIL_CHROME_SIBLING_PIXEL_PROOF_MISSING")
         print("SD_CI_CHROME_SECOND_NATIVE_XDG_DISCOVERED "
               f"initial_native_id={original_id} second_count={len(latest)} "
@@ -407,7 +506,7 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
             if (not members(root) and not profile.parent.exists() and
                     all(proc_start(pid) != st
                         for pid, st in snapshot.items()) and
-                    not any(n.get("id") in ids for n in containers(left))):
+                    not any(n.get("id") in ids for n in native_xdg_toplevels(left))):
                 break
             time.sleep(0.1)
         else:
@@ -496,7 +595,7 @@ def main() -> None:
              "--property=NoNewPrivileges=yes",
              "--property=IPAddressDeny=any",
              "--property=MemoryMax=1536M",
-             "--property=TasksMax=128",
+             "--property=TasksMax=256",
              "--property=KillMode=control-group",
              "--property=SendSIGKILL=yes",
              "--property=TimeoutStopSec=3s",
@@ -549,6 +648,8 @@ def main() -> None:
         root = Path("/sys/fs/cgroup" + relative)
         if not (root / "cgroup.procs").is_file():
             raise RuntimeError("BLOCKED_CGROUP_NOT_VISIBLE")
+        print("SD_CI_CHROME_SERVICE_TASK_PRESSURE at=start "
+              + json.dumps(service_task_pressure(root)), flush=True)
 
         actor = None
         count = 0
@@ -675,6 +776,11 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+            # Chrome can asynchronously alter its initial native geometry
+            # after the first screenshot. Require a later stable rectangle
+            # before sending PHASE2 or a second-window request. No relaxation.
+            assert_chrome_main_rect_stable(
+                e, temp, swaymsg, ipc, root, actor, snapshot)
             if sibling_mode:
                 discover_chrome_second_toplevel(
                     e, temp, swaymsg, ipc, grim, unit, root, snapshot,
@@ -878,6 +984,9 @@ def main() -> None:
               "native_xdg_unmapped=1 cgroup_members=0 private_profile_gone=1 "
               "watch=OFF scene_clip=OFF input=OFF PASS", flush=True)
     finally:
+        if started and root and root.exists():
+            print("SD_CI_CHROME_SERVICE_TASK_PRESSURE at=cleanup "
+                  + json.dumps(service_task_pressure(root)), flush=True)
         if started:
             call("sudo", "-n", "systemctl", "stop", unit, check=False)
             call("sudo", "-n", "systemctl", "reset-failed",
