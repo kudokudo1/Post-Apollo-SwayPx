@@ -259,6 +259,8 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
             call(grim, "-t", "ppm", str(positive), timeout=25)
             call(grim, "-t", "png",
                  str(temp / "sd-ci-native-popup-positive.png"), timeout=25)
+            print("SD_CI_NATIVE_POPUP_CONTROL_PROTOCOL_LOG:\n" +
+                  control_log.read_text(encoding="utf-8"), flush=True)
         finally:
             if control.poll() is None:
                 control.terminate()
