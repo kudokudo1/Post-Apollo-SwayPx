@@ -10,6 +10,7 @@ on:
       - 'sway/desktop/xdg_shell.c'
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'sway/tree/view.c'
+      - 'sway/input/seat.c'
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'tests/stage_director/headless_sway_smoke.sh'
       - 'tests/stage_director/ci_real_chrome_pixel_compositor.nix'
@@ -153,6 +154,17 @@ jobs:
           assert 'assert_chrome_main_rect_stable(' in test
           assert '"--property=TasksMax=256"' in test
           assert 'FAIL_CHROME_NATIVE_RECT_CHANGED_BEFORE_MASK' in test
+          seat_source=Path('sway/input/seat.c').read_text()
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE' in seat_source
+          assert 'stage_director_ci_scene_probe_reject_chrome_focus(' in seat_source
+          assert 'stage_director_ci_scene_probe_reject_chrome_surface_focus(' in seat_source
+          assert 'seat_set_workspace_focus(struct sway_seat *seat' in seat_source
+          assert 'seat_set_focus_surface(struct sway_seat *seat' in seat_source
+          assert 'SD_CI_CHROME_SIBLING_FOCUS_DENIED' in p
+          assert 'source=seat_container' in p
+          assert 'source=seat_direct_root_surface' in p
+          assert 'SD_CI_CHROME_FOCUS_CUSTODY: result=PASS' in test
+          assert 'FAIL_FOCUS_HIDDEN_CHROME_STOLE_SEAT' in test
           assert 'CI_CHROME_SIBLING_SLOTS 8' in p
           assert 'ci_sibling_actors[CI_CHROME_SIBLING_SLOTS]' in p
           assert 'SD_CI_CHROME_SIBLING_CAPACITY_EXCEEDED' in p
@@ -240,7 +252,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -272,6 +284,10 @@ jobs:
             echo "FAIL: test-only sibling quarantine linked into production" >&2
             exit 1
           fi
+          if grep -aFq 'SD_CI_CHROME_SIBLING_FOCUS_DENIED' "$prod/bin/sway"; then
+            echo "FAIL: test-only sibling focus guard linked into production" >&2
+            exit 1
+          fi
           echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
       - name: Compile test-only compositor and screenshot client separately
         run: |
@@ -282,6 +298,7 @@ jobs:
           grep -aFq 'SD_CI_CHROME_PIXEL_SCENE' "$ci/bin/sway"
           grep -aFq 'SD_CI_CHROME_POPUP_DENIED' "$ci/bin/sway"
           grep -aFq 'SD_CI_CHROME_SIBLING_QUARANTINED' "$ci/bin/sway"
+          grep -aFq 'SD_CI_CHROME_SIBLING_FOCUS_DENIED' "$ci/bin/sway"
           echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
@@ -292,11 +309,13 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
-          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_CONTAINMENT=1" >> "$GITHUB_ENV"
             if [[ "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" ]]; then
               echo "STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING=1" >> "$GITHUB_ENV"
+            elif [[ "${{ matrix.exit_mode }}" == "chrome-hidden-focus" ]]; then
+              echo "STAGE_DIRECTOR_CI_CHROME_FOCUS_CUSTODY=1" >> "$GITHUB_ENV"
             fi
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
@@ -372,6 +391,9 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-multi-reopened.ppm
             ${{ runner.temp }}/sd-ci-chrome-multi-reopened.png
             ${{ runner.temp }}/sd-ci-chrome-multi-reopened-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied.ppm
+            ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied.png
+            ${{ runner.temp }}/sd-ci-chrome-hidden-focus-denied-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -381,5 +403,6 @@ jobs:
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-second-toplevel matrix job requires a real Chrome-generated native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry." >> "$GITHUB_STEP_SUMMARY"
-          echo "The chrome-multi-toplevel job separately requires two extra simultaneous Chrome XDG roots, a native close followed by a different reopened native XDG root, scene-slot unmap revocation and three real screenshots. It does not claim continuous transient-frame or input/focus containment." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-multi-toplevel job requires two extra simultaneous Chrome XDG roots, exact close/reopen and three real screenshots." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-hidden-focus job attempts Sway IPC native focus on a real invisible Chrome sibling, requires compositor seat focus refusal and unchanged focused original, and rechecks a real screenshot. It does NOT test physical keyboard events, pointer motion, nested surfaces or seat focus from external clients." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
