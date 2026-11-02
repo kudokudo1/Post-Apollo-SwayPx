@@ -53,8 +53,8 @@ jobs:
           assert 'ci_real_chrome_process(view, &peer)' in p
           assert 'SD_CI_CHROME_MASK_REBIND' in p
           assert 'ci_mask_request_timer' in p
-          assert 'phase2_rect.width' in p
-          assert 'phase3_rect.width' in p
+          assert 'const struct wlr_box phase2_rect' in p
+          assert 'const struct wlr_box phase3_rect' in p
           assert 'SD_CI_CHROME_MASK_REBIND_PHASE3' in p
           assert 'memcmp(bytes, "PHASE3\\n", 7) == 0' in p
           assert 'ci_mask_third_applied' in p
