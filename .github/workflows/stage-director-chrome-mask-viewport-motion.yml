@@ -23,6 +23,8 @@ on:
       - 'tests/stage_director/ci_xdg_popup_witness.nix'
       - 'tests/stage_director/ci_chrome_popup_service.sh'
       - 'tests/stage_director/assert_real_xdg_popup_witness_pixels.py'
+      - 'tests/stage_director/ci_chrome_sibling_service.sh'
+      - 'tests/stage_director/assert_real_chrome_sibling_discovery.py'
       - 'docs/stage-director-chrome-pending-exit-20261102.md'
       - '.github/workflows/stage-director-chrome-mask-viewport-motion.yml'
       - 'docs/stage-director-chrome-mask-viewport-motion-20261102.md'
@@ -57,6 +59,8 @@ jobs:
           popup_service=Path("tests/stage_director/ci_chrome_popup_service.sh").read_text()
           popup_pixels=Path("tests/stage_director/assert_real_xdg_popup_witness_pixels.py").read_text()
           popup_nix=Path("tests/stage_director/ci_xdg_popup_witness.nix").read_text()
+          sibling_shell=Path("tests/stage_director/ci_chrome_sibling_service.sh").read_text()
+          sibling_check=Path("tests/stage_director/assert_real_chrome_sibling_discovery.py").read_text()
           test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" in mask
           assert "FAIL_NATIVE_CHROME_WINDOW_MOVED_OR_REPLACED" in mask
@@ -118,6 +122,15 @@ jobs:
           ast.parse(abrupt)
           ast.parse(pending)
           ast.parse(popup_pixels)
+          ast.parse(sibling_check)
+          assert 'SD_CI_CHROME_SECOND_TOPLEVEL_DIAGNOSTIC:' in sibling_check
+          assert 'containment=UNVERIFIED' in sibling_check
+          assert '"--new-window"' not in test
+          assert '--new-window about:blank' in sibling_shell
+          assert 'STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY' in sibling_shell
+          assert 'same_service_cgroup=1' in sibling_shell
+          assert 'discover_chrome_second_toplevel(' in test
+          assert 'FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG' in test
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
@@ -193,7 +206,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -240,6 +253,8 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" ]]; then
+            echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
           else
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           fi
@@ -299,6 +314,10 @@ jobs:
             ${{ runner.temp }}/sd-ci-native-popup-positive.png
             ${{ runner.temp }}/sd-ci-native-popup-denied.ppm
             ${{ runner.temp }}/sd-ci-native-popup-denied.png
+            ${{ runner.temp }}/sd-ci-chrome-second-toplevel.ppm
+            ${{ runner.temp }}/sd-ci-chrome-second-toplevel.png
+            ${{ runner.temp }}/sd-ci-chrome-sibling-before-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-sibling-after-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
@@ -307,4 +326,5 @@ jobs:
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
           echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-second-toplevel matrix job uses the actual Chrome executable and same private profile to discover a second native XDG toplevel and classify its real pixels. It is discovery, NOT containment verification." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"
