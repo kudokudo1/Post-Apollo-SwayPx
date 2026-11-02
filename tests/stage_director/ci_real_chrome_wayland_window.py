@@ -111,6 +111,39 @@ def native_xdg_toplevels(node):
                 yield from native_xdg_toplevels(child)
 
 
+def read_unrelated_startup_tree(swaymsg, ipc):
+    """Bounded startup-only IPC recovery, before Chrome or mask mutation.
+
+    Do not tolerate failures in any later Chrome focus/scene verification.
+    A missed response is recorded, not silently converted into a PASS.
+    """
+    for attempt in range(1, 5):
+        out = subprocess.run(
+            [swaymsg, "-s", ipc, "-r", "-t", "get_tree"],
+            text=True, capture_output=True, timeout=20, check=False)
+        if out.returncode == 0:
+            try:
+                tree = json.loads(out.stdout)
+                if isinstance(tree, dict):
+                    if attempt > 1:
+                        print("SD_CI_EARLY_IPC_RECOVERED "
+                              f"attempt={attempt} bounded=4 "
+                              "pre_chrome=1 authority=NONE", flush=True)
+                    return tree
+            except json.JSONDecodeError:
+                pass
+            raise RuntimeError("FAIL_EARLY_IPC_INVALID_TREE_RESPONSE")
+        if "Unable to receive IPC response" not in out.stderr:
+            raise RuntimeError("FAIL_EARLY_IPC_UNEXPECTED_RESPONSE " +
+                               out.stderr[-1400:])
+        print("SD_CI_EARLY_IPC_RESPONSE_MISSED "
+              f"attempt={attempt} bounded=4 pre_chrome=1",
+              flush=True)
+        if attempt < 4:
+            time.sleep(0.3)
+    raise RuntimeError("FAIL_EARLY_IPC_RECOVERY_EXHAUSTED attempts=4")
+
+
 def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
     """One ordinary native Wayland control proves borders aren't disabled globally."""
     if not foot.startswith("/nix/store/") or not Path(foot).is_file():
@@ -126,7 +159,7 @@ def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
         for _ in range(100):
             if actor.poll() is not None:
                 raise RuntimeError("FAIL_UNRELATED_CONTROL_EXITED_BEFORE_MAP")
-            tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            tree = read_unrelated_startup_tree(swaymsg, ipc)
             matches = [n for n in containers(tree)
                        if n.get("pid") == actor.pid and
                        n.get("shell") == "xdg_shell" and
@@ -151,7 +184,7 @@ def verify_unrelated_titlebar(swaymsg: str, ipc: str, foot: str) -> None:
             actor.kill()
             actor.wait(timeout=3)
     for _ in range(100):
-        tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+        tree = read_unrelated_startup_tree(swaymsg, ipc)
         if not any(n.get("pid") == actor.pid for n in containers(tree)):
             return
         time.sleep(0.05)
