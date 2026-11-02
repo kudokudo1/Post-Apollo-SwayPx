@@ -30,6 +30,14 @@ static void popup_handle_new_popup(struct wl_listener *listener, void *data) {
 	struct sway_xdg_popup *popup =
 		wl_container_of(listener, popup, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* Nested XDG popups also bypass the masked browser content tree.
+	 * Quarantine the exact selected CI Chrome actor before scene creation. */
+	if (stage_director_ci_scene_probe_reject_chrome_popup(popup->view)) {
+		wlr_xdg_popup_destroy(wlr_popup);
+		return;
+	}
+#endif
 	popup_create(wlr_popup, popup->view, popup->xdg_surface_tree, popup->image_capture_tree);
 }
 
@@ -376,6 +384,15 @@ static void handle_new_popup(struct wl_listener *listener, void *data) {
 	struct sway_xdg_shell_view *xdg_shell_view =
 		wl_container_of(listener, xdg_shell_view, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* Sway's normal root->layers.popup is outside Chrome content clipping.
+	 * There is no authorized popup broker in this isolated experiment. */
+	if (stage_director_ci_scene_probe_reject_chrome_popup(
+			&xdg_shell_view->view)) {
+		wlr_xdg_popup_destroy(wlr_popup);
+		return;
+	}
+#endif
 
 	struct sway_xdg_popup *popup = popup_create(wlr_popup,
 		&xdg_shell_view->view, root->layers.popup, xdg_shell_view->image_capture_tree);
