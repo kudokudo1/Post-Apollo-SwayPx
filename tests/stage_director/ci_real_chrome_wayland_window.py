@@ -683,6 +683,69 @@ def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
             encoding="utf-8", errors="replace")[pos:]
         if "kind=POINTER target=HIDDEN_SIBLING" in sibling_pointer_log:
             raise RuntimeError("FAIL_NATIVE_POINTER_REACHED_HIDDEN_SIBLING")
+        if e.get("STAGE_DIRECTOR_CI_CHROME_REAL_BUTTON") == "1":
+            def button_signals(label, *args):
+                cursor_start = len(log_path.read_text(
+                    encoding="utf-8", errors="replace"))
+                send(*args)
+                signals = log_path.read_text(
+                    encoding="utf-8", errors="replace")[cursor_start:]
+                if "SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS" not in signals:
+                    raise RuntimeError(
+                        "FAIL_NATIVE_BUTTON_PRESS_NOT_DELIVERED " +
+                        label + " " + signals[-2500:])
+                if "SD_CI_NATIVE_BUTTON_DELIVERED state=RELEASE" not in signals:
+                    raise RuntimeError(
+                        "FAIL_NATIVE_BUTTON_RELEASE_NOT_DELIVERED " +
+                        label + " " + signals[-2500:])
+                if ("SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS "
+                        "target=HIDDEN_SIBLING" in signals or
+                        "SD_CI_NATIVE_BUTTON_DELIVERED state=RELEASE "
+                        "target=HIDDEN_SIBLING" in signals or
+                        "SD_CI_NATIVE_INPUT_DELIVERED kind=POINTER "
+                        "target=HIDDEN_SIBLING" in signals):
+                    raise RuntimeError(
+                        "FAIL_NATIVE_BUTTON_GRAB_REACHED_HIDDEN_SIBLING " +
+                        label + " " + signals[-3500:])
+                return signals
+            visible = button_signals(
+                "visible_click", "button", str(main_x), str(main_y))
+            if (("SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS target=MAIN"
+                    not in visible) or
+                    ("SD_CI_NATIVE_BUTTON_DELIVERED state=RELEASE target=MAIN"
+                     not in visible)):
+                raise RuntimeError("FAIL_NATIVE_BUTTON_VISIBLE_POSITIVE " +
+                                   visible[-2500:])
+            hidden = button_signals(
+                "hidden_click", "button", str(sibling_x), str(sibling_y))
+            _, hidden_click_nodes = view_state()
+            if (hidden_click_nodes[sibling_id].get("focused") or
+                    hidden_click_nodes[original_id].get("rect") != initial_rect):
+                raise RuntimeError(
+                    "FAIL_NATIVE_BUTTON_HIDDEN_FOCUS_OR_GEOMETRY")
+            # Sway may legitimately focus an empty workspace after clicking
+            # hidden coordinates. Restore the visible actor before the
+            # independent same-pointer grab positive test.
+            focus(original_id)
+            grab = button_signals(
+                "cross_hidden_grab", "grab", str(main_x), str(main_y),
+                str(sibling_x), str(sibling_y))
+            if "SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS target=MAIN" not in grab:
+                raise RuntimeError("FAIL_NATIVE_GRAB_MAIN_PRESS_MISSING " +
+                                   grab[-2500:])
+            _, after_grab_nodes = view_state()
+            if (after_grab_nodes[sibling_id].get("focused") or
+                    after_grab_nodes[original_id].get("rect") != initial_rect):
+                raise RuntimeError(
+                    "FAIL_NATIVE_GRAB_HIDDEN_FOCUS_OR_GEOMETRY")
+            focus(original_id)
+            print("SD_CI_CHROME_BUTTON_GRAB: result=PASS "
+                  "native_btn_left_press_release=1 "
+                  "visible_button_positive=1 hidden_button_negative=1 "
+                  "same_pointer_grab_cross_hidden=1 "
+                  "hidden_root_button_receipts=0 "
+                  "hidden_root_pointer_receipts=0 authority=NONE",
+                  flush=True)
         # Return actual cursor to the visible, clipped Chrome region
         # before the independent scene screenshot pixel check.
         send("pointer", str(main_x), str(main_y))
@@ -691,6 +754,7 @@ def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
                 post_nodes[sibling_id].get("focused") or
                 post_nodes[original_id].get("rect") != initial_rect):
             raise RuntimeError("FAIL_VIRTUAL_INPUT_CHANGED_NATIVE_SEAT_OR_GEOMETRY")
+        tree = post_tree
         print("SD_CI_CHROME_REAL_INPUT: result=PASS "
               "native_virtual_keyboard=1 native_virtual_pointer=1 "
               "visible_keyboard_target=MAIN hidden_keyboard_target=NONE "

@@ -37,6 +37,10 @@ bool stage_director_ci_scene_probe_reject_chrome_surface_focus(
  * Reports actual focused/target surface; never grants input authority. */
 void stage_director_ci_scene_probe_record_input_delivery(
 	struct wlr_surface *surface, bool is_keyboard);
+/* Observe actual wlroots button delivery target and press/release state.
+ * This does not synthesize input or grant production authority. */
+void stage_director_ci_scene_probe_record_pointer_button_delivery(
+	struct wlr_surface *surface, bool pressed);
 void stage_director_ci_scene_probe(struct sway_view *view);
 /* Remove any CI screenshot hold before the disposable actor unmaps. */
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
