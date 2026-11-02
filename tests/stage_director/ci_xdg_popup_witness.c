@@ -222,6 +222,9 @@ int main(int argc, char **argv) {
 		} else if (wl_display_dispatch_pending(s.display) < 0) {
 			break;
 		}
+		/* The configure callback attaches the bright popup SHM buffer.
+		 * Flush its commit rather than relying on a future input event. */
+		if (wl_display_flush(s.display) < 0) break;
 	}
 	wl_display_disconnect(s.display);
 	return 0;
