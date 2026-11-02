@@ -335,6 +335,7 @@ jobs:
             ${{ runner.temp }}/sd-ci-chrome-second-toplevel.png
             ${{ runner.temp }}/sd-ci-chrome-sibling-before-tree.json
             ${{ runner.temp }}/sd-ci-chrome-sibling-after-tree.json
+            ${{ runner.temp }}/sd-ci-chrome-sibling-failed-tree.json
             ${{ runner.temp }}/sd-chrome-failed-tree.json
       - name: Declare evidence boundary
         if: always()
