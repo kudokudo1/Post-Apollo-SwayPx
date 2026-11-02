@@ -718,12 +718,27 @@ def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
                                    visible[-2500:])
             hidden = button_signals(
                 "hidden_click", "button", str(sibling_x), str(sibling_y))
+            _, hidden_click_nodes = view_state()
+            if (hidden_click_nodes[sibling_id].get("focused") or
+                    hidden_click_nodes[original_id].get("rect") != initial_rect):
+                raise RuntimeError(
+                    "FAIL_NATIVE_BUTTON_HIDDEN_FOCUS_OR_GEOMETRY")
+            # Sway may legitimately focus an empty workspace after clicking
+            # hidden coordinates. Restore the visible actor before the
+            # independent same-pointer grab positive test.
+            focus(original_id)
             grab = button_signals(
                 "cross_hidden_grab", "grab", str(main_x), str(main_y),
                 str(sibling_x), str(sibling_y))
             if "SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS target=MAIN" not in grab:
                 raise RuntimeError("FAIL_NATIVE_GRAB_MAIN_PRESS_MISSING " +
                                    grab[-2500:])
+            _, after_grab_nodes = view_state()
+            if (after_grab_nodes[sibling_id].get("focused") or
+                    after_grab_nodes[original_id].get("rect") != initial_rect):
+                raise RuntimeError(
+                    "FAIL_NATIVE_GRAB_HIDDEN_FOCUS_OR_GEOMETRY")
+            focus(original_id)
             print("SD_CI_CHROME_BUTTON_GRAB: result=PASS "
                   "native_btn_left_press_release=1 "
                   "visible_button_positive=1 hidden_button_negative=1 "
