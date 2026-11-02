@@ -372,7 +372,35 @@ def discover_chrome_second_toplevel(e, temp, swaymsg, ipc, grim,
                 break
             time.sleep(0.1)
         else:
-            raise RuntimeError("FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG")
+            # Preserve the real IPC representation at the precise failure
+            # boundary; never infer an invisible native view from a log.
+            tree = json.loads(call(
+                swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            (temp / "sd-ci-chrome-sibling-failed-tree.json").write_text(
+                json.dumps(tree), encoding="utf-8")
+            flat = []
+            def inspect_node(node):
+                if isinstance(node, dict):
+                    if (node.get("pid") is not None or
+                            node.get("type") in ("con", "floating_con")):
+                        pid = node.get("pid")
+                        flat.append({
+                            "type": node.get("type"), "id": node.get("id"),
+                            "pid": pid, "shell": node.get("shell"),
+                            "cgroup": pid in members(root) if pid else False,
+                            "rect": node.get("rect")})
+                    for key in ("nodes", "floating_nodes"):
+                        for child in node.get(key, []):
+                            inspect_node(child)
+            inspect_node(tree)
+            log = (Path(e["XDG_RUNTIME_DIR"]) / "sway.log").read_text(
+                encoding="utf-8", errors="replace")
+            raise RuntimeError(
+                "FAIL_CHROME_EXECUTABLE_NO_SECOND_NATIVE_XDG "
+                "observed_tree=" + json.dumps(flat) +
+                " original_id=" + str(original_id) +
+                " sibling_quarantined=" +
+                str("SD_CI_CHROME_SIBLING_QUARANTINED" in log))
         if not originals or not siblings:
             raise RuntimeError("FAIL_CHROME_SIBLING_LOST_ORIGINAL_NATIVE_XDG")
         journal = call("sudo", "-n", "journalctl", "-u", unit,
