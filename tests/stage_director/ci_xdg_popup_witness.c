@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -75,14 +75,10 @@ static const struct xdg_toplevel_listener top_listener = {
 static struct wl_buffer *solid(struct witness *s, uint32_t w,
 		uint32_t h, uint32_t color) {
 	if (w == 0 || h == 0 || w > 200 || h > 150) return NULL;
-	const char *runtime = getenv("XDG_RUNTIME_DIR");
-	if (!runtime || strlen(runtime) > PATH_MAX - 48) return NULL;
-	char filename[PATH_MAX];
-	if (snprintf(filename, sizeof(filename),
-			"%s/sd-ci-xdg-popup-shm-XXXXXX", runtime) <= 0) return NULL;
-	int fd = mkstemp(filename);
+	/* Chrome's isolated service uses ProtectHome=read-only. SHM must not
+	 * require a file in the runner's temporary Wayland socket directory. */
+	int fd = memfd_create("sd-ci-xdg-popup-shm", MFD_CLOEXEC);
 	if (fd < 0) return NULL;
-	(void)unlink(filename);
 	size_t length = (size_t)w * h * 4;
 	if (ftruncate(fd, (off_t)length) < 0) {
 		close(fd); return NULL;
