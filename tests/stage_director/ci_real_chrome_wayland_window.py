@@ -410,7 +410,7 @@ def main() -> None:
                  "--setenv=RUNNER_TEMP=" + str(temp),
                  "--setenv=STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1",
                  "/usr/bin/bash",
-                 "tests/stage_director/ci_chrome_popup_service.sh",
+                 str(Path("tests/stage_director/ci_chrome_popup_service.sh").resolve()),
                  popup_exe, str(popup_request),
              ] if popup_mode else []),
              "/opt/google/chrome/chrome",
