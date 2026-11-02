@@ -118,6 +118,58 @@ static bool actual_pointer(struct context *ctx, uint32_t x, uint32_t y) {
 		"actual_wayland_protocol=1 authority=NONE\n", x, y);
 	return true;
 }
+/* Real virtual pointer button events. A drag keeps the same virtual
+ * pointer alive from press through motion and release so wlroots may use
+ * its normal implicit pointer grab, not a sequence of fake pointer hits. */
+static bool actual_pointer_button(struct context *ctx, uint32_t x,
+		uint32_t y, bool drag, uint32_t dest_x, uint32_t dest_y) {
+	if (x >= 1920 || y >= 1080 || (drag && (dest_x >= 1920 ||
+			dest_y >= 1080))) return false;
+	struct zwlr_virtual_pointer_v1 *ptr =
+		zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
+			ctx->pointers, ctx->seat);
+	if (!ptr) return false;
+	pause_dispatch(ctx);
+	zwlr_virtual_pointer_v1_motion_absolute(ptr, now_msec(),
+		x, y, 1920, 1080);
+	zwlr_virtual_pointer_v1_frame(ptr);
+	pause_dispatch(ctx);
+	zwlr_virtual_pointer_v1_button(ptr, now_msec(), BTN_LEFT,
+		WL_POINTER_BUTTON_STATE_PRESSED);
+	zwlr_virtual_pointer_v1_frame(ptr);
+	pause_dispatch(ctx);
+	if (drag) {
+		zwlr_virtual_pointer_v1_motion_absolute(ptr, now_msec(),
+			dest_x, dest_y, 1920, 1080);
+		zwlr_virtual_pointer_v1_frame(ptr);
+		pause_dispatch(ctx);
+	}
+	zwlr_virtual_pointer_v1_button(ptr, now_msec(), BTN_LEFT,
+		WL_POINTER_BUTTON_STATE_RELEASED);
+	zwlr_virtual_pointer_v1_frame(ptr);
+	pause_dispatch(ctx);
+	if (drag) {
+		/* After implicit grab release, test the hidden region again. */
+		zwlr_virtual_pointer_v1_motion_absolute(ptr, now_msec(),
+			dest_x, dest_y, 1920, 1080);
+		zwlr_virtual_pointer_v1_frame(ptr);
+		pause_dispatch(ctx);
+	}
+	zwlr_virtual_pointer_v1_destroy(ptr);
+	printf("SD_CI_VIRTUAL_INPUT_SENT kind=%s x=%u y=%u "
+		"dest_x=%u dest_y=%u button=BTN_LEFT press=1 release=1 "
+		"same_native_pointer=1 authority=NONE\\n",
+		drag ? "GRAB" : "BUTTON", x, y, dest_x, dest_y);
+	return true;
+}
+static bool parse_coord(const char *raw, uint32_t limit, uint32_t *out) {
+	char *end = NULL;
+	errno = 0;
+	unsigned long value = strtoul(raw, &end, 10);
+	if (errno || !end || !raw[0] || *end || value >= limit) return false;
+	*out = (uint32_t)value;
+	return true;
+}
 int main(int argc, char **argv) {
 	const char *ci = getenv("CI"), *actions = getenv("GITHUB_ACTIONS");
 	const char *flag = getenv("STAGE_DIRECTOR_CI_CHROME_REAL_INPUT");
@@ -130,19 +182,14 @@ int main(int argc, char **argv) {
 	}
 	bool keyboard = argc == 2 && strcmp(argv[1], "keyboard") == 0;
 	bool pointer = argc == 4 && strcmp(argv[1], "pointer") == 0;
-	if (!keyboard && !pointer) return 3;
-	uint32_t x = 0, y = 0;
-	if (pointer) {
-		char *end = NULL;
-		errno = 0;
-		unsigned long v = strtoul(argv[2], &end, 10);
-		if (errno || !end || *end || v >= 1920) return 4;
-		x = (uint32_t)v;
-		errno = 0;
-		v = strtoul(argv[3], &end, 10);
-		if (errno || !end || *end || v >= 1080) return 4;
-		y = (uint32_t)v;
-	}
+	bool button = argc == 4 && strcmp(argv[1], "button") == 0;
+	bool grab = argc == 6 && strcmp(argv[1], "grab") == 0;
+	if (!keyboard && !pointer && !button && !grab) return 3;
+	uint32_t x = 0, y = 0, dx = 0, dy = 0;
+	if (!keyboard && (!parse_coord(argv[2], 1920, &x) ||
+			!parse_coord(argv[3], 1080, &y))) return 4;
+	if (grab && (!parse_coord(argv[4], 1920, &dx) ||
+			!parse_coord(argv[5], 1080, &dy))) return 4;
 	struct context ctx = {0};
 	ctx.display = wl_display_connect(NULL);
 	if (!ctx.display) return 5;
@@ -154,7 +201,10 @@ int main(int argc, char **argv) {
 		wl_display_disconnect(ctx.display);
 		return 6;
 	}
-	bool ok = keyboard ? actual_keyboard(&ctx) : actual_pointer(&ctx, x, y);
+	bool ok = keyboard ? actual_keyboard(&ctx) :
+		grab ? actual_pointer_button(&ctx, x, y, true, dx, dy) :
+		button ? actual_pointer_button(&ctx, x, y, false, x, y) :
+		actual_pointer(&ctx, x, y);
 	wl_display_roundtrip(ctx.display);
 	wl_display_disconnect(ctx.display);
 	return ok ? 0 : 8;
