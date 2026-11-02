@@ -38,6 +38,7 @@ jobs:
           p=Path("sway/stage_director_ci_scene_probe.c").read_text()
           pix=Path("tests/stage_director/assert_real_chrome_clip_pixels.py").read_text()
           mask=Path("tests/stage_director/assert_real_chrome_mask_shift_pixels.py").read_text()
+          test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           assert "SD_CI_CHROME_MASK_SHIFT_PIXELS: result=PASS" in mask
           assert "FAIL_NATIVE_CHROME_WINDOW_MOVED_OR_REPLACED" in mask
           assert "FAIL_STALE_CHROME_PIXELS_OLD_MASK" in mask
@@ -55,7 +56,6 @@ jobs:
           assert 'os.O_CREAT | os.O_EXCL | os.O_WRONLY' in test
           assert 'sd-chrome-mask-shift.ppm' in test
           ast.parse(mask)
-          test=Path("tests/stage_director/ci_real_chrome_wayland_window.py").read_text()
           nix=Path("tests/stage_director/ci_real_chrome_pixel_compositor.nix").read_text()
           runtime=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "default_border normal" in runtime
