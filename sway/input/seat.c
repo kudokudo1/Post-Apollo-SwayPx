@@ -1538,6 +1538,13 @@ struct seat_config *seat_get_config_by_name(const char *name) {
 
 void seat_pointer_notify_button(struct sway_seat *seat, uint32_t time_msec,
 		uint32_t button, enum wl_pointer_button_state state) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	if (button == BTN_LEFT) {
+		stage_director_ci_scene_probe_record_pointer_button_delivery(
+			seat->wlr_seat->pointer_state.focused_surface,
+			state == WL_POINTER_BUTTON_STATE_PRESSED);
+	}
+#endif
 	seat->last_button_serial = wlr_seat_pointer_notify_button(seat->wlr_seat,
 			time_msec, button, state);
 }
