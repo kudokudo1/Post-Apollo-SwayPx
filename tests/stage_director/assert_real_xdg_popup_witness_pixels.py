@@ -14,8 +14,25 @@ def amount(path):
     width, height, rgb = parse_ppm(path)
     if (width, height) != (1920, 1080):
         raise ValueError("FAIL_NATIVE_POPUP_SCREENSHOT_SIZE")
-    # Solid RGB DD44DD pixels, emitted only by the native popup witness.
-    return bytes(rgb).count(b"\xdd\x44\xdd")
+    # The software EGL renderer may color-convert SHM slightly, so avoid a
+    # brittle byte-exact comparison. This bounded hue/contrast predicate
+    # cannot match the black desktop or white Chrome about:blank surface.
+    # Report the exact count separately for diagnosing unexpected conversion.
+    exact = bytes(rgb).count(b"\xdd\x44\xdd")
+    painted = 0
+    x0, y0, x1, y1 = width, height, -1, -1
+    for i in range(0, len(rgb), 3):
+        red, green, blue = rgb[i], rgb[i + 1], rgb[i + 2]
+        if (red >= 150 and blue >= 150 and green <= 125 and
+                min(red, blue) - green >= 70):
+            painted += 1
+            pixel = i // 3
+            x, y = pixel % width, pixel // width
+            x0, y0 = min(x0, x), min(y0, y)
+            x1, y1 = max(x1, x), max(y1, y)
+    print(f"SD_CI_NATIVE_POPUP_HUE_SAMPLE file={path} exact={exact} "
+          f"magenta_like={painted} bounds={(x0,y0,x1,y1)}", flush=True)
+    return painted
 
 
 def main():
