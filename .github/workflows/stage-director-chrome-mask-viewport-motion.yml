@@ -228,6 +228,12 @@ jobs:
           assert 'xdg_surface_get_popup(s.popup_xdg, s.parent_xdg' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_REQUEST_SENT' in popup_client
           assert 'SD_CI_NATIVE_XDG_POPUP_BUFFER_ATTACHED' in popup_client
+          assert 'SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=%s' in popup_client
+          assert 'SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=%s owner=%s' in popup_client
+          assert 'wl_pointer_add_listener(' in popup_client
+          assert 'SD_CI_XDG_POPUP_INPUT_CUSTODY: result=PASS' in test
+          assert 'FAIL_NATIVE_POPUP_COMPOSITOR_INPUT_ROOT' in test
+          assert 'FAIL_DENIED_POPUP_RECEIVED_NATIVE_INPUT' in test
           assert 'sd-ci-popup-witness' in popup_client
           assert 'SD_CI_NATIVE_POPUP_DENIAL_PIXELS: result=PASS' in popup_pixels
           assert 'FAIL_NATIVE_POPUP_POSITIVE_CONTROL_NOT_RENDERED' in popup_pixels
@@ -366,6 +372,7 @@ jobs:
             echo "STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT=1" >> "$GITHUB_ENV"
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
+            echo "STAGE_DIRECTOR_CI_CHROME_REAL_INPUT=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
@@ -405,7 +412,7 @@ jobs:
             test -x "$popup/bin/sd-ci-xdg-popup-witness"
             echo "STAGE_DIRECTOR_TEST_XDG_POPUP_WITNESS=$popup/bin/sd-ci-xdg-popup-witness" >> "$GITHUB_ENV"
           fi
-          if [[ "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
+          if [[ "${{ matrix.exit_mode }}" == "native-popup-denial" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
             injector="$(nix build --impure --expr 'import ./tests/stage_director/ci_virtual_input_event.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
             test -x "$injector/bin/sd-ci-virtual-input-event"
             echo "STAGE_DIRECTOR_TEST_VIRTUAL_INPUT=$injector/bin/sd-ci-virtual-input-event" >> "$GITHUB_ENV"
@@ -480,7 +487,7 @@ jobs:
           echo "Real Chrome stays at the same XDG ID/rectangle while isolated SceneFX mask advances 320x240 -> 400x300 -> 280x220, with a screenshot after every step." >> "$GITHUB_STEP_SUMMARY"
           echo "Two isolated CI jobs: the established SIGKILL after PHASE3, and a separately acknowledged but unapplied pending mask request before SIGKILL. Both require native unmap and actual post-kill screenshot clearance." >> "$GITHUB_STEP_SUMMARY"
           echo "If pixel test fails, do not report containment success from scene hit-tests or source clips alone." >> "$GITHUB_STEP_SUMMARY"
-          echo "The native-popup-denial matrix job compares a real magenta xdg_popup positive control to the identical native protocol emitted from Chrome's exact disposable service cgroup. This does not mean the Chrome executable itself emitted that popup." >> "$GITHUB_STEP_SUMMARY"
+          echo "The native-popup-denial matrix job requires magenta popup pixels and actual unrelated client pointer/button receipts, then denied same-cgroup popup pixels and no denied client popup input receipts. The Chrome executable itself did not generate this popup." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-second-toplevel matrix job requires a real Chrome-generated native XDG, exact CI-only quarantine, zero sampled outside pixels and unchanged original XDG geometry." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-multi-toplevel job requires two extra simultaneous Chrome XDG roots, exact close/reopen and three real screenshots." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-hidden-focus job attempts Sway IPC native focus on a real invisible Chrome sibling, requires native seat refusal and unchanged original focus; no actual keys or pointer tested in that lane." >> "$GITHUB_STEP_SUMMARY"
