@@ -169,7 +169,7 @@ static void pointer_enter(void *data, struct wl_pointer *ptr,
     (void)ptr; (void)serial; (void)x; (void)y;
     struct witness *s = data;
     s->pointer_surface = surface;
-    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=%s\\n",
+    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=%s\n",
         pointer_owner(s, surface));
     fflush(stdout);
 }
@@ -187,7 +187,7 @@ static void pointer_button(void *data, struct wl_pointer *ptr,
         uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
     (void)ptr; (void)serial; (void)time; (void)button;
     struct witness *s = data;
-    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=%s owner=%s\\n",
+    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=%s owner=%s\n",
         state == WL_POINTER_BUTTON_STATE_PRESSED ? "PRESS" : "RELEASE",
         pointer_owner(s, s->pointer_surface));
     fflush(stdout);
@@ -227,7 +227,7 @@ static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
         s->pointer = wl_seat_get_pointer(seat);
         if (!s->pointer ||
                 wl_pointer_add_listener(s->pointer, &pointer_listener, s)) {
-            fputs("FAIL_POPUP_POINTER_LISTENER_BIND\\n", stderr);
+            fputs("FAIL_POPUP_POINTER_LISTENER_BIND\n", stderr);
             exit(9);
         }
     }
