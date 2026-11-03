@@ -1035,6 +1035,10 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 }
 
 void view_unmap(struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* Guard reference cannot survive native XDG unmap / view destruction. */
+	stage_director_ci_scene_probe_early_unmap(view);
+#endif
 	stage_director_view_unmapped(view);
 	wl_signal_emit_mutable(&view->events.unmap, view);
 
