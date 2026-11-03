@@ -29,6 +29,10 @@ GitHub Actions > `Stage Director real Chrome stationary XDG moving mask (CI)` > 
 - [ ] All Chrome regressions green and exact PR head read back
 - [ ] Operator Fedora and Weather Station acceptance NOT attempted
 
+## VERIFICATION HISTORY // CHROME STARTUP PRESSURE
+
+Initial PR #69 run: `chrome-first-frame` passed native map-hide, output release and four-edge screenshot checks. The first full Chrome matrix reported `BLOCKED_NO_UNIQUE_LIVE_NATIVE_CHROME_TOPLEVEL` in `chrome-multi-toplevel` and `chrome-subsurface-owner` before either lane reached its feature checks. The multi-window lane passed on isolated retry; subsurface startup timed out again. This is a startup-provenance timing blocker, not a rendered-pixel containment failure. The CI harness now gives these two multi-client modes a bounded 160 observation samples (formerly 80), preserving native kernel PID/starttime, exact transient cgroup, unique XDG window and three stable geometry observations. Rerun all checks on the changed PR head before merge.
+
 ## WATCH OUT FOR
 
 This experiment provides **CI-only scene authority gating at output preparation**, not a guarantee that all pixels emitted by the GPU were continuously observed. The screenshot checker still samples frames, and the Chrome app is fixed `about:blank`. No live Weather host interior geometry, ephemeral popup mediation, sandbox attestation, browser launch broker or actual WATCH playback is enabled.
