@@ -29,6 +29,11 @@
  * standard Sway clipping. No process, seat, popup, or WATCH authority.
  */
 static struct sway_view *ci_render_actor;
+/* Only the isolated first-frame CI variant acquires this native view. */
+static struct sway_view *ci_first_frame_actor;
+static bool ci_first_frame_released;
+static bool ci_first_frame_failed;
+static unsigned ci_first_frame_checks;
 /* One second native Chrome XDG window in a disposable CI test only. */
 /* Explicit bound: CI-only test fixtures never admit unlimited siblings.
  * Every retained native view must be re-disabled after each layout pass.
