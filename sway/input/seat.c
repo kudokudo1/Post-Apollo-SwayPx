@@ -35,6 +35,7 @@
 #include "sway/tree/root.h"
 #include "sway/tree/view.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include <wlr/util/log.h>
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
 #include "sway/tree/workspace.h"
