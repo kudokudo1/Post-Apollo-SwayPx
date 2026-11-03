@@ -697,6 +697,18 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
 	if (!ci_real_chrome_process(view, &native_peer)) return false;
 	view->container->pending.border = B_NONE;
 	view->container->pending.border_thickness = 0;
+	if (ci_first_frame_mode() && !ci_first_frame_actor &&
+			view->container->scene_tree) {
+		ci_first_frame_actor = view;
+		ci_first_frame_released = false;
+		ci_first_frame_failed = false;
+		ci_first_frame_checks = 0;
+		wlr_scene_node_set_enabled(
+			&view->container->scene_tree->node, false);
+		wlr_log(WLR_INFO, "SD_CI_FIRST_FRAME_MAP_HIDDEN "
+			"verified_native_chrome=1 before_first_layout=1 "
+			"authority=NONE result=PASS");
+	}
 	wlr_log(WLR_INFO,
 		"SD_CI_CHROME_PER_VIEW_BORDER native_cgroup=1 "
 		"exact_native_peer=1 actor_only=1 border=none "
