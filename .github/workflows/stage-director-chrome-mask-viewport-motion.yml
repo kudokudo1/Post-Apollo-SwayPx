@@ -373,6 +373,7 @@ jobs:
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_REAL_INPUT=1" >> "$GITHUB_ENV"
+            echo "STAGE_DIRECTOR_CI_CHROME_REAL_BUTTON=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           elif [[ "${{ matrix.exit_mode }}" == "chrome-second-toplevel" || "${{ matrix.exit_mode }}" == "chrome-multi-toplevel" || "${{ matrix.exit_mode }}" == "chrome-hidden-focus" || "${{ matrix.exit_mode }}" == "chrome-real-input" || "${{ matrix.exit_mode }}" == "chrome-button-grab" || "${{ matrix.exit_mode }}" == "chrome-subsurface-owner" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_SIBLING_DISCOVERY=1" >> "$GITHUB_ENV"
