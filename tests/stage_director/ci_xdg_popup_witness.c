@@ -24,6 +24,9 @@ struct witness {
 	struct wl_display *display;
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
+	struct wl_seat *seat;
+	struct wl_pointer *pointer;
+	struct wl_surface *pointer_surface;
 	struct xdg_wm_base *wm;
 	struct wl_surface *parent_surface, *popup_surface;
 	struct xdg_surface *parent_xdg, *popup_xdg;
@@ -45,6 +48,9 @@ static void global(void *data, struct wl_registry *reg,
 			&wl_compositor_interface, version < 4 ? version : 4);
 	} else if (!strcmp(interface, wl_shm_interface.name)) {
 		s->shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
+	} else if (!strcmp(interface, wl_seat_interface.name)) {
+		s->seat = wl_registry_bind(reg, name, &wl_seat_interface,
+			version < 4 ? version : 4);
 	} else if (!strcmp(interface, xdg_wm_base_interface.name)) {
 		s->wm = wl_registry_bind(reg, name,
 			&xdg_wm_base_interface, version < 3 ? version : 3);
@@ -150,6 +156,89 @@ static const struct xdg_popup_listener popup_listener = {
 	.configure = popup_configure, .popup_done = popup_done,
 	.repositioned = popup_repositioned,
 };
+
+/* CI-only client receipts. An XDG popup is a separate wl_surface root,
+ * not a wl_subsurface child of the window it is attached to. */
+static const char *pointer_owner(struct witness *s, struct wl_surface *surface) {
+    if (surface == s->popup_surface) return "POPUP";
+    if (surface == s->parent_surface) return "PARENT";
+    return surface ? "OTHER" : "NONE";
+}
+static void pointer_enter(void *data, struct wl_pointer *ptr,
+        uint32_t serial, struct wl_surface *surface, wl_fixed_t x, wl_fixed_t y) {
+    (void)ptr; (void)serial; (void)x; (void)y;
+    struct witness *s = data;
+    s->pointer_surface = surface;
+    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=%s\n",
+        pointer_owner(s, surface));
+    fflush(stdout);
+}
+static void pointer_leave(void *data, struct wl_pointer *ptr,
+        uint32_t serial, struct wl_surface *surface) {
+    (void)ptr; (void)serial;
+    struct witness *s = data;
+    if (s->pointer_surface == surface) s->pointer_surface = NULL;
+}
+static void pointer_motion(void *data, struct wl_pointer *ptr,
+        uint32_t time, wl_fixed_t x, wl_fixed_t y) {
+    (void)data; (void)ptr; (void)time; (void)x; (void)y;
+}
+static void pointer_button(void *data, struct wl_pointer *ptr,
+        uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
+    (void)ptr; (void)serial; (void)time; (void)button;
+    struct witness *s = data;
+    printf("SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=%s owner=%s\n",
+        state == WL_POINTER_BUTTON_STATE_PRESSED ? "PRESS" : "RELEASE",
+        pointer_owner(s, s->pointer_surface));
+    fflush(stdout);
+}
+static void pointer_axis(void *data, struct wl_pointer *ptr,
+        uint32_t time, uint32_t axis, wl_fixed_t value) {
+    (void)data; (void)ptr; (void)time; (void)axis; (void)value;
+}
+static void pointer_frame(void *data, struct wl_pointer *ptr) {
+    (void)data; (void)ptr;
+}
+static void pointer_axis_source(void *data, struct wl_pointer *ptr,
+        uint32_t source) { (void)data; (void)ptr; (void)source; }
+static void pointer_axis_stop(void *data, struct wl_pointer *ptr,
+        uint32_t time, uint32_t axis) {
+    (void)data; (void)ptr; (void)time; (void)axis;
+}
+static void pointer_axis_discrete(void *data, struct wl_pointer *ptr,
+        uint32_t axis, int32_t discrete) {
+    (void)data; (void)ptr; (void)axis; (void)discrete;
+}
+static const struct wl_pointer_listener pointer_listener = {
+    .enter=pointer_enter, .leave=pointer_leave, .motion=pointer_motion,
+    .button=pointer_button, .axis=pointer_axis, .frame=pointer_frame,
+    .axis_source=pointer_axis_source, .axis_stop=pointer_axis_stop,
+    .axis_discrete=pointer_axis_discrete,
+};
+static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
+    struct witness *s = data;
+    /* A disposable virtual sender may revoke/recreate POINTER capability. */
+    if (!(caps & WL_SEAT_CAPABILITY_POINTER) && s->pointer) {
+        wl_pointer_release(s->pointer);
+        s->pointer = NULL;
+        s->pointer_surface = NULL;
+    }
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !s->pointer) {
+        s->pointer = wl_seat_get_pointer(seat);
+        if (!s->pointer ||
+                wl_pointer_add_listener(s->pointer, &pointer_listener, s)) {
+            fputs("FAIL_POPUP_POINTER_LISTENER_BIND\n", stderr);
+            exit(9);
+        }
+    }
+}
+static void seat_name(void *data, struct wl_seat *seat, const char *name) {
+    (void)data; (void)seat; (void)name;
+}
+static const struct wl_seat_listener seat_listener = {
+    .capabilities=seat_capabilities, .name=seat_name,
+};
+
 int main(int argc, char **argv) {
 	const char *runtime = getenv("XDG_RUNTIME_DIR");
 	const char *temp = getenv("RUNNER_TEMP");
@@ -169,10 +258,12 @@ int main(int argc, char **argv) {
 	if (!s.display) return 1;
 	struct wl_registry *registry = wl_display_get_registry(s.display);
 	if (!registry || wl_registry_add_listener(registry, &registry_listener, &s) ||
-			wl_display_roundtrip(s.display) < 0 || !s.compositor || !s.shm || !s.wm) {
+			wl_display_roundtrip(s.display) < 0 || !s.compositor || !s.shm ||
+            !s.wm || !s.seat) {
 		fputs("FAIL_XDG_POPUP_REGISTRY\n", stderr); return 1;
 	}
 	xdg_wm_base_add_listener(s.wm, &wm_listener, &s);
+	wl_seat_add_listener(s.seat, &seat_listener, &s);
 	s.parent_surface = wl_compositor_create_surface(s.compositor);
 	s.parent_xdg = xdg_wm_base_get_xdg_surface(s.wm, s.parent_surface);
 	s.parent_top = xdg_surface_get_toplevel(s.parent_xdg);

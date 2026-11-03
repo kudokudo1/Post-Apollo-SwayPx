@@ -14,6 +14,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from assert_news_render_pixels import parse_ppm
 
 
 def call(*args: str, check: bool = True, timeout: int = 20) -> str:
@@ -313,6 +314,23 @@ def verify_pending_mask_exit(e, temp, runtime, swaymsg, ipc, grim,
 
 
 
+def native_popup_pointer_target(ppm):
+    """Select a real rendered popup pixel instead of guessing its geometry."""
+    width, height, rgb = parse_ppm(ppm)
+    if (width, height) != (1920, 1080):
+        raise RuntimeError("FAIL_NATIVE_POPUP_POINTER_SCREENSHOT_DIMENSIONS")
+    hits = []
+    for i in range(0, len(rgb), 3):
+        red, green, blue = rgb[i], rgb[i + 1], rgb[i + 2]
+        if (red >= 150 and blue >= 150 and green <= 125 and
+                min(red, blue) - green >= 70):
+            pixel = i // 3
+            hits.append((pixel % width, pixel // width))
+    if len(hits) < 800:
+        raise RuntimeError("FAIL_NATIVE_POPUP_POINTER_NO_PAINTED_TARGET")
+    return hits[len(hits) // 2]
+
+
 def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
                                 root, crop_ppm):
     """Real xdg_popup positive/negative control in one CI compositor.
@@ -327,7 +345,13 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
             not witness.startswith("/nix/store/") or
             not Path(witness).is_file()):
         raise RuntimeError("BLOCKED_NATIVE_POPUP_WITNESS_OUTSIDE_CI")
+    injector = e.get("STAGE_DIRECTOR_TEST_VIRTUAL_INPUT", "")
+    if (e.get("STAGE_DIRECTOR_CI_CHROME_REAL_INPUT") != "1" or
+            not injector.startswith("/nix/store/") or
+            not Path(injector).is_file()):
+        raise RuntimeError("BLOCKED_NATIVE_POPUP_INPUT_WITNESS_UNAVAILABLE")
     control_log = temp / "sd-ci-native-popup-control.log"
+    pointer_xy = None
     with control_log.open("w", encoding="utf-8") as output:
         control = subprocess.Popen(
             [witness, "emit"], stdout=output, stderr=subprocess.STDOUT)
@@ -349,6 +373,40 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
             call(grim, "-t", "ppm", str(positive), timeout=25)
             call(grim, "-t", "png",
                  str(temp / "sd-ci-native-popup-positive.png"), timeout=25)
+            pointer_xy = native_popup_pointer_target(positive)
+            compositor_before = len((runtime / "sway.log").read_text(
+                encoding="utf-8", errors="replace"))
+            call(injector, "button", str(pointer_xy[0]), str(pointer_xy[1]),
+                 timeout=20)
+            expected = (
+                "SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=POPUP",
+                "SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=PRESS owner=POPUP",
+                "SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON state=RELEASE owner=POPUP",
+            )
+            for _ in range(65):
+                receipt = control_log.read_text(encoding="utf-8")
+                if all(marker in receipt for marker in expected):
+                    break
+                if control.poll() is not None:
+                    raise RuntimeError(
+                        "FAIL_NATIVE_POPUP_POSITIVE_INPUT_CLIENT_EXITED " + receipt)
+                time.sleep(0.1)
+            else:
+                raise RuntimeError("FAIL_NATIVE_POPUP_POSITIVE_INPUT_RECEIPTS " +
+                                   control_log.read_text(encoding="utf-8"))
+            event_log = (runtime / "sway.log").read_text(
+                encoding="utf-8", errors="replace")[compositor_before:]
+            if ("SD_CI_NATIVE_INPUT_DELIVERED kind=POINTER target=OTHER" not in
+                    event_log or
+                    "SD_CI_NATIVE_BUTTON_DELIVERED state=PRESS target=OTHER" not in
+                    event_log or
+                    "SD_CI_NATIVE_BUTTON_DELIVERED state=RELEASE target=OTHER" not in
+                    event_log or "target=HIDDEN_SIBLING" in event_log):
+                raise RuntimeError("FAIL_NATIVE_POPUP_COMPOSITOR_INPUT_ROOT " +
+                                   event_log[-3800:])
+            print("SD_CI_NATIVE_POPUP_POSITIVE_INPUT: result=PASS "
+                  "native_popup_pointer_enter=1 click_press_release=1 "
+                  "compositor_root=OTHER authority=NONE", flush=True)
             print("SD_CI_NATIVE_POPUP_CONTROL_PROTOCOL_LOG:\n" +
                   control_log.read_text(encoding="utf-8"), flush=True)
         finally:
@@ -404,6 +462,31 @@ def verify_native_popup_witness(e, temp, runtime, grim, unit, snapshot,
         print(report, flush=True)
         if "SD_CI_NATIVE_POPUP_DENIAL_PIXELS: result=PASS" not in report:
             raise RuntimeError("FAIL_NATIVE_POPUP_SCREENSHOT_PROOF_MISSING")
+        # Click the same location after the exact Chrome-cgroup popup is
+        # rejected; its service must have no native popup input receipt.
+        if pointer_xy is None:
+            raise RuntimeError("FAIL_NATIVE_POPUP_POSITIVE_COORDINATE_MISSING")
+        denied_event_start = len((runtime / "sway.log").read_text(
+            encoding="utf-8", errors="replace"))
+        call(injector, "button", str(pointer_xy[0]), str(pointer_xy[1]),
+             timeout=20)
+        denied_event_log = (runtime / "sway.log").read_text(
+            encoding="utf-8", errors="replace")[denied_event_start:]
+        if "target=HIDDEN_SIBLING" in denied_event_log:
+            raise RuntimeError("FAIL_DENIED_POPUP_INPUT_HIDDEN_CHROME_TARGET " +
+                               denied_event_log[-2500:])
+        denied_journal = call("sudo", "-n", "journalctl", "-u", unit,
+                              "-n", "160", "--no-pager",
+                              check=False, timeout=20)
+        if "SD_CI_NATIVE_XDG_POPUP_INPUT kind=ENTER owner=POPUP" in denied_journal or (
+                "SD_CI_NATIVE_XDG_POPUP_INPUT kind=BUTTON" in denied_journal and
+                "owner=POPUP" in denied_journal):
+            raise RuntimeError("FAIL_DENIED_POPUP_RECEIVED_NATIVE_INPUT " +
+                               denied_journal[-3500:])
+        print("SD_CI_XDG_POPUP_INPUT_CUSTODY: result=PASS "
+              "unrelated_popup_native_receipt=1 denied_same_cgroup_popup_receipt=0 "
+              "same_pixels_clicked=1 protected_popup_global_scene=BLOCKED "
+              "browser_executable_popup=UNTESTED authority=NONE", flush=True)
         print("SD_CI_XDG_POPUP_NATIVE_EVENT: result=PASS "
               "separate_unrelated_popup_rendered=1 "
               "same_chrome_service_cgroup_emitter=1 "
@@ -1211,7 +1294,12 @@ def main() -> None:
         count = 0
         stable_candidate = None
         stable_observations = 0
-        for _ in range(80):
+        # The popup input lane starts an additional pinned native client and
+        # runs alongside nine Chrome CI lanes. Keep the exact native identity,
+        # unique-window, cgroup and three stable geometry checks unchanged;
+        # allow bounded extra cold-start observations only for this CI mode.
+        startup_samples = 160 if popup_mode else 80
+        for _ in range(startup_samples):
             if call("systemctl", "is-active", unit, check=False) != "active":
                 logs = call("sudo", "-n", "journalctl", "-u", unit,
                             "-n", "75", "--no-pager", check=False)
