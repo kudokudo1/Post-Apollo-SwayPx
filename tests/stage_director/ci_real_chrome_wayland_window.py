@@ -1298,7 +1298,13 @@ def main() -> None:
         # runs alongside nine Chrome CI lanes. Keep the exact native identity,
         # unique-window, cgroup and three stable geometry checks unchanged;
         # allow bounded extra cold-start observations only for this CI mode.
-        startup_samples = 160 if popup_mode else 80
+        # Parallel Chrome CI can start slowly under runner pressure. These
+        # modes run extra native clients/windows but still require one exact
+        # source/cgroup-matched native XDG + three stable geometry reads.
+        extra_startup = (popup_mode or
+                         e.get("STAGE_DIRECTOR_CI_CHROME_SUBSURFACE") == "1" or
+                         e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") == "1")
+        startup_samples = 160 if extra_startup else 80
         for _ in range(startup_samples):
             if call("systemctl", "is-active", unit, check=False) != "active":
                 logs = call("sudo", "-n", "journalctl", "-u", unit,
