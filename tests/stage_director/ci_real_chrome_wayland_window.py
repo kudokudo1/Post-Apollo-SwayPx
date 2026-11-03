@@ -579,6 +579,139 @@ def verify_multi_chrome_sibling_cycles(e, temp, swaymsg, ipc, grim,
             path.unlink(missing_ok=True)
 
 
+def verify_real_native_subsurface_ownership(e, temp, swaymsg, ipc, grim,
+                                            original_id, sibling_id, root,
+                                            send, focus, view_state, log_path):
+    """Actual Wayland wl_subsurface event from unrelated control, not Chrome.
+
+    The observable unrelated descendant confirms the native wlroots root
+    resolver is exercised, while the Chrome hidden sibling stays excluded.
+    An XDG popup is NOT a wl_subsurface ancestor and remains unproven.
+    """
+    exe = e.get("STAGE_DIRECTOR_TEST_SUBSURFACE_WITNESS", "")
+    if (e.get("CI") != "true" or e.get("GITHUB_ACTIONS") != "true" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_SUBSURFACE") != "1" or
+            e.get("STAGE_DIRECTOR_CI_CHROME_REAL_BUTTON") != "1" or
+            not exe.startswith("/nix/store/") or not Path(exe).is_file()):
+        raise RuntimeError("BLOCKED_NATIVE_SUBSURFACE_OUTSIDE_EXACT_CI")
+    outpath = temp / "sd-ci-native-subsurface-witness.log"
+    outfile = outpath.open("w", encoding="utf-8")
+    child = None
+    try:
+        child = subprocess.Popen([exe, "run"], stdout=outfile,
+                                 stderr=subprocess.STDOUT)
+        native = None
+        for _ in range(120):
+            if child.poll() is not None:
+                raise RuntimeError("FAIL_SUBSURFACE_WITNESS_EXITED_EARLY")
+            tree = json.loads(call(swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+            matches = [n for n in native_xdg_toplevels(tree)
+                       if n.get("pid") == child.pid and
+                       n.get("app_id") == "sd-ci-subsurface-witness" and
+                       n.get("shell") == "xdg_shell"]
+            if len(matches) == 1:
+                native = matches[0]
+                break
+            time.sleep(0.1)
+        if native is None:
+            raise RuntimeError("FAIL_SUBSURFACE_XDG_PARENT_NOT_MAPPED")
+        rect = native.get("rect") or {}
+        x, y = int(rect["x"]) + 49, int(rect["y"]) + 47
+        if not (0 <= x < 1920 and 0 <= y < 1080):
+            raise RuntimeError("BLOCKED_SUBSURFACE_COORDS_OUTSIDE_OUTPUT")
+        for _ in range(30):
+            outfile.flush()
+            if "SD_CI_NATIVE_SUBSURFACE_MAPPED" in outpath.read_text(
+                    encoding="utf-8", errors="replace"):
+                break
+            time.sleep(0.10)
+        else:
+            raise RuntimeError("FAIL_REAL_SUBSURFACE_BUFFER_NOT_ATTACHED")
+        pos = len(log_path.read_text(encoding="utf-8", errors="replace"))
+        send("pointer", str(x), str(y))
+        send("button", str(x), str(y))
+        # Independent parent-surface click: if both parent and child miss
+        # button receipts, a pre-notify target log is not receipt proof.
+        px, py = int(rect["x"]) + 130, int(rect["y"]) + 103
+        if not (0 <= px < 1920 and 0 <= py < 1080):
+            raise RuntimeError("BLOCKED_SUBSURFACE_PARENT_COORDS_OUTSIDE_OUTPUT")
+        send("button", str(px), str(py))
+        events = log_path.read_text(
+            encoding="utf-8", errors="replace")[pos:]
+        if ("kind=POINTER target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=PRESS target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=RELEASE target=OTHER root_only=0 descendant=1" not in
+                events):
+            print("SD_CI_SUBSURFACE_INPUT_DIAGNOSTIC "
+                  "child_root_resolution=FAIL " + events[-2600:],
+                  flush=True)
+        if ("SD_CI_NATIVE_BUTTON_RESULT state=PRESS serial_nonzero=1"
+                not in events or
+                "SD_CI_NATIVE_BUTTON_RESULT state=RELEASE serial_nonzero=1"
+                not in events):
+            raise RuntimeError("FAIL_SUBSURFACE_WLROOTS_BUTTON_NO_SERIAL " +
+                               events[-3500:])
+        if ("kind=POINTER target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=PRESS target=OTHER root_only=0 descendant=1" not in
+                events or
+                "state=RELEASE target=OTHER root_only=0 descendant=1" not in
+                events):
+            raise RuntimeError("FAIL_NATIVE_SUBSURFACE_ROOT_RESOLUTION " +
+                               events[-3500:])
+        if "target=HIDDEN_SIBLING" in events:
+            raise RuntimeError("FAIL_SUBSURFACE_EVENT_TO_CHROME_HIDDEN_ROOT")
+        for _ in range(30):
+            outfile.flush()
+            clientlog = outpath.read_text(
+                encoding="utf-8", errors="replace")
+            if ("kind=ENTER owner=CHILD" in clientlog and
+                    "kind=BUTTON state=PRESS owner=CHILD" in clientlog and
+                    "kind=BUTTON state=RELEASE owner=CHILD" in clientlog and
+                    "kind=BUTTON state=PRESS owner=PARENT" in clientlog and
+                    "kind=BUTTON state=RELEASE owner=PARENT" in clientlog):
+                break
+            time.sleep(0.10)
+        else:
+            raise RuntimeError("FAIL_REAL_SUBSURFACE_CLIENT_NO_RECEIPT " +
+                               "actual_client_log=" + clientlog[-2500:] +
+                               " native_wlroots=" + events[-2500:])
+        call(grim, "-t", "png",
+             str(temp / "sd-ci-subsurface-positive.png"), timeout=20)
+        print("SD_CI_NATIVE_SUBSURFACE_INPUT_OWNER: result=PASS "
+              "real_wl_subsurface=1 real_xdg_parent=1 "
+              "wlroots_root_resolved=1 descendant=1 "
+              "child_pointer_receipt=1 child_button_press_release=1 "
+              "other_root_positive=1 hidden_chrome_root_receipts=0 "
+              "xdg_popup_parentage=UNTESTED authority=NONE", flush=True)
+    finally:
+        if child is not None:
+            if child.poll() is None:
+                child.terminate()
+            try:
+                child.wait(timeout=4)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=3)
+        outfile.close()
+        if child is not None:
+            for _ in range(100):
+                tree = json.loads(call(
+                    swaymsg, "-s", ipc, "-r", "-t", "get_tree"))
+                if not any(n.get("pid") == child.pid
+                           for n in containers(tree)):
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError("FAIL_SUBSURFACE_XDG_PARENT_STILL_MAPPED")
+        focus(original_id)
+        _, nodes = view_state()
+        if nodes[sibling_id].get("focused") or not nodes[original_id].get("focused"):
+            raise RuntimeError("FAIL_SUBSURFACE_TEST_CHANGED_CHROME_FOCUS")
+
+
 def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
                                        root, original_id, sibling_id,
                                        baseline_ppm):
@@ -746,6 +879,10 @@ def verify_chrome_native_focus_custody(e, temp, swaymsg, ipc, grim,
                   "hidden_root_button_receipts=0 "
                   "hidden_root_pointer_receipts=0 authority=NONE",
                   flush=True)
+        if e.get("STAGE_DIRECTOR_CI_CHROME_SUBSURFACE") == "1":
+            verify_real_native_subsurface_ownership(
+                e, temp, swaymsg, ipc, grim, original_id, sibling_id, root,
+                send, focus, view_state, log_path)
         # Return actual cursor to the visible, clipped Chrome region
         # before the independent scene screenshot pixel check.
         send("pointer", str(main_x), str(main_y))

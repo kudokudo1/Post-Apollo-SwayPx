@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <linux/input-event-codes.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
@@ -34,6 +35,7 @@
 #include "sway/tree/root.h"
 #include "sway/tree/view.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+#include <wlr/util/log.h>
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
 #include "sway/tree/workspace.h"
@@ -1547,6 +1549,18 @@ void seat_pointer_notify_button(struct sway_seat *seat, uint32_t time_msec,
 #endif
 	seat->last_button_serial = wlr_seat_pointer_notify_button(seat->wlr_seat,
 			time_msec, button, state);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* A pre-notify target marker alone does not mean the Wayland client
+	 * received the event. Record the actual wlroots result separately.
+	 * Only the disposable subsurface CI lane enables this diagnostic. */
+	if (button == BTN_LEFT &&
+			getenv("STAGE_DIRECTOR_CI_CHROME_SUBSURFACE")) {
+		wlr_log(WLR_INFO, "SD_CI_NATIVE_BUTTON_RESULT "
+			"state=%s serial_nonzero=%d authority=NONE",
+			state == WL_POINTER_BUTTON_STATE_PRESSED ? "PRESS" : "RELEASE",
+			seat->last_button_serial != 0);
+	}
+#endif
 }
 
 void seat_consider_warp_to_focus(struct sway_seat *seat) {

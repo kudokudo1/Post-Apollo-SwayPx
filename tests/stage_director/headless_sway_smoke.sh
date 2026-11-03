@@ -64,6 +64,9 @@ if [[ "${STAGE_DIRECTOR_CI_REAL_CHROME_PIXEL:-}" == 1 ]]; then
   fi
   printf '\ndefault_border normal\ndefault_floating_border normal\n' >> "$config"
   echo "SD_CI_CHROME_DECORATION_SAFETY default_titlebar=ON per_view_chrome=ONLY"
+  if [[ "${STAGE_DIRECTOR_CI_CHROME_SUBSURFACE:-}" == 1 ]]; then
+    printf '\nfor_window [app_id="sd-ci-subsurface-witness"] floating enable\n' >> "$config"
+  fi
   if [[ "${STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS:-}" == 1 ]]; then
     # This tiny (24x24) native toplevel only exists in the disposable test.
     # Ensure its real popup can paint without forcing a tiled/fullscreen parent.
