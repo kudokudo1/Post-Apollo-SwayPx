@@ -1420,6 +1420,23 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+
+            if e.get("STAGE_DIRECTOR_CI_CHROME_FIRST_FRAME") == "1":
+                # The actual output-build hook must release the source-verified
+                # crop before the screenshot, never merely accept a scene hit.
+                early_log = (runtime / "sway.log").read_text(
+                    encoding="utf-8", errors="replace")
+                hidden = early_log.find("SD_CI_FIRST_FRAME_MAP_HIDDEN ")
+                released = early_log.find("SD_CI_FIRST_FRAME_RELEASE ")
+                if (hidden < 0 or released < 0 or released <= hidden or
+                        "SD_CI_FIRST_FRAME_CUSTODY_LOST" in early_log):
+                    raise RuntimeError("FAIL_FIRST_FRAME_NATIVE_OUTPUT_GUARD " +
+                                       early_log[-6000:])
+                print("SD_CI_FIRST_FRAME_NATIVE_GUARD: result=PASS "
+                      "map_hidden_before_layout=1 "
+                      "output_build_crop_released=1 "
+                      "real_screenshot_four_edges=1 "
+                      "intermediate_pixels=UNMEASURED authority=NONE", flush=True)
             # Chrome can asynchronously alter its initial native geometry
             # after the first screenshot. Require a later stable rectangle
             # before sending PHASE2 or a second-window request. No relaxation.
