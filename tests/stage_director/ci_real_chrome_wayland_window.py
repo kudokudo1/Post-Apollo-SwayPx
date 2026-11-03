@@ -1294,7 +1294,12 @@ def main() -> None:
         count = 0
         stable_candidate = None
         stable_observations = 0
-        for _ in range(80):
+        # The popup input lane starts an additional pinned native client and
+        # runs alongside nine Chrome CI lanes. Keep the exact native identity,
+        # unique-window, cgroup and three stable geometry checks unchanged;
+        # allow bounded extra cold-start observations only for this CI mode.
+        startup_samples = 160 if popup_mode else 80
+        for _ in range(startup_samples):
             if call("systemctl", "is-active", unit, check=False) != "active":
                 logs = call("sudo", "-n", "journalctl", "-u", unit,
                             "-n", "75", "--no-pager", check=False)
