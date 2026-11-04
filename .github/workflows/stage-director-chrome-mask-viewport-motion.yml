@@ -8,6 +8,7 @@ on:
     paths:
       - 'sway/stage_director_ci_scene_probe.c'
       - 'sway/desktop/xdg_shell.c'
+      - 'sway/desktop/output.c'
       - 'include/sway/stage_director_ci_scene_probe.h'
       - 'sway/tree/view.c'
       - 'sway/input/seat.c'
@@ -184,6 +185,14 @@ jobs:
           assert 'SD_CI_NATIVE_BUTTON_DELIVERED' in p
           assert 'stage_director_ci_scene_probe_record_pointer_button_delivery(' in native_header
           assert 'stage_director_ci_scene_probe_record_pointer_button_delivery(' in Path('sway/input/seat.c').read_text()
+          output_src=Path('sway/desktop/output.c').read_text()
+          view_src=Path('sway/tree/view.c').read_text()
+          assert 'stage_director_ci_scene_probe_pre_frame_guard();' in output_src
+          assert 'stage_director_ci_scene_probe_early_unmap(view);' in view_src
+          assert 'SD_CI_FIRST_FRAME_MAP_HIDDEN' in p
+          assert 'SD_CI_FIRST_FRAME_RELEASE' in p
+          assert 'SD_CI_FIRST_FRAME_CUSTODY_LOST' in p
+          assert 'SD_CI_FIRST_FRAME_NATIVE_GUARD: result=PASS' in test
           assert 'zwlr_virtual_pointer_v1_button(' in virt_src
           assert 'same_native_pointer=1' in virt_src
           assert 'SD_CI_NATIVE_INPUT_DELIVERED' in p
@@ -306,7 +315,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus, chrome-real-input, chrome-button-grab, chrome-subsurface-owner]
+        exit_mode: [after-third-mask, pending-before-move, native-popup-denial, chrome-second-toplevel, chrome-multi-toplevel, chrome-hidden-focus, chrome-real-input, chrome-button-grab, chrome-subsurface-owner, chrome-first-frame]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -350,6 +359,10 @@ jobs:
             echo "FAIL: CI pointer-button observer linked into production" >&2
             exit 1
           fi
+          if grep -aFq 'SD_CI_FIRST_FRAME_RELEASE' "$prod/bin/sway"; then
+            echo "FAIL: CI-only first-frame window gate leaked into production" >&2
+            exit 1
+          fi
           echo "SD_CI_CHROME_PROD_BOUNDARY compiled_without_test_selector=1 PASS"
       - name: Compile test-only compositor and screenshot client separately
         run: |
@@ -363,6 +376,7 @@ jobs:
           grep -aFq 'SD_CI_CHROME_SIBLING_FOCUS_DENIED' "$ci/bin/sway"
           grep -aFq 'SD_CI_NATIVE_INPUT_DELIVERED' "$ci/bin/sway"
           grep -aFq 'SD_CI_NATIVE_BUTTON_DELIVERED' "$ci/bin/sway"
+          grep -aFq 'SD_CI_FIRST_FRAME_RELEASE' "$ci/bin/sway"
           echo "CI_COMPOSITOR=$ci" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
           echo "STAGE_DIRECTOR_CI_REAL_CHROME_WAYLAND=1" >> "$GITHUB_ENV"
@@ -370,6 +384,9 @@ jobs:
           echo "STAGE_DIRECTOR_CI_BROWSER_MASK=1" >> "$GITHUB_ENV"
           if [[ "${{ matrix.exit_mode }}" == "pending-before-move" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_PENDING_EXIT=1" >> "$GITHUB_ENV"
+          elif [[ "${{ matrix.exit_mode }}" == "chrome-first-frame" ]]; then
+            echo "STAGE_DIRECTOR_CI_CHROME_FIRST_FRAME=1" >> "$GITHUB_ENV"
+            echo "STAGE_DIRECTOR_CI_CHROME_ABRUPT_EXIT=1" >> "$GITHUB_ENV"
           elif [[ "${{ matrix.exit_mode }}" == "native-popup-denial" ]]; then
             echo "STAGE_DIRECTOR_CI_CHROME_POPUP_WITNESS=1" >> "$GITHUB_ENV"
             echo "STAGE_DIRECTOR_CI_CHROME_REAL_INPUT=1" >> "$GITHUB_ENV"
@@ -495,4 +512,5 @@ jobs:
           echo "The chrome-real-input lane uses actual Wayland virtual keyboard KEY_A and virtual-pointer motion with exact compositor root-surface delivery markers." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-button-grab lane extends this with real BTN_LEFT click and same-device press-drag-release through hidden sibling coordinates." >> "$GITHUB_STEP_SUMMARY"
           echo "The chrome-subsurface-owner lane uses a native unrelated wl_subsurface under a real XDG parent and verifies actual client pointer/button receipt plus compositor root attribution. It does not prove a Chrome executable created that descendant or XDG popup ancestry." >> "$GITHUB_STEP_SUMMARY"
+          echo "The chrome-first-frame lane hides exact Chrome native scene at map, permits it only under verified crop at output-build and preserves normal screenshot checks; pre-frame scene gating is NOT a capture of every intermediate rendered pixel." >> "$GITHUB_STEP_SUMMARY"
           echo "This uses fixed disposable mask coordinates, NOT a production authenticated Weather host; no browser launch, keyboard/pointer/focus, popups or operator workstation changes are authorized." >> "$GITHUB_STEP_SUMMARY"

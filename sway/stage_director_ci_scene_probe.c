@@ -29,6 +29,11 @@
  * standard Sway clipping. No process, seat, popup, or WATCH authority.
  */
 static struct sway_view *ci_render_actor;
+/* Only the isolated first-frame CI variant acquires this native view. */
+static struct sway_view *ci_first_frame_actor;
+static bool ci_first_frame_released;
+static bool ci_first_frame_failed;
+static unsigned ci_first_frame_checks;
 /* One second native Chrome XDG window in a disposable CI test only. */
 /* Explicit bound: CI-only test fixtures never admit unlimited siblings.
  * Every retained native view must be re-disabled after each layout pass.
@@ -451,6 +456,73 @@ static bool ci_real_chrome_process(struct sway_view *view, pid_t *peer_out) {
 	return match;
 }
 
+
+static bool ci_first_frame_mode(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_CHROME_FIRST_FRAME");
+    return flag && strcmp(flag, "1") == 0;
+}
+
+/* At the real output repaint seam after layout but BEFORE scene output build.
+ * A recognized Chrome view starts disabled at native map. Never expose it
+ * until that same identity has a selected/normalized SceneFX crop. */
+void stage_director_ci_scene_probe_pre_frame_guard(void) {
+    struct sway_view *view = ci_first_frame_actor;
+    if (!view || !ci_first_frame_mode()) return;
+    if (!view->container || !view->container->scene_tree ||
+            view->container->node.destroying) return;
+    struct wlr_scene_node *scene = &view->container->scene_tree->node;
+    pid_t peer = -1;
+    const bool ready = !ci_first_frame_failed &&
+        ci_render_actor == view && view->content_tree &&
+        ci_render_clip.width > 0 && ci_render_clip.height > 0 &&
+        view->geometry.x == ci_render_geometry.x &&
+        view->geometry.y == ci_render_geometry.y &&
+        view->geometry.width == ci_render_geometry.width &&
+        view->geometry.height == ci_render_geometry.height &&
+        ci_real_chrome_process(view, &peer);
+    ci_first_frame_checks++;
+    if (!ready) {
+        if (scene->enabled) wlr_scene_node_set_enabled(scene, false);
+        if (ci_first_frame_released) {
+            ci_first_frame_failed = true;
+            wlr_log(WLR_ERROR, "SD_CI_FIRST_FRAME_CUSTODY_LOST "
+                "scene_hidden=1 authority=NONE result=FAIL");
+        } else if (ci_first_frame_checks == 1) {
+            wlr_log(WLR_INFO, "SD_CI_FIRST_FRAME_WAIT "
+                "scene_hidden=1 authority=NONE");
+        }
+        return;
+    }
+    /* Normal output_configure_scene can resize the destination again.
+     * Reapply both source clip and 1:1 destination before output build. */
+    wlr_scene_subsurface_tree_set_clip(
+        &view->content_tree->node, &ci_render_clip);
+    wlr_scene_node_for_each_buffer(&view->content_tree->node,
+        ci_normalize_root_buffer, NULL);
+    if (!ci_first_frame_released) {
+        wlr_log(WLR_INFO, "SD_CI_FIRST_FRAME_RELEASE "
+            "source_verified=1 native_pid=%ld crop=%dx%d "
+            "output_build_gate=1 authority=NONE result=PASS",
+            (long)peer, ci_render_clip.width, ci_render_clip.height);
+        ci_first_frame_released = true;
+    }
+    if (!scene->enabled) wlr_scene_node_set_enabled(scene, true);
+}
+
+/* This runs at native view_unmap before the original container is destroyed.
+ * The output hook must never retain a stale view pointer. */
+void stage_director_ci_scene_probe_early_unmap(struct sway_view *view) {
+    if (!view || view != ci_first_frame_actor) return;
+    wlr_log(WLR_INFO, "SD_CI_FIRST_FRAME_UNMAP "
+        "guard_revoked=1 checks=%u released=%d failed=%d authority=NONE",
+        ci_first_frame_checks, ci_first_frame_released,
+        ci_first_frame_failed);
+    ci_first_frame_actor = NULL;
+    ci_first_frame_released = false;
+    ci_first_frame_failed = false;
+    ci_first_frame_checks = 0;
+}
+
 /* Distinct second native XDG root from the exact verified Chrome cgroup.
  * No title, app_id, URL or client-provided string can enable quarantine.
  * The flag exists ONLY on the isolated headless GitHub Actions compositor.
@@ -625,6 +697,18 @@ bool stage_director_ci_scene_probe_borderless_verified_actor(
 	if (!ci_real_chrome_process(view, &native_peer)) return false;
 	view->container->pending.border = B_NONE;
 	view->container->pending.border_thickness = 0;
+	if (ci_first_frame_mode() && !ci_first_frame_actor &&
+			view->container->scene_tree) {
+		ci_first_frame_actor = view;
+		ci_first_frame_released = false;
+		ci_first_frame_failed = false;
+		ci_first_frame_checks = 0;
+		wlr_scene_node_set_enabled(
+			&view->container->scene_tree->node, false);
+		wlr_log(WLR_INFO, "SD_CI_FIRST_FRAME_MAP_HIDDEN "
+			"verified_native_chrome=1 before_first_layout=1 "
+			"authority=NONE result=PASS");
+	}
 	wlr_log(WLR_INFO,
 		"SD_CI_CHROME_PER_VIEW_BORDER native_cgroup=1 "
 		"exact_native_peer=1 actor_only=1 border=none "

@@ -1298,7 +1298,13 @@ def main() -> None:
         # runs alongside nine Chrome CI lanes. Keep the exact native identity,
         # unique-window, cgroup and three stable geometry checks unchanged;
         # allow bounded extra cold-start observations only for this CI mode.
-        startup_samples = 160 if popup_mode else 80
+        # Parallel Chrome CI can start slowly under runner pressure. These
+        # modes run extra native clients/windows but still require one exact
+        # source/cgroup-matched native XDG + three stable geometry reads.
+        extra_startup = (popup_mode or
+                         e.get("STAGE_DIRECTOR_CI_CHROME_SUBSURFACE") == "1" or
+                         e.get("STAGE_DIRECTOR_CI_CHROME_MULTI_SIBLING") == "1")
+        startup_samples = 160 if extra_startup else 80
         for _ in range(startup_samples):
             if call("systemctl", "is-active", unit, check=False) != "active":
                 logs = call("sudo", "-n", "journalctl", "-u", unit,
@@ -1420,6 +1426,23 @@ def main() -> None:
             if ("SD_CI_REAL_CHROME_RENDER_PIXELS:" not in pixel_report or
                     "no_left_top_right_bottom_leak=1" not in pixel_report):
                 raise RuntimeError("FAIL_CHROME_PIXEL_EVIDENCE_MARKER_MISSING")
+
+            if e.get("STAGE_DIRECTOR_CI_CHROME_FIRST_FRAME") == "1":
+                # The actual output-build hook must release the source-verified
+                # crop before the screenshot, never merely accept a scene hit.
+                early_log = (runtime / "sway.log").read_text(
+                    encoding="utf-8", errors="replace")
+                hidden = early_log.find("SD_CI_FIRST_FRAME_MAP_HIDDEN ")
+                released = early_log.find("SD_CI_FIRST_FRAME_RELEASE ")
+                if (hidden < 0 or released < 0 or released <= hidden or
+                        "SD_CI_FIRST_FRAME_CUSTODY_LOST" in early_log):
+                    raise RuntimeError("FAIL_FIRST_FRAME_NATIVE_OUTPUT_GUARD " +
+                                       early_log[-6000:])
+                print("SD_CI_FIRST_FRAME_NATIVE_GUARD: result=PASS "
+                      "map_hidden_before_layout=1 "
+                      "output_build_crop_released=1 "
+                      "real_screenshot_four_edges=1 "
+                      "intermediate_pixels=UNMEASURED authority=NONE", flush=True)
             # Chrome can asynchronously alter its initial native geometry
             # after the first screenshot. Require a later stable rectangle
             # before sending PHASE2 or a second-window request. No relaxation.

@@ -381,6 +381,11 @@ static int output_repaint_timer_handler(void *data) {
 	}
 
 	output_configure_scene(output, &root->root_scene->tree.node, false, NULL);
+#ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
+	/* CI-only: source-verify and clip a browser before the renderer can
+	 * build or commit its next output state. Production omits this hook. */
+	stage_director_ci_scene_probe_pre_frame_guard();
+#endif
 
 	struct wlr_scene_output_state_options opts = {
 		.color_transform = output->color_transform,

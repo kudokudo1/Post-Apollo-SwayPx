@@ -46,6 +46,10 @@ void stage_director_ci_scene_probe(struct sway_view *view);
 void stage_director_ci_scene_probe_restore(struct sway_view *view);
 /* CI-only post-arrange hook; production Meson option stays disabled. */
 void stage_director_ci_scene_probe_post_layout(void);
+/* CI-only pre-output-build containment, never a production authority. */
+void stage_director_ci_scene_probe_pre_frame_guard(void);
+/* Discard guarded native-view pointer before unmap destroys the view. */
+void stage_director_ci_scene_probe_early_unmap(struct sway_view *view);
 /* Only the disposable CI compositor may keep a tested 320x240 scene buffer
  * destination when output_configure_scene normally resets it per frame. */
 bool stage_director_ci_scene_probe_preserve_dest(struct wlr_scene_buffer *buffer);
