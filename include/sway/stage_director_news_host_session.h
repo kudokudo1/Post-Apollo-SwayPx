@@ -154,6 +154,11 @@ void stage_director_news_host_session_host_lost(
 void stage_director_news_host_session_invalidate(
 	struct stage_director_news_host_session *session);
 
+/* Called when the reporting Wayland protocol object is destroyed.
+ * Clears only this geometry candidate; never grants or retains authority. */
+void stage_director_news_host_session_clear_viewport_candidate(
+	struct stage_director_news_host_session *session);
+
 /* Pure candidate-only receipt from the exact compositor-tracked host.
  * This function does NOT check the Wayland protocol resource: the *caller*
  * must first prove request resource/client + paired epoch and WATCH lease.
