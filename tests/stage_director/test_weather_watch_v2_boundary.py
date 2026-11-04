@@ -47,6 +47,8 @@ assert "request_epoch_current(client, resource)" in protocol
 assert ".report_viewport = handle_report_viewport" in protocol
 assert "stage_director_news_watch_report_viewport(" in protocol
 assert "post_apollo_weather_watch_v1_send_viewport_result" in protocol
+assert "stage_director_news_watch_viewport_resource_destroyed(resource);" in protocol
+assert "stage_director_news_host_session_clear_viewport_candidate(" in stage
 assert "stage_director_news_watch_probe_request(resource)" in stage
 assert "weather_watch_lease.state != SD_NEWS_LEASE_HOST_CANDIDATE" in stage
 assert "stage_director_weather_host_observe_native_peer(host)" in stage
