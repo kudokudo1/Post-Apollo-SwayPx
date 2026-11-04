@@ -32,6 +32,40 @@ bool stage_director_rect_contains_point(struct stage_director_rect rect,
 		(int64_t)y < (int64_t)rect.y + rect.height;
 }
 
+/* UI-local coordinates (for example StationNewsHub.playerViewportRect)
+ * are not output coordinates. Rebase only against the currently observed
+ * native Weather host, never a hard-coded monitor or 1000x700 assumption. */
+bool stage_director_viewport_from_host_local(
+		struct stage_director_rect observed_host,
+		struct stage_director_rect inner_host_local,
+		struct stage_director_rect *global) {
+	if (!global) return false;
+	*global = (struct stage_director_rect){0};
+	if (!stage_director_rect_valid(observed_host) ||
+			!stage_director_rect_valid(inner_host_local)) return false;
+	const struct stage_director_rect local_host = {
+		.x = 0, .y = 0,
+		.width = observed_host.width, .height = observed_host.height,
+	};
+	if (!stage_director_rect_contains(local_host, inner_host_local)) {
+		return false;
+	}
+	const int64_t x = (int64_t)observed_host.x + inner_host_local.x;
+	const int64_t y = (int64_t)observed_host.y + inner_host_local.y;
+	if (x < INT32_MIN || x > INT32_MAX ||
+			y < INT32_MIN || y > INT32_MAX) return false;
+	const struct stage_director_rect translated = {
+		.x = (int)x, .y = (int)y,
+		.width = inner_host_local.width,
+		.height = inner_host_local.height,
+	};
+	if (!stage_director_rect_contains(observed_host, translated)) {
+		return false;
+	}
+	*global = translated;
+	return true;
+}
+
 struct stage_director_viewport_plan stage_director_viewport_plan(
 		const struct stage_director_viewport_request *request) {
 	struct stage_director_viewport_plan plan = {
