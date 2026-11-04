@@ -20,6 +20,7 @@
       <arg name="source_id" type="string" summary="catalog token, never a URL"/>
     </request>
     <request name="close"/>
+    <request name="destroy" type="destructor"/>
     <!-- v2 never grants playback or asserts the reported QML Rectangle has
          independent native Wayland surface identity. Its coordinates are
          relative to the selected, compositor-observed Weather layer. -->
@@ -29,7 +30,6 @@
       <arg name="width" type="int" summary="inner width (zero with all fields zero means hidden)"/>
       <arg name="height" type="int" summary="inner height"/>
     </request>
-    <request name="destroy" type="destructor"/>
     <event name="result">
       <arg name="status" type="uint" enum="status"/>
     </event>
