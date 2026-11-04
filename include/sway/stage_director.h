@@ -51,6 +51,22 @@ bool stage_director_news_watch_selected_client(struct wl_client *client);
 bool stage_director_news_watch_probe_request(struct wl_resource *resource);
 /* Prevent stale protocol objects from replaying after a new pairing epoch. */
 uint64_t stage_director_news_watch_current_epoch(struct wl_client *client);
+/* WATCH v2: report a QML rectangle relative to the paired Weather host.
+ * This is NOT a trusted inner wl_surface, and confers no render/launch/input
+ * rights. Every request revalidates the same native peer and host geometry. */
+enum stage_director_news_watch_viewport_status {
+	SD_NEWS_WATCH_VIEWPORT_DENIED,
+	SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY,
+	SD_NEWS_WATCH_VIEWPORT_HIDDEN,
+};
+struct stage_director_news_watch_viewport_ack {
+	enum stage_director_news_watch_viewport_status status;
+	uint64_t host_revision;
+};
+struct stage_director_news_watch_viewport_ack
+stage_director_news_watch_report_viewport(
+	struct wl_resource *resource, int32_t x, int32_t y,
+	int32_t width, int32_t height);
 
 /* Production compositor-side WATCH candidate bookkeeping.
  * Called only after actual paired-client + request-epoch checks in native
