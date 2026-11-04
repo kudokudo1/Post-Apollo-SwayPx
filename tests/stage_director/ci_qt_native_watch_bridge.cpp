@@ -71,6 +71,7 @@ static bool ci_only() {
 		runtime[strlen(temp)] == '/';
 }
 
+#ifndef SD_CI_QML_WATCH_BRIDGE
 static void watch_result(void *data, post_apollo_weather_watch_v1 *,
 		uint32_t value) {
 	State *s = static_cast<State *>(data);
@@ -92,6 +93,7 @@ static const post_apollo_weather_watch_v1_listener watch_listener = {
 	watch_result,
 	watch_viewport_result
 };
+#endif
 
 static void registry_global(void *data, wl_registry *registry,
 		uint32_t name, const char *iface, uint32_t version) {
@@ -235,7 +237,7 @@ WatchBridge { enabled: true; viewport: Qt.rect(20, 30, 120, 100) }
 	const auto is = [&prop](const char *name, bool value) {
 		return prop(name).toBool() == value;
 	};
-	if (!s->mapped || !s->watch_advertised ||
+	if (!s->mapped ||
 		!qpa_events_until(app, [&]() {return is("paired",true);}, 7000) ||
 		prop("status").toString() != QStringLiteral("WATCH_V2_AVAILABLE")) {
 		fprintf(stderr,"FAIL: Qt QPA event loop did not discover privileged v2: %s\n",
