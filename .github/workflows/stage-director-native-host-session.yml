@@ -19,6 +19,9 @@ on:
       - 'sway/input/cursor.c'
       - 'sway/stage_director_news_request_peer.c'
       - 'sway/stage_director.c'
+      - 'protocols/post-apollo-weather-watch-v1.xml'
+      - 'sway/stage_director_weather_watch_protocol.c'
+      - 'tests/stage_director/test_weather_watch_v2_boundary.py'
       - 'sway/meson.build'
       - 'tests/stage_director/test_news_host_session.c'
       - '.github/workflows/stage-director-native-host-session.yml'
@@ -36,6 +39,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Verify WATCH v1 compatibility and v2 paired viewport wire contract
+        run: python3 -B tests/stage_director/test_weather_watch_v2_boundary.py
       - name: Install real Wayland server headers
         run: |
           set -euo pipefail

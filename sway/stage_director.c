@@ -74,6 +74,9 @@ static int last_news_actors = -1;
  */
 static struct stage_director_news_host_session weather_host_session;
 static struct stage_director_news_session_lease weather_watch_lease;
+/* No rendering authority: remembers only which bound v2 resource last
+ * supplied the current geometry candidate, for destructor-time revocation. */
+static struct wl_resource *weather_viewport_reporting_resource;
 static bool weather_watch_lease_initialized;
 
 static void ensure_weather_watch_lease(void) {
@@ -103,6 +106,7 @@ static void close_weather_watch_lease(void) {
 
 static void on_weather_host_revoked(void *data) {
 	(void)data;
+	weather_viewport_reporting_resource = NULL;
 	/* Native wl_client/role/surface destroy and host loss all invalidate
 	 * the private global AND the same native WATCH candidate ledger. */
 	close_weather_watch_lease();
@@ -117,6 +121,7 @@ static void ensure_weather_host_session(void) {
 
 void stage_director_news_pairing_clear_host(void) {
 	ensure_weather_host_session();
+	weather_viewport_reporting_resource = NULL;
 	/* Even in an already-revoked pairing, never strand a WATCH candidate. */
 	close_weather_watch_lease();
 	stage_director_news_host_session_invalidate(&weather_host_session);
@@ -221,6 +226,89 @@ bool stage_director_news_watch_record_candidate(
 		"native_paired=1 process=NONE browser=OFF authority=NONE",
 		epoch, weather_watch_lease.source_id);
 	return true;
+}
+
+/* WATCH v2 geometry receipt. The client is authenticated by the existing
+ * native pairing protocol, but its reported QML rectangle remains a hint.
+ * There is no native inner-surface identity or renderer/launch authority. */
+struct stage_director_news_watch_viewport_ack
+stage_director_news_watch_report_viewport(
+		struct wl_resource *resource, int32_t x, int32_t y,
+		int32_t width, int32_t height) {
+	struct stage_director_news_watch_viewport_ack out = {
+		.status = SD_NEWS_WATCH_VIEWPORT_DENIED,
+	};
+	ensure_weather_host_session();
+	ensure_weather_watch_lease();
+	if (!resource || !stage_director_news_watch_probe_request(resource) ||
+			weather_watch_lease.state != SD_NEWS_LEASE_HOST_CANDIDATE ||
+			!weather_host_session.candidate ||
+			weather_watch_lease.epoch != weather_host_session.epoch ||
+			weather_watch_lease.native_host_ref !=
+				weather_host_session.native_host_ref ||
+			weather_watch_lease.native_host_client_ref !=
+				(uintptr_t)weather_host_session.client ||
+			weather_watch_lease.native_output_ref !=
+				weather_host_session.native_output_ref) {
+		return out;
+	}
+	/* Do not rely on geometry recorded when the old host was paired.
+	 * Reobserve the real compositor's current native layer and output. */
+	struct sway_layer_surface *host =
+		(struct sway_layer_surface *)weather_host_session.native_host_ref;
+	const struct stage_director_weather_host_native_peer peer =
+		stage_director_weather_host_observe_native_peer(host);
+	if (!peer.native_peer_candidate || !peer.host.candidate_observed ||
+			peer.native_layer_ref != weather_host_session.native_host_ref ||
+			peer.native_client_ref != (uintptr_t)weather_host_session.client ||
+			peer.native_output_ref != weather_host_session.native_output_ref ||
+			!stage_director_news_host_session_update_geometry(
+				&weather_host_session, peer.native_layer_ref,
+				peer.native_client_ref, peer.native_output_ref,
+				weather_host_session.epoch, peer.host.host,
+				peer.host.output)) {
+		stage_director_news_pairing_clear_host();
+		return out;
+	}
+	const struct stage_director_news_host_viewport_receipt receipt =
+		stage_director_news_host_session_report_viewport(
+			&weather_host_session, peer.native_layer_ref,
+			peer.native_client_ref, peer.native_output_ref,
+			weather_host_session.epoch,
+			(struct stage_director_rect){x, y, width, height});
+	out.host_revision = receipt.host_geometry_revision;
+	if (receipt.status == SD_NEWS_HOST_VIEWPORT_HIDDEN) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_HIDDEN;
+	} else if (receipt.status == SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY &&
+			stage_director_news_host_session_viewport_current(
+				&weather_host_session, &receipt)) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY;
+	}
+	/* Forget any old v2 reporter after a denied or hidden report. */
+	weather_viewport_reporting_resource =
+		out.status == SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY ? resource : NULL;
+	/* A positive response is still ONLY a geometry hint. No compositor
+	 * crop, browser, focus, pointer or XDG-popup action occurs here. */
+	sway_log(SWAY_DEBUG, "[stage-director][SD1][VIEWPORT_REPORT] "
+		"status=%u epoch=%" PRIu64 " revision=%" PRIu64
+		" native_host=matched authority=NONE",
+		(unsigned)out.status, weather_host_session.epoch,
+		out.host_revision);
+	return out;
+}
+
+/* Called by the real Wayland resource destructor. The protocol resource
+ * may vanish while the Weather host and its WATCH candidate still live.
+ * Revoke its geometry immediately; never leave a dangling viewport hint. */
+void stage_director_news_watch_viewport_resource_destroyed(
+		struct wl_resource *resource) {
+	if (!resource || weather_viewport_reporting_resource != resource) return;
+	weather_viewport_reporting_resource = NULL;
+	stage_director_news_host_session_clear_viewport_candidate(
+		&weather_host_session);
+	sway_log(SWAY_DEBUG, "[stage-director][SD1][VIEWPORT_REPORT] "
+		"native_reporting_resource_destroyed=1 candidate_revoked=1 "
+		"browser=OFF authority=NONE");
 }
 
 /*

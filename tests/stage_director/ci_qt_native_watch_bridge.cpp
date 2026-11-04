@@ -40,6 +40,9 @@ struct State {
 	bool mapped = false;
 	bool closed = false;
 	unsigned status[4] = {0, 0, 0, 0};
+	unsigned viewport_status[3] = {0, 0, 0};
+	uint32_t watch_protocol_version = 0;
+	uint64_t last_host_revision = 0;
 	bool watch_advertised = false;
 	bool has_layer_protocol = false;
 	bool has_compositor = false;
@@ -62,8 +65,21 @@ static void watch_result(void *data, post_apollo_weather_watch_v1 *,
 	State *s = static_cast<State *>(data);
 	if (value < 4) ++s->status[value];
 }
+/* This fixture deliberately binds the backwards-compatible v1 proxy.
+ * The v2 listener slot must still be initialized under -Werror. */
+static void watch_viewport_result(void *data,
+		post_apollo_weather_watch_v1 *, uint32_t status,
+		uint32_t host_revision_hi, uint32_t host_revision_lo) {
+	State *s = static_cast<State *>(data);
+	if (status < 3) ++s->viewport_status[status];
+	s->last_host_revision =
+		(static_cast<uint64_t>(host_revision_hi) << 32) | host_revision_lo;
+}
+/* This fixture deliberately binds v2 on Qt's real Wayland connection. A
+ * separate C wire fixture retains v1 WATCH/CLOSE/opcode coverage. */
 static const post_apollo_weather_watch_v1_listener watch_listener = {
-	watch_result
+	watch_result,
+	watch_viewport_result
 };
 
 static void registry_global(void *data, wl_registry *registry,
@@ -82,10 +98,11 @@ static void registry_global(void *data, wl_registry *registry,
 				version < 1 ? version : 1));
 	} else if (!strcmp(iface,post_apollo_weather_watch_v1_interface.name)) {
 		s->watch_advertised = true;
-		if (!s->watch) {
+		if (!s->watch && version >= 2) {
+			s->watch_protocol_version = 2;
 			s->watch = static_cast<post_apollo_weather_watch_v1 *>(
 				wl_registry_bind(registry,name,
-					&post_apollo_weather_watch_v1_interface,1));
+					&post_apollo_weather_watch_v1_interface,2));
 			if (s->watch) {
 				post_apollo_weather_watch_v1_add_listener(
 					s->watch, &watch_listener, s);
@@ -211,8 +228,8 @@ int main(int argc, char **argv) {
 	for (int i=0;i<60 && !s.watch;++i) {
 		if (!dispatch(&s)) return 1;
 	}
-	if (!s.watch || !s.watch_advertised) {
-		fputs("FAIL: Qt-owned Weather Wayland display did not receive WATCH\n",
+	if (!s.watch || !s.watch_advertised || s.watch_protocol_version != 2) {
+		fputs("FAIL: Qt-owned Weather Wayland display did not receive WATCH v2\n",
 			stderr);
 		return 1;
 	}
@@ -221,6 +238,36 @@ int main(int argc, char **argv) {
 		fputs("FAIL: Qt-owned display WATCH candidate request\n",stderr);
 		return 1;
 	}
+	/* Real production host: QML-like rectangle is local to the mapped
+	 * 320x240 layer, rebased to the compositor's native output geometry.
+	 * It remains candidate-only; it does not create an inner wl_surface. */
+	post_apollo_weather_watch_v1_report_viewport(s.watch, 20, 30, 120, 100);
+	if (!dispatch(&s) || s.viewport_status[1] != 1 ||
+			s.last_host_revision == 0) {
+		fputs("FAIL: Qt-owned display WATCH v2 viewport candidate\n",stderr);
+		return 1;
+	}
+	post_apollo_weather_watch_v1_report_viewport(s.watch, -1, 30, 120, 100);
+	if (!dispatch(&s) || s.viewport_status[0] != 1) {
+		fputs("FAIL: Qt-owned display accepted invalid local viewport\n",
+			stderr);
+		return 1;
+	}
+	post_apollo_weather_watch_v1_report_viewport(s.watch, 0, 0, 0, 0);
+	if (!dispatch(&s) || s.viewport_status[2] != 1) {
+		fputs("FAIL: Qt-owned display failed to clear hidden viewer\n",stderr);
+		return 1;
+	}
+	post_apollo_weather_watch_v1_report_viewport(s.watch, 20, 30, 120, 100);
+	if (!dispatch(&s) || s.viewport_status[1] != 2) {
+		fputs("FAIL: Qt-owned display refused renewed viewport candidate\n",
+			stderr);
+		return 1;
+	}
+	puts("SD_CI_QT_NATIVE_VIEWPORT_V2 same_wl_display=1 "
+		"real_paired_weather_layer=1 positive=1 invalid_denied=1 "
+		"hidden=1 renewed=1 host_revision=1 browser=OFF authority=NONE PASS");
+	fflush(stdout);
 	/* A second valid WATCH on the same paired resource must be denied:
 	 * only one compositor-owned candidate can be reserved per epoch. */
 	post_apollo_weather_watch_v1_watch(s.watch,"cspan");
@@ -238,6 +285,13 @@ int main(int argc, char **argv) {
 		fputs("FAIL: Qt-owned display CLOSE request\n",stderr);
 		return 1;
 	}
+	post_apollo_weather_watch_v1_report_viewport(s.watch, 20, 30, 120, 100);
+	if (!dispatch(&s) || s.viewport_status[0] != 2 ||
+			s.last_host_revision != 0) {
+		fputs("FAIL: Qt-owned display accepted stale viewport after CLOSE\n",
+			stderr);
+		return 1;
+	}
 	post_apollo_weather_watch_v1_watch(s.watch,"bbc");
 	if (!dispatch(&s) || s.status[0] != 2 || s.status[1] != 1) {
 		fputs("FAIL: Qt-owned display accepted stale WATCH after CLOSE\n",stderr);
@@ -245,7 +299,7 @@ int main(int argc, char **argv) {
 	}
 	puts("SD_CI_QT_NATIVE_WATCH_BRIDGE Qt6_QGuiApplication=1 "
 		"QWaylandApplication_display=1 same_wl_display=1 "
-		"actual_mapped_layer=1 candidate=1 invalid_url_refused=1 "
+		"actual_mapped_layer=1 candidate=1 v2_viewport=1 invalid_url_refused=1 "
 		"duplicate_watch_denied=1 close_revoked=1 stale_watch_denied=1 browser=OFF "
 		"input_auth=UNTESTED authority=NONE PASS");
 	fflush(stdout);

@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <wayland-server.h>
 #include <wayland-client.h>
+#include "sway/stage_director.h"
 #include "sway/stage_director_weather_watch_protocol.h"
 #include "post-apollo-weather-watch-v1-client-protocol.h"
 
@@ -47,6 +48,35 @@ bool stage_director_news_watch_record_candidate(
 	}
 	candidate_recorded = true;
 	return true;
+}
+/* Standalone v1/v2 wire fixture. This stub does NOT implement the real
+ * compositor's native host checks; those are exercised separately by the
+ * production host-session and SwayPX CI. It proves only wire dispatch. */
+struct stage_director_news_watch_viewport_ack
+stage_director_news_watch_report_viewport(
+		struct wl_resource *resource, int32_t x, int32_t y,
+		int32_t width, int32_t height) {
+	struct stage_director_news_watch_viewport_ack out = {
+		.status = SD_NEWS_WATCH_VIEWPORT_DENIED,
+	};
+	if (!stage_director_news_watch_probe_request(resource) ||
+			!candidate_recorded) return out;
+	out.host_revision = 7;
+	if (x == 0 && y == 0 && width == 0 && height == 0) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_HIDDEN;
+	} else if (x >= 0 && y >= 0 && width > 0 && height > 0 &&
+			(int64_t)x + width <= 320 && (int64_t)y + height <= 240) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY;
+	}
+	return out;
+}
+/* Native compositor owns resource-loss revocation. This wire fixture has
+ * no real host session: exercise the destructor callback/linkage only. */
+static atomic_uint viewport_binding_destroyed;
+void stage_director_news_watch_viewport_resource_destroyed(
+		struct wl_resource *resource) {
+	assert(resource);
+	atomic_fetch_add(&viewport_binding_destroyed, 1);
 }
 void stage_director_news_pairing_clear_host(void) {
 	atomic_store(&paired, false);
@@ -86,6 +116,9 @@ struct test_client {
 	struct post_apollo_weather_watch_v1 *watch;
 	uint32_t global_name;
 	unsigned count[4];
+	uint32_t advertised_version;
+	unsigned viewport_count[3];
+	uint64_t last_host_revision;
 };
 
 static void on_result(void *data,
@@ -99,6 +132,20 @@ static void on_result(void *data,
 static const struct post_apollo_weather_watch_v1_listener watch_listener = {
 	.result = on_result,
 };
+static void on_viewport_result(void *data,
+		struct post_apollo_weather_watch_v1 *watch, uint32_t status,
+		uint32_t revision_hi, uint32_t revision_lo) {
+	struct test_client *c = data;
+	(void)watch;
+	assert(status < 3);
+	++c->viewport_count[status];
+	c->last_host_revision =
+		((uint64_t)revision_hi << 32) | revision_lo;
+}
+static const struct post_apollo_weather_watch_v1_listener watch_v2_listener = {
+	.result = on_result,
+	.viewport_result = on_viewport_result,
+};
 static void on_global(void *data, struct wl_registry *reg,
 		uint32_t name, const char *iface, uint32_t version) {
 	struct test_client *c = data;
@@ -108,6 +155,7 @@ static void on_global(void *data, struct wl_registry *reg,
 	assert(version >= 1);
 	assert(!c->watch);
 	c->global_name = name;
+	c->advertised_version = version;
 	c->watch = wl_registry_bind(reg, name,
 		&post_apollo_weather_watch_v1_interface, 1);
 	assert(c->watch);
@@ -155,6 +203,7 @@ int main(void) {
 	assert(foreign != paired_client);
 	atomic_init(&paired, true);
 	atomic_init(&pairing_epoch, 1);
+	atomic_init(&viewport_binding_destroyed, 0);
 	stage_director_weather_watch_protocol_init(server);
 	assert(stage_director_weather_watch_protocol_publish());
 	atomic_init(&running, true);
@@ -165,11 +214,31 @@ int main(void) {
 	connect_client(&chosen, chosen_fd);
 	connect_client(&spoof, foreign_fd);
 	assert(chosen.watch && chosen.global_name != 0);
+	assert(chosen.advertised_version == 2);
 	assert(!spoof.watch && spoof.global_name == 0);
+	/* Keep the initial v1 proxy to exercise unchanged old opcodes. A second
+	 * v2 proxy on the SAME actual native wl_client tests the new request. */
+	struct post_apollo_weather_watch_v1 *v2 = wl_registry_bind(
+		chosen.registry, chosen.global_name,
+		&post_apollo_weather_watch_v1_interface, 2);
+	assert(v2);
+	assert(post_apollo_weather_watch_v1_add_listener(
+		v2, &watch_v2_listener, &chosen) == 0);
+	sync_client(&chosen);
 
 	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
 	sync_client(&chosen);
 	assert(chosen.count[1] == 1);
+	post_apollo_weather_watch_v1_report_viewport(v2, 12, 22, 100, 80);
+	sync_client(&chosen);
+	assert(chosen.viewport_count[1] == 1 &&
+		chosen.last_host_revision == 7);
+	post_apollo_weather_watch_v1_report_viewport(v2, -1, 22, 100, 80);
+	sync_client(&chosen);
+	assert(chosen.viewport_count[0] == 1);
+	post_apollo_weather_watch_v1_report_viewport(v2, 0, 0, 0, 0);
+	sync_client(&chosen);
+	assert(chosen.viewport_count[2] == 1);
 	post_apollo_weather_watch_v1_watch(chosen.watch,
 		"https://untrusted.invalid/watch");
 	sync_client(&chosen);
@@ -192,6 +261,12 @@ int main(void) {
 	sync_client(&chosen);
 	assert(chosen.count[3] == 1);
 	assert(!atomic_load(&paired));
+	/* Bound v2 viewport requests are stale after CLOSE, even when the
+	 * client keeps the old wl_resource alive. */
+	post_apollo_weather_watch_v1_report_viewport(v2, 12, 22, 100, 80);
+	sync_client(&chosen);
+	assert(chosen.viewport_count[0] == 2 &&
+		chosen.last_host_revision == 0);
 	/* Existing bound resources can no longer ask for a WATCH candidate. */
 	post_apollo_weather_watch_v1_watch(chosen.watch, "bbc");
 	sync_client(&chosen);
@@ -206,8 +281,16 @@ int main(void) {
 	sync_client(&chosen);
 	assert(chosen.count[0] == 3);
 	assert(chosen.count[1] == 1);
+	post_apollo_weather_watch_v1_report_viewport(v2, 12, 22, 100, 80);
+	sync_client(&chosen);
+	assert(chosen.viewport_count[0] == 3); /* stale pairing epoch */
 	atomic_store(&paired, false);
 
+	post_apollo_weather_watch_v1_destroy(v2);
+	/* Wait for the server's real wl_resource destructor, not a socket-close
+	 * race during test-thread teardown. */
+	sync_client(&chosen);
+	assert(atomic_load(&viewport_binding_destroyed) >= 1);
 	close_client(&chosen);
 	/* Spoof was already rejected; free locally without another request. */
 	wl_proxy_destroy((struct wl_proxy *)forged);
@@ -215,11 +298,13 @@ int main(void) {
 	wl_display_disconnect(spoof.display);
 	atomic_store(&running, false);
 	assert(pthread_join(th, NULL) == 0);
+	/* At least the synced v2 reporting resource was destroyed. */
+	assert(atomic_load(&viewport_binding_destroyed) >= 1);
 	stage_director_weather_watch_protocol_finish();
 	wl_display_destroy_clients(server);
 	wl_display_destroy(server);
 	puts("SD_PRIVATE_WATCH_WIRE: dynamic paired-only global, foreign "
-		"discovery/bind refused, real WATCH/CLOSE and stale request "
+		"discovery/bind refused, v1 WATCH/CLOSE, v2 VIEWPORT/hidden "
 		"refused; no launch/scene/input authority: PASS");
 	return 0;
 }

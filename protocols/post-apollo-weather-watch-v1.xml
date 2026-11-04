@@ -3,7 +3,7 @@
   <copyright>
     Copyright (c) Post-Apollo contributors. MIT license.
   </copyright>
-  <interface name="post_apollo_weather_watch_v1" version="1">
+  <interface name="post_apollo_weather_watch_v1" version="2">
     <description summary="paired Weather Station NEWS request, non-authorizing">
       Requests originate from the exact compositor-paired Weather Station
       Wayland client. A successful response is candidate evidence ONLY.
@@ -23,6 +23,25 @@
     <request name="destroy" type="destructor"/>
     <event name="result">
       <arg name="status" type="uint" enum="status"/>
+    </event>
+    <!-- v2 never grants playback or asserts the reported QML Rectangle has
+         independent native Wayland surface identity. Its coordinates are
+         relative to the selected, compositor-observed Weather layer. -->
+    <request name="report_viewport" since="2">
+      <arg name="x" type="int" summary="inner left relative to the Weather host"/>
+      <arg name="y" type="int" summary="inner top relative to the Weather host"/>
+      <arg name="width" type="int" summary="inner width (zero with all fields zero means hidden)"/>
+      <arg name="height" type="int" summary="inner height"/>
+    </request>
+    <enum name="viewport_status">
+      <entry name="denied" value="0" summary="not paired, stale, malformed or outside native host"/>
+      <entry name="candidate_only" value="1" summary="bounded geometry observed, no scene or input rights"/>
+      <entry name="hidden" value="2" summary="reported viewer is closed and receipt cleared"/>
+    </enum>
+    <event name="viewport_result" since="2">
+      <arg name="status" type="uint" enum="viewport_status"/>
+      <arg name="host_revision_hi" type="uint" summary="upper 32 bits of compositor-owned host revision"/>
+      <arg name="host_revision_lo" type="uint" summary="lower 32 bits of compositor-owned host revision"/>
     </event>
   </interface>
 </protocol>
