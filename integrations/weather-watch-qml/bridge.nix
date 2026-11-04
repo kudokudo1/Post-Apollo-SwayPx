@@ -9,6 +9,7 @@ in pkgs.stdenv.mkDerivation {
   version = "0.1.0";
   src = ../..;
   strictDeps = true;
+  dontWrapQtApps = true;
   nativeBuildInputs = [
     pkgs.cmake pkgs.ninja pkgs.pkg-config pkgs.wayland-scanner
   ];
