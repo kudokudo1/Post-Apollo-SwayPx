@@ -46,6 +46,16 @@ target_link_libraries(postapollo_weather_watch PRIVATE
 target_compile_options(postapollo_weather_watch PRIVATE
     -Wall -Wextra -Werror -Wpedantic)
 
+enable_testing()
+qt_add_executable(watch_qml_offscreen_test test_inactive_qml.cpp)
+target_link_libraries(watch_qml_offscreen_test PRIVATE Qt6::Gui Qt6::Qml)
+target_compile_options(watch_qml_offscreen_test PRIVATE -Wall -Wextra -Werror)
+add_dependencies(watch_qml_offscreen_test postapollo_weather_watch)
+add_test(NAME watch-bridge-disabled-by-default
+    COMMAND watch_qml_offscreen_test "${CMAKE_CURRENT_BINARY_DIR}/qml")
+set_tests_properties(watch-bridge-disabled-by-default PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Portable runtime artifact: the module may be installed into Quickshell's
 # QML import path later, only with operator-approved local deployment.
 install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/"
