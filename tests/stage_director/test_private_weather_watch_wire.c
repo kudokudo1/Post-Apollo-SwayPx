@@ -70,6 +70,14 @@ stage_director_news_watch_report_viewport(
 	}
 	return out;
 }
+/* Native compositor owns resource-loss revocation. This wire fixture has
+ * no real host session: exercise the destructor callback/linkage only. */
+static atomic_uint viewport_binding_destroyed;
+void stage_director_news_watch_viewport_resource_destroyed(
+		struct wl_resource *resource) {
+	assert(resource);
+	atomic_fetch_add(&viewport_binding_destroyed, 1);
+}
 void stage_director_news_pairing_clear_host(void) {
 	atomic_store(&paired, false);
 	stage_director_weather_watch_protocol_revoke();
@@ -195,6 +203,7 @@ int main(void) {
 	assert(foreign != paired_client);
 	atomic_init(&paired, true);
 	atomic_init(&pairing_epoch, 1);
+	atomic_init(&viewport_binding_destroyed, 0);
 	stage_director_weather_watch_protocol_init(server);
 	assert(stage_director_weather_watch_protocol_publish());
 	atomic_init(&running, true);
@@ -285,6 +294,8 @@ int main(void) {
 	wl_display_disconnect(spoof.display);
 	atomic_store(&running, false);
 	assert(pthread_join(th, NULL) == 0);
+	/* The bound client destroyed its real v2 and v1 resources. */
+	assert(atomic_load(&viewport_binding_destroyed) >= 2);
 	stage_director_weather_watch_protocol_finish();
 	wl_display_destroy_clients(server);
 	wl_display_destroy(server);
