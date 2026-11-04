@@ -67,6 +67,9 @@ struct stage_director_news_watch_viewport_ack
 stage_director_news_watch_report_viewport(
 	struct wl_resource *resource, int32_t x, int32_t y,
 	int32_t width, int32_t height);
+/* Exact protocol resource's destructor revokes its last candidate. */
+void stage_director_news_watch_viewport_resource_destroyed(
+	struct wl_resource *resource);
 
 /* Production compositor-side WATCH candidate bookkeeping.
  * Called only after actual paired-client + request-epoch checks in native
