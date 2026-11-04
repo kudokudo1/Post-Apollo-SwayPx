@@ -62,8 +62,11 @@ static void watch_result(void *data, post_apollo_weather_watch_v1 *,
 	State *s = static_cast<State *>(data);
 	if (value < 4) ++s->status[value];
 }
+/* This fixture deliberately binds the backwards-compatible v1 proxy.
+ * The v2 listener slot must still be initialized under -Werror. */
 static const post_apollo_weather_watch_v1_listener watch_listener = {
-	watch_result
+	watch_result,
+	nullptr
 };
 
 static void registry_global(void *data, wl_registry *registry,
