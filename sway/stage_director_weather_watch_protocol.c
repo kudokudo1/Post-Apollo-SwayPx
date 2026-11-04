@@ -80,6 +80,26 @@ static void handle_watch(struct wl_client *client,
 		resource, POST_APOLLO_WEATHER_WATCH_V1_STATUS_CANDIDATE_ONLY);
 }
 
+/* v2 only. A wl_resource for this client must already have been bound to
+ * the exact physical-input-paired host. No URL, PID, renderer or input
+ * permission crosses this request. v1 WATCH/CLOSE wire ABI stays unchanged. */
+static void handle_report_viewport(struct wl_client *client,
+		struct wl_resource *resource, int32_t x, int32_t y,
+		int32_t width, int32_t height) {
+	if (wl_resource_get_version(resource) < 2) return;
+	struct stage_director_news_watch_viewport_ack ack = {
+		.status = SD_NEWS_WATCH_VIEWPORT_DENIED,
+	};
+	if (client == wl_resource_get_client(resource) &&
+			request_epoch_current(client, resource)) {
+		ack = stage_director_news_watch_report_viewport(
+			resource, x, y, width, height);
+	}
+	post_apollo_weather_watch_v1_send_viewport_result(resource,
+		(uint32_t)ack.status, (uint32_t)(ack.host_revision >> 32),
+		(uint32_t)ack.host_revision);
+}
+
 static void handle_close(struct wl_client *client,
 		struct wl_resource *resource) {
 	if (client != wl_resource_get_client(resource) ||
@@ -104,12 +124,14 @@ static const struct post_apollo_weather_watch_v1_interface watch_impl = {
 	.watch = handle_watch,
 	.close = handle_close,
 	.destroy = handle_destroy,
+	.report_viewport = handle_report_viewport,
 };
 
 static void bind_watch(struct wl_client *client, void *data,
 		uint32_t version, uint32_t id) {
 	(void)data;
-	if (version != 1 || !stage_director_news_watch_selected_client(client)) {
+	if (version < 1 || version > 2 ||
+			!stage_director_news_watch_selected_client(client)) {
 		/* A forged bind is a Wayland protocol violation. No resource or
 		 * WATCH authority must ever be given to an unpaired client. */
 		wl_client_post_implementation_error(client,
@@ -153,7 +175,7 @@ bool stage_director_weather_watch_protocol_publish(void) {
 		return false;
 	}
 	watch_global = wl_global_create(watch_display,
-		&post_apollo_weather_watch_v1_interface, 1, NULL, bind_watch);
+		&post_apollo_weather_watch_v1_interface, 2, NULL, bind_watch);
 	if (!watch_global) {
 		return false;
 	}
