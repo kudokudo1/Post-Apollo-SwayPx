@@ -39,6 +39,15 @@ void stage_director_news_host_session_on_revoked(
 	session->on_revoked_data = data;
 }
 
+static void clear_viewport_candidate(
+		struct stage_director_news_host_session *session) {
+	if (!session) return;
+	session->viewport_candidate_valid = false;
+	session->viewport_host_revision = 0;
+	session->viewport_local = (struct stage_director_rect){0};
+	session->viewport_global = (struct stage_director_rect){0};
+}
+
 void stage_director_news_host_session_invalidate(
 		struct stage_director_news_host_session *session) {
 	if (!session || !session->initialized) {
@@ -62,6 +71,7 @@ void stage_director_news_host_session_invalidate(
 	session->epoch = 0;
 	session->geometry_revision = 0;
 	session->geometry_valid = false;
+	clear_viewport_candidate(session);
 	memset(&session->observed_host, 0, sizeof(session->observed_host));
 	memset(&session->observed_output, 0, sizeof(session->observed_output));
 	session->candidate = false;
@@ -160,6 +170,8 @@ bool stage_director_news_host_session_update_geometry(
 	}
 	session->last_geometry_revision++;
 	session->geometry_revision = session->last_geometry_revision;
+	/* In-flight reports were relative to the prior outer host. */
+	clear_viewport_candidate(session);
 	session->observed_host = host;
 	session->observed_output = output;
 	session->geometry_valid = true;
@@ -242,6 +254,83 @@ stage_director_news_host_session_probe_request(
 		result(SD_NEWS_HOST_SESSION_NATIVE_CANDIDATE_ONLY);
 	out.native_candidate_matches = true;
 	return out;
+}
+
+/* Same-client and WATCH lease validation happens BEFORE this helper in
+ * the actual Wayland request handler. Even a bounded client rectangle is
+ * geometrical evidence, not an authenticated inner Wayland surface. */
+struct stage_director_news_host_viewport_receipt
+stage_director_news_host_session_report_viewport(
+		struct stage_director_news_host_session *session,
+		uintptr_t native_host_ref, uintptr_t native_client_ref,
+		uintptr_t native_output_ref, uint64_t epoch,
+		struct stage_director_rect inner_host_local) {
+	struct stage_director_news_host_viewport_receipt out = {
+		.status = SD_NEWS_HOST_VIEWPORT_DENIED,
+	};
+	if (!session || !session->initialized || !session->candidate) {
+		return out;
+	}
+	const struct stage_director_news_host_geometry_snapshot host =
+		stage_director_news_host_session_geometry_snapshot(session,
+			native_host_ref, native_client_ref, native_output_ref, epoch);
+	if (!host.candidate_only || !host.revision ||
+			!stage_director_news_host_session_geometry_current(session, &host)) {
+		return out; /* Foreign requester must not clear a real client's report. */
+	}
+	/* Every response echoes the compositor's current revision. An invalid
+	 * report from the paired client revokes its previously accepted viewport. */
+	clear_viewport_candidate(session);
+	out.epoch = host.epoch;
+	out.host_geometry_revision = host.revision;
+	if (inner_host_local.x == 0 && inner_host_local.y == 0 &&
+			inner_host_local.width == 0 && inner_host_local.height == 0) {
+		out.status = SD_NEWS_HOST_VIEWPORT_HIDDEN;
+		return out;
+	}
+	struct stage_director_rect translated = {0};
+	if (!stage_director_viewport_from_host_local(
+			host.host, inner_host_local, &translated) ||
+			!stage_director_rect_contains(host.output, translated)) {
+		return out;
+	}
+	session->viewport_candidate_valid = true;
+	session->viewport_host_revision = host.revision;
+	session->viewport_local = inner_host_local;
+	session->viewport_global = translated;
+	out.status = SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY;
+	out.inner_global = translated;
+	/* All can_* permissions remain FALSE, including a successful report. */
+	return out;
+}
+
+bool stage_director_news_host_session_viewport_current(
+		const struct stage_director_news_host_session *session,
+		const struct stage_director_news_host_viewport_receipt *receipt) {
+	if (!session || !receipt ||
+			receipt->status != SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY ||
+			receipt->can_launch || receipt->can_clip ||
+			receipt->can_render || receipt->can_accept_input ||
+			receipt->can_show_popup || !session->viewport_candidate_valid ||
+			!session->viewport_host_revision ||
+			receipt->host_geometry_revision !=
+				session->viewport_host_revision ||
+			receipt->epoch != session->epoch) {
+		return false;
+	}
+	const struct stage_director_news_host_geometry_snapshot host =
+		stage_director_news_host_session_geometry_snapshot(session,
+			session->native_host_ref, (uintptr_t)session->client,
+			session->native_output_ref, receipt->epoch);
+	return host.candidate_only &&
+		stage_director_news_host_session_geometry_current(session, &host) &&
+		host.revision == receipt->host_geometry_revision &&
+		session->viewport_global.x == receipt->inner_global.x &&
+		session->viewport_global.y == receipt->inner_global.y &&
+		session->viewport_global.width == receipt->inner_global.width &&
+		session->viewport_global.height == receipt->inner_global.height &&
+		stage_director_rect_contains(host.host, receipt->inner_global) &&
+		stage_director_rect_contains(host.output, receipt->inner_global);
 }
 
 bool stage_director_news_host_session_tracks(
