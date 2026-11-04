@@ -7,6 +7,10 @@
 #include <QRectF>
 #include <QString>
 #include <QVariant>
+/* The Nix package is Release; keep these runtime safety assertions active. */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdio>
 
