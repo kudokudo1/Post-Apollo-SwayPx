@@ -13,6 +13,17 @@
  */
 #include <QGuiApplication>
 #include <QByteArray>
+#ifdef SD_CI_QML_WATCH_BRIDGE
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QMetaObject>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QRectF>
+#include <QThread>
+#include <QVariant>
+#include <functional>
+#endif
 #include <QtGlobal>
 #include <cerrno>
 #include <cstdio>
@@ -98,6 +109,7 @@ static void registry_global(void *data, wl_registry *registry,
 				version < 1 ? version : 1));
 	} else if (!strcmp(iface,post_apollo_weather_watch_v1_interface.name)) {
 		s->watch_advertised = true;
+#ifndef SD_CI_QML_WATCH_BRIDGE
 		if (!s->watch && version >= 2) {
 			s->watch_protocol_version = 2;
 			s->watch = static_cast<post_apollo_weather_watch_v1 *>(
@@ -108,6 +120,9 @@ static void registry_global(void *data, wl_registry *registry,
 					s->watch, &watch_listener, s);
 			}
 		}
+#else
+		if (version >= 2) s->watch_protocol_version = 2;
+#endif
 	}
 }
 static void registry_remove(void *, wl_registry *, uint32_t) {}
@@ -168,6 +183,127 @@ static const zwlr_layer_surface_v1_listener layer_listener = {
 static bool dispatch(State *s) {
 	return wl_display_roundtrip_queue(s->display,s->queue) >= 0;
 }
+#ifdef SD_CI_QML_WATCH_BRIDGE
+/* After the real Weather layer is mapped, the bridge must receive messages
+ * through Qt's OWN socket reader and its QTimer event pump. No native
+ * wl_display_roundtrip_queue/dispatch call is permitted in this phase. */
+static bool qpa_events_until(QGuiApplication &app,
+		const std::function<bool()> &predicate, int limitMs = 6500) {
+	QElapsedTimer elapsed;
+	elapsed.start();
+	while (elapsed.elapsed() < limitMs) {
+		app.processEvents(QEventLoop::AllEvents, 25);
+		if (predicate()) return true;
+		QThread::msleep(10);
+	}
+	return predicate();
+}
+static bool invoke_watch(QObject *obj, const QString &source, bool expected) {
+	bool sent = !expected;
+	return QMetaObject::invokeMethod(obj, "requestWatch",
+		Q_RETURN_ARG(bool, sent), Q_ARG(QString, source)) &&
+		sent == expected;
+}
+static bool invoke_close(QObject *obj) {
+	return QMetaObject::invokeMethod(obj, "close", Qt::DirectConnection);
+}
+static bool qml_bridge_test(QGuiApplication &app, State *s) {
+	const char *module = getenv("SD_CI_WATCH_QML_IMPORT_PATH");
+	if (!module || strncmp(module, "/nix/store/", 11)) {
+		fputs("BLOCKED_NONISOLATED_QML_IMPORT\n", stderr);
+		return false;
+	}
+	QQmlEngine engine;
+	engine.addImportPath(QString::fromLocal8Bit(module));
+	QQmlComponent qml(&engine);
+	qml.setData(R"QML(
+import QtQml
+import PostApollo.StageDirector 1.0
+WatchBridge { enabled: true; viewport: Qt.rect(20, 30, 120, 100) }
+)QML", QUrl());
+	if (qml.isError()) {
+		for (const auto &error : qml.errors())
+			fprintf(stderr, "QML_BRIDGE_IMPORT_FAIL: %s\n", qPrintable(error.toString()));
+		return false;
+	}
+	QObject *obj = qml.create();
+	if (!obj) {
+		fputs("FAIL: no live WatchBridge QObject\n", stderr);
+		return false;
+	}
+	const auto prop = [obj](const char *name) {return obj->property(name);};
+	const auto is = [&prop](const char *name, bool value) {
+		return prop(name).toBool() == value;
+	};
+	if (!s->mapped || !s->watch_advertised ||
+		!qpa_events_until(app, [&]() {return is("paired",true);}, 7000) ||
+		prop("status").toString() != QStringLiteral("WATCH_V2_AVAILABLE")) {
+		fprintf(stderr,"FAIL: Qt QPA event loop did not discover privileged v2: %s\n",
+			qPrintable(prop("status").toString()));
+		delete obj;
+		return false;
+	}
+	if (!invoke_watch(obj, QStringLiteral("https://invalid.example/watch"),false) ||
+		!invoke_watch(obj,QStringLiteral("bbc"),true) ||
+		!qpa_events_until(app,[&]() {
+			return is("watchCandidate",true) &&
+				is("viewportCandidate",true) &&
+				prop("hostRevision").toULongLong() != 0;
+		},7000)) {
+		fprintf(stderr,"FAIL: real QML WATCH/viewport acknowledgements: %s\n",
+			qPrintable(prop("status").toString()));
+		delete obj;
+		return false;
+	}
+	const auto initialRevision = prop("hostRevision").toULongLong();
+	if (!obj->setProperty("viewport",QRectF()) ||
+		!qpa_events_until(app,[&]() {
+			return is("viewportCandidate",false) &&
+				prop("status").toString() == QStringLiteral("VIEWPORT_HIDDEN");
+		},6000)) {
+		fprintf(stderr,"FAIL: QML hidden viewport not acknowledged: %s\n",
+			qPrintable(prop("status").toString()));
+		delete obj;
+		return false;
+	}
+	if (!obj->setProperty("viewport",QRectF(25,35,120,100)) ||
+		!qpa_events_until(app,[&]() {
+			return is("viewportCandidate",true) &&
+				prop("hostRevision").toULongLong() == initialRevision;
+		},6000)) {
+		fputs("FAIL: QML viewport reconnect after hidden\n",stderr);
+		delete obj;
+		return false;
+	}
+	if (!invoke_close(obj) ||
+		!qpa_events_until(app,[&]() {
+			return is("watchCandidate",false) &&
+				is("viewportCandidate",false) &&
+				prop("status").toString() == QStringLiteral("CLOSED");
+		},6000)) {
+		fprintf(stderr,"FAIL: QML CLOSE lost or unreconciled: %s\n",
+			qPrintable(prop("status").toString()));
+		delete obj;
+		return false;
+	}
+	if (!obj->setProperty("enabled",false) ||
+		!is("paired",false) ||
+		prop("status").toString() != QStringLiteral("DISABLED") ||
+		!invoke_watch(obj,QStringLiteral("bbc"),false)) {
+		fputs("FAIL: QML disabled but retained WATCH authority\n",stderr);
+		delete obj;
+		return false;
+	}
+	delete obj;
+	printf("SD_CI_QML_WATCH_BRIDGE_REAL_QPA QtQml_type=1 qt_owned_display=1 "
+		"real_native_mapped_layer=1 v2_dynamic_global=1 watch_candidate=1 "
+		"viewport_candidate=1 hidden=1 resize=1 close_revoked=1 "
+		"disabled=1 host_revision=%llu browser=OFF input=NONE PASS\n",
+		static_cast<unsigned long long>(initialRevision));
+	fflush(stdout);
+	return true;
+}
+#endif
 
 int main(int argc, char **argv) {
 	alarm(25);
@@ -223,6 +359,18 @@ int main(int argc, char **argv) {
 	puts("SD_CI_QT_WAYLAND_LAYER_MAPPED qt_native_display=1 "
 		"same_connection=1 mapped=1 authority=NONE");
 	fflush(stdout);
+#ifdef SD_CI_QML_WATCH_BRIDGE
+	/* No test-native WATCH proxy may consume the candidate. The production
+	 * WatchBridge QML object must discover the dynamic global on this same
+	 * Qt native display via Qt's event loop. */
+	if (!qml_bridge_test(app, &s)) return 1;
+	puts("SD_CI_QT_NATIVE_WATCH_BRIDGE Qt6_QGuiApplication=1 "
+		"QWaylandApplication_display=1 same_wl_display=1 "
+		"actual_mapped_layer=1 candidate=1 v2_viewport=1 "
+		"invalid_url_refused=1 close_revoked=1 browser=OFF "
+		"input_auth=UNTESTED authority=NONE PASS");
+	fflush(stdout);
+#else
 	/* Compositor publishes WATCH only after native mapped host selection.
 	 * A registry created before pairing must receive this dynamic global. */
 	for (int i=0;i<60 && !s.watch;++i) {
@@ -305,7 +453,8 @@ int main(int argc, char **argv) {
 	fflush(stdout);
 	/* Display and Qt platform compositor proxy remain Qt-owned.
 	 * Other local protocol objects/queue belong to the test. */
-	post_apollo_weather_watch_v1_destroy(s.watch);
+#endif
+	if (s.watch) post_apollo_weather_watch_v1_destroy(s.watch);
 	zwlr_layer_surface_v1_destroy(s.layer);
 	wl_surface_destroy(s.surface);
 	if (s.buffer) wl_buffer_destroy(s.buffer);
