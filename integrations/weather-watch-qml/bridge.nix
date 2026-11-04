@@ -30,7 +30,9 @@ in pkgs.stdenv.mkDerivation {
   doCheck = true;
   checkPhase = ''
     runHook preCheck
-    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+    export XDG_CACHE_HOME="$TMPDIR/post-apollo-qt-cache"
+    mkdir -p "$XDG_CACHE_HOME"
+    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -VV
     runHook postCheck
   '';
   installPhase = ''
