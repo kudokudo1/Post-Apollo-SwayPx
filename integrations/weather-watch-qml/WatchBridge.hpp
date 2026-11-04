@@ -23,7 +23,7 @@ struct post_apollo_weather_watch_v1;
  * Do NOT instantiate it in a separate helper process: the server requires
  * identity of the exact Wayland client that owns the paired Weather layer.
  */
-class WatchBridge final : public QObject {
+class WatchBridge : public QObject {
     Q_OBJECT
     QML_NAMED_ELEMENT(WatchBridge)
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
