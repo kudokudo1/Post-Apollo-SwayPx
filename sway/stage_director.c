@@ -74,6 +74,9 @@ static int last_news_actors = -1;
  */
 static struct stage_director_news_host_session weather_host_session;
 static struct stage_director_news_session_lease weather_watch_lease;
+/* No rendering authority: remembers only which bound v2 resource last
+ * supplied the current geometry candidate, for destructor-time revocation. */
+static struct wl_resource *weather_viewport_reporting_resource;
 static bool weather_watch_lease_initialized;
 
 static void ensure_weather_watch_lease(void) {
@@ -103,6 +106,7 @@ static void close_weather_watch_lease(void) {
 
 static void on_weather_host_revoked(void *data) {
 	(void)data;
+	weather_viewport_reporting_resource = NULL;
 	/* Native wl_client/role/surface destroy and host loss all invalidate
 	 * the private global AND the same native WATCH candidate ledger. */
 	close_weather_watch_lease();
@@ -117,6 +121,7 @@ static void ensure_weather_host_session(void) {
 
 void stage_director_news_pairing_clear_host(void) {
 	ensure_weather_host_session();
+	weather_viewport_reporting_resource = NULL;
 	/* Even in an already-revoked pairing, never strand a WATCH candidate. */
 	close_weather_watch_lease();
 	stage_director_news_host_session_invalidate(&weather_host_session);
@@ -279,6 +284,9 @@ stage_director_news_watch_report_viewport(
 				&weather_host_session, &receipt)) {
 		out.status = SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY;
 	}
+	/* Forget any old v2 reporter after a denied or hidden report. */
+	weather_viewport_reporting_resource =
+		out.status == SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY ? resource : NULL;
 	/* A positive response is still ONLY a geometry hint. No compositor
 	 * crop, browser, focus, pointer or XDG-popup action occurs here. */
 	sway_log(SWAY_DEBUG, "[stage-director][SD1][VIEWPORT_REPORT] "
@@ -287,6 +295,20 @@ stage_director_news_watch_report_viewport(
 		(unsigned)out.status, weather_host_session.epoch,
 		out.host_revision);
 	return out;
+}
+
+/* Called by the real Wayland resource destructor. The protocol resource
+ * may vanish while the Weather host and its WATCH candidate still live.
+ * Revoke its geometry immediately; never leave a dangling viewport hint. */
+void stage_director_news_watch_viewport_resource_destroyed(
+		struct wl_resource *resource) {
+	if (!resource || weather_viewport_reporting_resource != resource) return;
+	weather_viewport_reporting_resource = NULL;
+	stage_director_news_host_session_clear_viewport_candidate(
+		&weather_host_session);
+	sway_log(SWAY_DEBUG, "[stage-director][SD1][VIEWPORT_REPORT] "
+		"native_reporting_resource_destroyed=1 candidate_revoked=1 "
+		"browser=OFF authority=NONE");
 }
 
 /*
