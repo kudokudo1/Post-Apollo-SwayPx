@@ -39,7 +39,7 @@ void stage_director_news_host_session_on_revoked(
 	session->on_revoked_data = data;
 }
 
-static void clear_viewport_candidate(
+void stage_director_news_host_session_clear_viewport_candidate(
 		struct stage_director_news_host_session *session) {
 	if (!session) return;
 	session->viewport_candidate_valid = false;
@@ -71,7 +71,7 @@ void stage_director_news_host_session_invalidate(
 	session->epoch = 0;
 	session->geometry_revision = 0;
 	session->geometry_valid = false;
-	clear_viewport_candidate(session);
+	stage_director_news_host_session_clear_viewport_candidate(session);
 	memset(&session->observed_host, 0, sizeof(session->observed_host));
 	memset(&session->observed_output, 0, sizeof(session->observed_output));
 	session->candidate = false;
@@ -171,7 +171,7 @@ bool stage_director_news_host_session_update_geometry(
 	session->last_geometry_revision++;
 	session->geometry_revision = session->last_geometry_revision;
 	/* In-flight reports were relative to the prior outer host. */
-	clear_viewport_candidate(session);
+	stage_director_news_host_session_clear_viewport_candidate(session);
 	session->observed_host = host;
 	session->observed_output = output;
 	session->geometry_valid = true;
@@ -280,7 +280,7 @@ stage_director_news_host_session_report_viewport(
 	}
 	/* Every response echoes the compositor's current revision. An invalid
 	 * report from the paired client revokes its previously accepted viewport. */
-	clear_viewport_candidate(session);
+	stage_director_news_host_session_clear_viewport_candidate(session);
 	out.epoch = host.epoch;
 	out.host_geometry_revision = host.revision;
 	if (inner_host_local.x == 0 && inner_host_local.y == 0 &&
