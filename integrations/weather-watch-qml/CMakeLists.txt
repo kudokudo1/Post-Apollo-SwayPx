@@ -56,8 +56,16 @@ add_test(NAME watch-bridge-disabled-by-default
 set_tests_properties(watch-bridge-disabled-by-default PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-# Portable runtime artifact: the module may be installed into Quickshell's
-# QML import path later, only with operator-approved local deployment.
-install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/"
-    DESTINATION lib/qt6/qml
-    FILES_MATCHING PATTERN "qmldir" PATTERN "*.so" PATTERN "*.qmltypes")
+# Install backing library AND QML plugin side by side: the plugin must
+# not retain a forbidden RPATH to the temporary Nix build directory.
+set_target_properties(postapollo_weather_watch
+    postapollo_weather_watchplugin PROPERTIES INSTALL_RPATH "$ORIGIN")
+set(QML_MODULE_INSTALL "lib/qt6/qml/PostApollo/StageDirector")
+install(TARGETS postapollo_weather_watch postapollo_weather_watchplugin
+    LIBRARY DESTINATION "${QML_MODULE_INSTALL}"
+    ARCHIVE DESTINATION "${QML_MODULE_INSTALL}")
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/qml/PostApollo/StageDirector/qmldir"
+    "${CMAKE_CURRENT_BINARY_DIR}/qml/PostApollo/StageDirector/postapollo_weather_watch.qmltypes"
+    DESTINATION "${QML_MODULE_INSTALL}")
+# The smoke is executed against this installed package in bridge.nix.
