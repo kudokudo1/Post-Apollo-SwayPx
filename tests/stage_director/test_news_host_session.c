@@ -135,6 +135,53 @@ int main(void) {
 	second.can_clip = true;
 	assert(!stage_director_news_host_session_geometry_current(&state, &second));
 	second.can_clip = false;
+	/* WATCH v2 QML local rectangles are only read-only client geometry
+	 * reports, rebased under the actual native host epoch and revision. */
+	const struct stage_director_rect viewport_local = {20, 30, 320, 240};
+	struct stage_director_news_host_viewport_receipt reported =
+		stage_director_news_host_session_report_viewport(
+			&state, 0x10, (uintptr_t)a, 0x20, 1, viewport_local);
+	assert(reported.status == SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY);
+	assert(reported.epoch == 1 && reported.host_geometry_revision == 2);
+	assert(reported.inner_global.x == 170 && reported.inner_global.y == 100);
+	assert(reported.inner_global.width == 320 &&
+		reported.inner_global.height == 240);
+	assert(!reported.can_launch && !reported.can_clip &&
+		!reported.can_render && !reported.can_accept_input &&
+		!reported.can_show_popup);
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
+	struct stage_director_news_host_viewport_receipt hostile =
+		stage_director_news_host_session_report_viewport(
+			&state, 0x10, (uintptr_t)b, 0x20, 1, viewport_local);
+	assert(hostile.status == SD_NEWS_HOST_VIEWPORT_DENIED);
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
+	hostile = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x21, 1, viewport_local);
+	assert(hostile.status == SD_NEWS_HOST_VIEWPORT_DENIED);
+	hostile = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x20, 2, viewport_local);
+	assert(hostile.status == SD_NEWS_HOST_VIEWPORT_DENIED);
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
+	/* A malformed message FROM the paired client must revoke its old area. */
+	hostile = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x20, 1,
+		(struct stage_director_rect){-1, 30, 320, 240});
+	assert(hostile.status == SD_NEWS_HOST_VIEWPORT_DENIED);
+	assert(!stage_director_news_host_session_viewport_current(&state, &reported));
+	assert(!state.viewport_candidate_valid);
+	hostile = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x20, 1,
+		(struct stage_director_rect){0, 0, 0, 0});
+	assert(hostile.status == SD_NEWS_HOST_VIEWPORT_HIDDEN);
+	assert(hostile.host_geometry_revision == 2);
+	assert(!state.viewport_candidate_valid);
+	reported = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x20, 1, viewport_local);
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
+	reported.can_clip = true; /* even a forged receipt cannot grant authority */
+	assert(!stage_director_news_host_session_viewport_current(&state, &reported));
+	reported.can_clip = false;
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
 	/* Candidate-only inner NEWS area: geometry must match the current
 	 * exact native host revision and fit inside both host and actor. */
 	struct stage_director_news_viewport_candidate_request inner = {
@@ -202,6 +249,8 @@ int main(void) {
 	assert(state.candidate); /* wrong host cannot revoke */
 	stage_director_news_host_session_host_lost(&state, 0x10);
 	assert(!state.candidate);
+	assert(!state.viewport_candidate_valid);
+	assert(!stage_director_news_host_session_viewport_current(&state, &reported));
 	assert(!stage_director_news_host_session_geometry_current(&state, &second));
 	assert(state.geometry_revision == 0 && state.last_geometry_revision == 2);
 	assert(stage_director_news_viewport_candidate_probe(&state, &inner).status ==
@@ -218,6 +267,17 @@ int main(void) {
 		&state, 0x10, (uintptr_t)a, 0x20, 2, host1, output));
 	assert(state.geometry_revision == 3);
 	assert(!stage_director_news_host_session_geometry_current(&state, &second));
+	struct stage_director_news_host_viewport_receipt moved =
+		stage_director_news_host_session_report_viewport(
+			&state, 0x10, (uintptr_t)a, 0x20, 2, viewport_local);
+	assert(moved.status == SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY);
+	assert(stage_director_news_host_session_viewport_current(&state, &moved));
+	/* Panel move on the SAME output immediately revokes older player crop. */
+	assert(stage_director_news_host_session_update_geometry(
+		&state, 0x10, (uintptr_t)a, 0x20, 2, host2, output));
+	assert(state.geometry_revision == 4);
+	assert(!state.viewport_candidate_valid);
+	assert(!stage_director_news_host_session_viewport_current(&state, &moved));
 	wl_resource_destroy(role_a);
 	assert(!state.candidate && state.last_epoch == 2);
 	role_a = new_resource(a);
@@ -240,7 +300,7 @@ int main(void) {
 	close(b_fd);
 	wl_display_destroy(display);
 	puts("SD_NEWS_HOST_SESSION: real Wayland resource/client lifetime, "
-		"foreign denial, host geometry revisions, stale denial, and zero "
+		"foreign denial, viewport v2 reports/revocation, stale denial, and zero "
 		"authority PASS");
 	return 0;
 }
