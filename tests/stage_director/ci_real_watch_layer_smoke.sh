@@ -56,6 +56,13 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
+if [[ "${STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE:-}" == 1 &&
+      ( -z "$qt_bin" || "$qt_bin" != /nix/store/* ||
+        "${SD_CI_WATCH_QML_IMPORT_PATH:-}" != /nix/store/* ) ]]; then
+  echo "BLOCKED_NONISOLATED_QML_WATCH_RUNTIME" >&2
+  exit 2
+fi
+
 if [[ -n "$qt_bin" ]]; then
   # Qt creates its own Wayland QPA display; all layer and WATCH traffic
   # must borrow that exact display. Do not execute the C weather client.
@@ -65,7 +72,13 @@ else
 fi
 weather_pid=$!
 test_result=0
-for _ in {1..120}; do
+# Qt QPA event-loop delivery is asynchronous. Allow time for its
+# independent QML import/Qt timer loop without weakening the 25s alarm.
+max_checks=120
+if [[ "${STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE:-}" == 1 ]]; then
+  max_checks=320
+fi
+for ((attempt=0; attempt<max_checks; attempt++)); do
   if [[ -n "$qt_bin" ]]; then
     marker='SD_CI_QT_NATIVE_WATCH_BRIDGE Qt6_QGuiApplication=1'
   else
@@ -77,6 +90,14 @@ for _ in {1..120}; do
   if ! kill -0 "$weather_pid" 2>/dev/null; then break; fi
   sleep 0.05
 done
+if [[ "$test_result" == 1 &&
+      "${STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE:-}" == 1 ]] &&
+   ! grep -Fq 'SD_CI_QML_WATCH_BRIDGE_REAL_QPA QtQml_type=1' \
+     "$runtime/watch-weather.log"; then
+  echo "FAIL: ordinary protocol fixture passed without live QML bridge proof" >&2
+  cat "$runtime/watch-weather.log" >&2 || true
+  exit 1
+fi
 if [[ "$test_result" != 1 ]]; then
   echo "FAIL: real mapped Weather client did not complete WATCH/CLOSE" >&2
   cat "$runtime/watch-weather.log" >&2 || true
@@ -126,6 +147,9 @@ foreign_pid=""
 
 if [[ -n "$qt_bin" ]]; then
   grep -F 'SD_CI_QT_NATIVE_WATCH_BRIDGE' "$runtime/watch-weather.log"
+  if [[ "${STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE:-}" == 1 ]]; then
+    grep -F 'SD_CI_QML_WATCH_BRIDGE_REAL_QPA' "$runtime/watch-weather.log"
+  fi
 else
   grep -F 'SD_CI_REAL_WATCH_END_TO_END' "$runtime/watch-weather.log"
 fi

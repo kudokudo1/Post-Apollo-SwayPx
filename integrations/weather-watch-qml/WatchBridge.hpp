@@ -87,6 +87,9 @@ private:
     QString m_status = QStringLiteral("DISABLED");
     bool m_watchCandidate = false;
     bool m_viewportCandidate = false;
+    // A server-ACKED CLOSE revokes the private global deliberately. Do not
+    // misreport that expected removal as unexpected pairing loss.
+    bool m_closeAcknowledged = false;
     qulonglong m_hostRevision = 0;
     uint32_t m_watchGlobalName = 0;
     wl_display *m_display = nullptr;  // BORROWED from Qt QPA
