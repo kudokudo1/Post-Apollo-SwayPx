@@ -1,9 +1,9 @@
 #include "WatchBridge.hpp"
 
 #include <QGuiApplication>
-#include <QNativeInterface>
 #include <QtGlobal>
 #include <cerrno>
+#include <cstring>
 #include <cmath>
 #include <limits>
 #include <wayland-client.h>
