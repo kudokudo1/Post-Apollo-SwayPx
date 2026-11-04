@@ -42,6 +42,12 @@ The operator need not install, restart or click anything on their Fedora desktop
 - [ ] Green workflow review and bounded merge
 - [ ] Operator live Quickshell session pairing and UI acceptance
 
+## FIRST-RUN FINDING // Real QPA CLOSE lifecycle
+
+The **first exact-head** integration job reached `WATCH_CANDIDATE_ONLY`, `VIEWPORT_CANDIDATE_ONLY`, hidden, and renewed viewport responses on the **real installed QML object**, but failed on CLOSE because SwayPX sends `CLOSED` then deliberately revokes the private global. The client `registryRemoved` callback then overwrote `CLOSED` with `PAIRING_REVOKED`.
+
+Resolution in this branch: `WatchBridge` remembers only a **server-acknowledged** CLOSE, and preserves `CLOSED` when its subsequent global removal arrives. An unacknowledged/unexpected removal continues to emit `PAIRING_REVOKED`. The real QPA fixture now requires `paired == false`, `watchCandidate == false`, `viewportCandidate == false`, and terminal `status == CLOSED` before passing. This was a genuine client lifecycle mismatch, not a server authority bypass or QML import failure.
+
 ## WATCH OUT FOR
 
 The existing QML module's `wl_display_dispatch_queue_pending` relies on Qt QPA to read messages from the native display while the Qt GUI event loop runs. Offscreen import cannot prove this; this fixture must detect and reject failure. It must **not** take over Qt's socket reader or call `wl_display_roundtrip_queue` after creating the QML object. If a real Qt event-loop issue is exposed, change the client transport with a reviewed nonblocking integration, not the compositor's pairing security.
