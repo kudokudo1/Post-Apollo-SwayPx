@@ -119,11 +119,49 @@ static void check_overflow_and_edge_cases(void) {
 	}, 0, 0));
 }
 
+static void check_host_local_weather_bridge_geometry(void) {
+	/* Mirrors the existing QML rectangle in Station chassis local units,
+	 * not a new Wayland surface or any sort of browser authorization. */
+	struct stage_director_rect host = {100, 40, 1000, 700};
+	const struct stage_director_rect local = {120, 80, 800, 500};
+	struct stage_director_rect global = {99, 99, 99, 99};
+	assert(stage_director_viewport_from_host_local(host, local, &global));
+	assert(global.x == 220 && global.y == 120);
+	assert(global.width == 800 && global.height == 500);
+	/* When the entire panel moves, the interior must be freshly rebased. */
+	host.x = 400;
+	host.y = 250;
+	assert(stage_director_viewport_from_host_local(host, local, &global));
+	assert(global.x == 520 && global.y == 330);
+	/* Multi-monitor layouts can have negative compositor-global origins. */
+	host = (struct stage_director_rect){-1360, -20, 1000, 700};
+	assert(stage_director_viewport_from_host_local(host, local, &global));
+	assert(global.x == -1240 && global.y == 60);
+	assert(stage_director_rect_contains(host, global));
+
+	/* A closed viewer, missing host, or a geometry leak fails closed. */
+	const struct stage_director_rect closed = {0, 0, 0, 0};
+	const struct stage_director_rect outside = {700, 80, 400, 500};
+	const struct stage_director_rect negative = {-1, 80, 800, 500};
+	const struct stage_director_rect overflow = {INT_MAX - 100, 0, 200, 700};
+	global = (struct stage_director_rect){99, 99, 99, 99};
+	assert(!stage_director_viewport_from_host_local(host, closed, &global));
+	assert(global.width == 0 && global.height == 0);
+	global = (struct stage_director_rect){99, 99, 99, 99};
+	assert(!stage_director_viewport_from_host_local(host, outside, &global));
+	assert(global.x == 0 && global.y == 0);
+	assert(!stage_director_viewport_from_host_local(host, negative, &global));
+	assert(!stage_director_viewport_from_host_local(overflow, local, &global));
+	assert(!stage_director_viewport_from_host_local(closed, local, &global));
+	assert(!stage_director_viewport_from_host_local(host, local, NULL));
+}
+
 int main(void) {
 	check_ready_geometry_not_authority();
 	check_fail_closed();
 	check_second_monitor_and_negative_origins();
 	check_overflow_and_edge_cases();
+	check_host_local_weather_bridge_geometry();
 	puts("Stage Director SD1 viewport geometry policy: PASS");
 	return 0;
 }
