@@ -279,7 +279,8 @@ WatchBridge { enabled: true; viewport: Qt.rect(20, 30, 120, 100) }
 	}
 	if (!invoke_close(obj) ||
 		!qpa_events_until(app,[&]() {
-			return is("watchCandidate",false) &&
+			return is("paired",false) &&
+				is("watchCandidate",false) &&
 				is("viewportCandidate",false) &&
 				prop("status").toString() == QStringLiteral("CLOSED");
 		},6000)) {
