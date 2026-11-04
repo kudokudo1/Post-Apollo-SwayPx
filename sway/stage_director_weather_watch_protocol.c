@@ -29,6 +29,8 @@ static bool request_epoch_current(struct wl_client *client,
 }
 
 static void destroy_binding(struct wl_resource *resource) {
+	/* Bound v2 protocol object lost; any rectangle it reported must vanish. */
+	stage_director_news_watch_viewport_resource_destroyed(resource);
 	free(wl_resource_get_user_data(resource));
 }
 
