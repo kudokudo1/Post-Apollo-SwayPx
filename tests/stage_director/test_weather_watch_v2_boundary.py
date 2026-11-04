@@ -10,7 +10,8 @@ assert interface.attrib["name"] == "post_apollo_weather_watch_v1"
 assert interface.attrib["version"] == "2"
 requests = {e.attrib["name"]: e for e in interface.findall("request")}
 events = {e.attrib["name"]: e for e in interface.findall("event")}
-assert list(requests) == ["watch", "close", "report_viewport", "destroy"]
+# Wayland opcode order is ABI. Legacy v1 indexes MUST remain 0,1,2.
+assert list(requests) == ["watch", "close", "destroy", "report_viewport"]
 assert requests["watch"].get("since") is None
 assert requests["close"].get("since") is None
 assert requests["destroy"].get("since") is None
