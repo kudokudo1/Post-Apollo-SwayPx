@@ -69,6 +69,7 @@ void WatchBridge::setViewport(const QRectF &localRect) {
 }
 
 void WatchBridge::start() {
+    m_closeAcknowledged = false;
     // Qt QPA owns this display. Creating a second Wayland socket would fail
     // the compositor's exact native client pairing check by design.
     if (!qGuiApp) {
@@ -108,6 +109,7 @@ void WatchBridge::start() {
 }
 
 void WatchBridge::stop() {
+    m_closeAcknowledged = false;
     m_viewportDebounce.stop();
     m_queuePump.stop();
     if (m_watch && m_watchCandidate) {
@@ -195,8 +197,12 @@ void WatchBridge::registryRemoved(void *data, wl_registry *,
                                   uint32_t name) {
     auto *self = static_cast<WatchBridge *>(data);
     if (!self || name != self->m_watchGlobalName) return;
+    const bool acknowledgedClose = self->m_closeAcknowledged;
     self->releaseWatch();
-    self->setStatus(QStringLiteral("PAIRING_REVOKED"));
+    self->m_closeAcknowledged = false;
+    self->setStatus(acknowledgedClose
+        ? QStringLiteral("CLOSED")
+        : QStringLiteral("PAIRING_REVOKED"));
 }
 
 void WatchBridge::releaseWatch() {
@@ -217,17 +223,21 @@ void WatchBridge::watchResult(void *data, post_apollo_weather_watch_v1 *,
     auto *self = static_cast<WatchBridge *>(data);
     if (!self) return;
     if (result == POST_APOLLO_WEATHER_WATCH_V1_STATUS_CANDIDATE_ONLY) {
+        self->m_closeAcknowledged = false;
         self->setWatchCandidate(true);
         self->setStatus(QStringLiteral("WATCH_CANDIDATE_ONLY"));
         self->sendViewport();
     } else if (result == POST_APOLLO_WEATHER_WATCH_V1_STATUS_CLOSED) {
+        self->m_closeAcknowledged = true;
         self->setWatchCandidate(false);
         self->setViewportCandidate(false);
         self->setHostRevision(0);
         self->setStatus(QStringLiteral("CLOSED"));
     } else if (result == POST_APOLLO_WEATHER_WATCH_V1_STATUS_INVALID_SOURCE) {
+        self->m_closeAcknowledged = false;
         self->setStatus(QStringLiteral("INVALID_CATALOG_SOURCE"));
     } else {
+        self->m_closeAcknowledged = false;
         self->setWatchCandidate(false);
         self->setViewportCandidate(false);
         self->setHostRevision(0);
