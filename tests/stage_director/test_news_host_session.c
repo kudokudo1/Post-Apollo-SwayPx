@@ -182,6 +182,13 @@ int main(void) {
 	assert(!stage_director_news_host_session_viewport_current(&state, &reported));
 	reported.can_clip = false;
 	assert(stage_director_news_host_session_viewport_current(&state, &reported));
+	/* A destroyed reporting v2 object revokes only its geometry candidate. */
+	stage_director_news_host_session_clear_viewport_candidate(&state);
+	assert(!state.viewport_candidate_valid);
+	assert(!stage_director_news_host_session_viewport_current(&state, &reported));
+	reported = stage_director_news_host_session_report_viewport(
+		&state, 0x10, (uintptr_t)a, 0x20, 1, viewport_local);
+	assert(stage_director_news_host_session_viewport_current(&state, &reported));
 	/* Candidate-only inner NEWS area: geometry must match the current
 	 * exact native host revision and fit inside both host and actor. */
 	struct stage_director_news_viewport_candidate_request inner = {
