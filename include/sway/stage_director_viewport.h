@@ -94,6 +94,16 @@ bool stage_director_rect_contains(struct stage_director_rect outer,
 		struct stage_director_rect inner);
 bool stage_director_rect_contains_point(struct stage_director_rect rect,
 		int x, int y);
+/* Convert an inner QML/host-local logical rectangle to compositor-global
+ * coordinates from a CURRENT, compositor-observed outer host rectangle.
+ * This checks geometry only. No client-supplied rectangle, even if valid,
+ * proves its own origin or grants clip, browser, pointer or popup authority.
+ * Recompute on each host movement/revision; never cache across unmap.
+ * On rejection, *global is reset to the empty rectangle. */
+bool stage_director_viewport_from_host_local(
+		struct stage_director_rect observed_host,
+		struct stage_director_rect inner_host_local,
+		struct stage_director_rect *global);
 struct stage_director_viewport_plan stage_director_viewport_plan(
 		const struct stage_director_viewport_request *request);
 const char *stage_director_viewport_result_name(
