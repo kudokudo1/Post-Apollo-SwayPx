@@ -52,6 +52,26 @@ struct stage_director_news_host_geometry_snapshot {
 	bool can_show_popup;
 };
 
+/* A paired Weather client may suggest only a QML host-local rectangle.
+ * The native compositor host and output determine the global coordinate.
+ * This never authenticates a native inner wl_surface or grants playback. */
+enum stage_director_news_host_viewport_status {
+	SD_NEWS_HOST_VIEWPORT_DENIED,
+	SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY,
+	SD_NEWS_HOST_VIEWPORT_HIDDEN,
+};
+struct stage_director_news_host_viewport_receipt {
+	enum stage_director_news_host_viewport_status status;
+	uint64_t epoch;
+	uint64_t host_geometry_revision;
+	struct stage_director_rect inner_global;
+	bool can_launch;
+	bool can_clip;
+	bool can_render;
+	bool can_accept_input;
+	bool can_show_popup;
+};
+
 struct stage_director_news_host_session {
 	struct wl_client *client;
 	struct wl_resource *layer_role;
@@ -66,6 +86,11 @@ struct stage_director_news_host_session {
 	struct stage_director_rect observed_host;
 	struct stage_director_rect observed_output;
 	bool geometry_valid;
+	/* Revoke whenever outer host geometry revision changes or host unmaps. */
+	bool viewport_candidate_valid;
+	uint64_t viewport_host_revision;
+	struct stage_director_rect viewport_local;
+	struct stage_director_rect viewport_global;
 	bool initialized;
 	bool candidate;
 	/* Called after native refs have been invalidated, including disconnect. */
@@ -128,6 +153,23 @@ void stage_director_news_host_session_host_lost(
 /* A scene/output/peer re-check can invalidate the native candidate. */
 void stage_director_news_host_session_invalidate(
 	struct stage_director_news_host_session *session);
+
+/* Pure candidate-only receipt from the exact compositor-tracked host.
+ * This function does NOT check the Wayland protocol resource: the *caller*
+ * must first prove request resource/client + paired epoch and WATCH lease.
+ * It may never turn client geometry into native surface credentials. */
+struct stage_director_news_host_viewport_receipt
+stage_director_news_host_session_report_viewport(
+	struct stage_director_news_host_session *session,
+	uintptr_t native_host_ref, uintptr_t native_client_ref,
+	uintptr_t native_output_ref, uint64_t epoch,
+	struct stage_director_rect inner_host_local);
+
+/* Checks that an earlier accepted candidate is still tied to the exact
+ * current native host revision, otherwise refuses stale geometry. */
+bool stage_director_news_host_session_viewport_current(
+	const struct stage_director_news_host_session *session,
+	const struct stage_director_news_host_viewport_receipt *receipt);
 
 bool stage_director_news_host_session_tracks(
 	const struct stage_director_news_host_session *session,
