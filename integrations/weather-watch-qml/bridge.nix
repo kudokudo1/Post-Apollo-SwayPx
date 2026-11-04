@@ -43,7 +43,14 @@ in pkgs.stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
     cmake --install build
-    test -f "$out/lib/qt6/qml/PostApollo/StageDirector/qmldir"
+    module="$out/lib/qt6/qml/PostApollo/StageDirector"
+    test -f "$module/qmldir"
+    test -f "$module/libpostapollo_weather_watchplugin.so"
+    test -f "$module/libpostapollo_weather_watch.so"
+    # Validate the delivered package, not just the in-build-tree module.
+    export QML_IMPORT_PATH="$out/lib/qt6/qml:$QML_IMPORT_PATH"
+    QT_QPA_PLATFORM=offscreen build/watch_qml_offscreen_test "$out/lib/qt6/qml"
+    echo "SD_WEATHER_QML_INSTALLED_IMPORT: packaged_plugin=1 backing_lib=1 default_off=1 PASS"
     runHook postInstall
   '';
 }
