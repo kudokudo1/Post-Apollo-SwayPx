@@ -21,6 +21,9 @@
     </request>
     <request name="close"/>
     <request name="destroy" type="destructor"/>
+    <event name="result">
+      <arg name="status" type="uint" enum="status"/>
+    </event>
     <!-- v2 never grants playback or asserts the reported QML Rectangle has
          independent native Wayland surface identity. Its coordinates are
          relative to the selected, compositor-observed Weather layer. -->
@@ -30,9 +33,6 @@
       <arg name="width" type="int" summary="inner width (zero with all fields zero means hidden)"/>
       <arg name="height" type="int" summary="inner height"/>
     </request>
-    <event name="result">
-      <arg name="status" type="uint" enum="status"/>
-    </event>
     <enum name="viewport_status">
       <entry name="denied" value="0" summary="not paired, stale, malformed or outside native host"/>
       <entry name="candidate_only" value="1" summary="bounded geometry observed, no scene or input rights"/>
