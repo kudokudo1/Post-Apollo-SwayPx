@@ -1,0 +1,116 @@
+name: Stage Director real Qt QML WATCH bridge on paired Wayland host (isolated)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'integrations/weather-watch-qml/**'
+      - 'protocols/post-apollo-weather-watch-v1.xml'
+      - 'tests/stage_director/ci_qt_native_watch_bridge.cpp'
+      - 'tests/stage_director/ci_qml_watch_bridge_runtime.nix'
+      - 'tests/stage_director/ci_real_watch_layer_smoke.sh'
+      - 'tests/stage_director/ci_real_watch_compositor.nix'
+      - '.github/workflows/stage-director-weather-qml-real-wayland-event-loop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce production and native QML identity boundaries
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          fixture=Path("tests/stage_director/ci_qt_native_watch_bridge.cpp").read_text()
+          build=Path("tests/stage_director/ci_qml_watch_bridge_runtime.nix").read_text()
+          script=Path("tests/stage_director/ci_real_watch_layer_smoke.sh").read_text()
+          module=Path("integrations/weather-watch-qml/WatchBridge.cpp").read_text()
+          for token in (
+              "SD_CI_QML_WATCH_BRIDGE", "QQmlEngine engine",
+              "QQmlComponent qml", "WatchBridge { enabled: true",
+              "qpa_events_until", "app.processEvents(QEventLoop::AllEvents",
+              "SD_CI_QML_WATCH_BRIDGE_REAL_QPA",
+              'invoke_watch(obj, QStringLiteral("https://invalid.example/watch"),false)',
+              'is("viewportCandidate",true)', 'is("viewportCandidate",false)',
+              '"VIEWPORT_HIDDEN"', '"CLOSED"', '"DISABLED"'):
+              assert token in fixture, token
+          assert "ci_qt_native_watch_bridge.cpp" in build
+          assert "SD_CI_QML_WATCH_BRIDGE=1" in build
+          assert "import ../../integrations/weather-watch-qml/bridge.nix" in build
+          assert "STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE" in script
+          assert "SD_CI_QML_WATCH_BRIDGE_REAL_QPA" in script
+          for forbidden in ("wl_display_connect(", "wl_display_disconnect(",
+                            "posix_spawn(", "fork(", "QProcess(",
+                            "wlr_scene_", "wlr_seat_"):
+              assert forbidden not in module, forbidden
+          assert "wl_display_dispatch_queue_pending(m_display, m_queue)" in module
+          assert "qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()" in module
+          assert "post_apollo_weather_watch_v1_close" in module
+          print("SD_CI_QML_QPA_BOUNDARY: existing_qt_native_connection=1 "
+                "real_qml_component=1 isolated_host=1 one_lease=1 "
+                "second_wayland_connection=NONE browser=OFF authority=NONE PASS")
+          PY
+
+  real-qt-qml-on-isolated-swaypx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build non-CI compositor, CI headless compositor and real QML client
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          ! grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$prod/bin/sway"
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_compositor.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          layer="$(nix build --impure --expr 'import ./tests/stage_director/ci_real_watch_layer_client.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          qml="$(nix build --impure --expr 'import ./integrations/weather-watch-qml/bridge.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          qpa="$(nix build --impure --expr 'import ./tests/stage_director/ci_qml_watch_bridge_runtime.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          for bin in "$ci/bin/sway" "$layer/bin/sd-ci-real-watch-layer" "$qpa/bin/sd-ci-qt-qml-watch-bridge"; do
+            test -x "$bin"
+          done
+          test -f "$qml/lib/qt6/qml/PostApollo/StageDirector/qmldir"
+          test -f "$qml/lib/qt6/qml/PostApollo/StageDirector/libpostapollo_weather_watchplugin.so"
+          grep -aFq 'SD_CI_REAL_WATCH_SCENE selection=1' "$ci/bin/sway"
+          qtdeclarative="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qtdeclarative.outPath')"
+          standard_qml="$(find "$qtdeclarative" -type f -path '*/qml/QtQml/qmldir' -print -quit)"
+          test -n "$standard_qml"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          {
+            echo "CI_COMPOSITOR=$ci"
+            echo "STAGE_DIRECTOR_MESA_DIR=$mesa"
+            echo "STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT=$layer/bin/sd-ci-real-watch-layer"
+            echo "STAGE_DIRECTOR_TEST_QT_WATCH_BRIDGE=$qpa/bin/sd-ci-qt-qml-watch-bridge"
+            echo "STAGE_DIRECTOR_CI_REAL_WATCH_LAYER=1"
+            echo "STAGE_DIRECTOR_CI_QML_WATCH_BRIDGE=1"
+            echo "SD_CI_WATCH_QML_IMPORT_PATH=$qml/lib/qt6/qml"
+            echo "QML_IMPORT_PATH=$qml/lib/qt6/qml:$(dirname "$(dirname "$standard_qml")")"
+          } >> "$GITHUB_ENV"
+      - name: Run real QML component on Qt's owned connection, paired mapped layer
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$CI_COMPOSITOR/bin/sway"
+      - name: Preserve honest acceptance limits
+        if: always()
+        run: |
+          echo "CI verified installed WatchBridge QML type against a real Qt-QPA-owned Wayland connection and a genuinely mapped Weather layer; physical selection uses CI-only deterministic scene hit-test." >> "$GITHUB_STEP_SUMMARY"
+          echo "No browser launch, Quickshell Weather UI wiring, local Fedora mutation, or production compositor activation." >> "$GITHUB_STEP_SUMMARY"
