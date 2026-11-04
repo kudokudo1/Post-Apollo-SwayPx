@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           git rev-parse HEAD
           result="$(nix build --impure --expr 'import ./integrations/weather-watch-qml/bridge.nix' \
-                    --no-link --print-out-paths --show-trace | tail -n 1)"
+                    --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
           test -n "$result"
           test -f "$result/lib/qt6/qml/PostApollo/StageDirector/qmldir"
           find "$result/lib/qt6/qml/PostApollo/StageDirector" -maxdepth 1 -type f
