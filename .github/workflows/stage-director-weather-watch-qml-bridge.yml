@@ -1,0 +1,89 @@
+name: Stage Director opt-in Weather QML bridge (no activation)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'integrations/weather-watch-qml/**'
+      - 'protocols/post-apollo-weather-watch-v1.xml'
+      - '.github/workflows/stage-director-weather-watch-qml-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce Qt QPA origin and zero-authority source
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          base = Path("integrations/weather-watch-qml")
+          header = (base/"WatchBridge.hpp").read_text()
+          source = (base/"WatchBridge.cpp").read_text()
+          project = (base/"CMakeLists.txt").read_text()
+          nix = (base/"bridge.nix").read_text()
+          assert "QML_NAMED_ELEMENT(WatchBridge)" in header
+          assert "bool m_enabled = false;" in header
+          assert "qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()" in source
+          assert "native->display()" in source
+          assert "wl_display_create_queue(m_display)" in source
+          assert "wl_display_dispatch_queue_pending(m_display, m_queue)" in source
+          assert "post_apollo_weather_watch_v1_report_viewport" in source
+          assert "post_apollo_weather_watch_v1_close" in source
+          assert 'sourceId != QStringLiteral("bbc")' in source
+          assert 'sourceId != QStringLiteral("cspan")' in source
+          assert "WAYLAND_DISCONNECTED" in source
+          for denied in ("wl_display_connect", "wl_display_disconnect",
+                         "wl_display_read_events", "wl_display_roundtrip",
+                         "posix_spawn", "fork", "execve", "QProcess",
+                         "wlr_scene_", "wlr_seat_"):
+              assert not re.search(r"\b" + denied + r"\s*\(", source), denied
+          assert "../../protocols/post-apollo-weather-watch-v1.xml" in project
+          assert "QT_QPA_PLATFORM=offscreen" in project
+          assert "ctest --test-dir build" in nix
+          assert not (base/"post-apollo-weather-watch-v1.xml").exists()
+          print("SD_WEATHER_QML_WATCH_BOUNDARY: exact_qt_qpa_display=1 "
+                "catalog_only=1 disabled_default=1 no_second_display=1 "
+                "no_browser_spawn=1 authority=NONE PASS")
+          PY
+
+  native-qml-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Nix in isolated runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile Qt6 QML native plugin and run disabled offscreen smoke
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build --impure --expr 'import ./integrations/weather-watch-qml/bridge.nix' \
+                    --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -n "$result"
+          test -f "$result/lib/qt6/qml/PostApollo/StageDirector/qmldir"
+          find "$result/lib/qt6/qml/PostApollo/StageDirector" -maxdepth 1 -type f
+          echo "SD_WEATHER_QML_WATCH_PLUGIN: native_qml_build=PASS "
+          echo "Actual Qt bridge package compiled in Nix store, NOT activated."
+      - name: State exact deployment boundary
+        if: always()
+        run: |
+          echo "Qt same-display client module only; Weather Station does NOT import it yet." >> "$GITHUB_STEP_SUMMARY"
+          echo "No operator Fedora edits, browser launch, scene crop, popup or pointer authority." >> "$GITHUB_STEP_SUMMARY"
