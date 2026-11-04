@@ -32,6 +32,12 @@ in pkgs.stdenv.mkDerivation {
     runHook preCheck
     export XDG_CACHE_HOME="$TMPDIR/post-apollo-qt-cache"
     mkdir -p "$XDG_CACHE_HOME"
+    # dontWrapQtApps is correct for this library. In the isolated test
+    # process, explicitly expose Qt's standard QML import modules.
+    qt_qml_dir="$(find ${pkgs.qt6.qtdeclarative} -type f \\
+      -path '*/qml/QtQml/qmldir' -print -quit)"
+    test -n "$qt_qml_dir"
+    export QML_IMPORT_PATH="$(dirname "$(dirname "$qt_qml_dir")")"
     QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -VV
     runHook postCheck
   '';
