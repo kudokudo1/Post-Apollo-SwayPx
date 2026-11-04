@@ -223,6 +223,72 @@ bool stage_director_news_watch_record_candidate(
 	return true;
 }
 
+/* WATCH v2 geometry receipt. The client is authenticated by the existing
+ * native pairing protocol, but its reported QML rectangle remains a hint.
+ * There is no native inner-surface identity or renderer/launch authority. */
+struct stage_director_news_watch_viewport_ack
+stage_director_news_watch_report_viewport(
+		struct wl_resource *resource, int32_t x, int32_t y,
+		int32_t width, int32_t height) {
+	struct stage_director_news_watch_viewport_ack out = {
+		.status = SD_NEWS_WATCH_VIEWPORT_DENIED,
+	};
+	ensure_weather_host_session();
+	ensure_weather_watch_lease();
+	if (!resource || !stage_director_news_watch_probe_request(resource) ||
+			weather_watch_lease.state != SD_NEWS_LEASE_HOST_CANDIDATE ||
+			!weather_host_session.candidate ||
+			weather_watch_lease.epoch != weather_host_session.epoch ||
+			weather_watch_lease.native_host_ref !=
+				weather_host_session.native_host_ref ||
+			weather_watch_lease.native_host_client_ref !=
+				(uintptr_t)weather_host_session.client ||
+			weather_watch_lease.native_output_ref !=
+				weather_host_session.native_output_ref) {
+		return out;
+	}
+	/* Do not rely on geometry recorded when the old host was paired.
+	 * Reobserve the real compositor's current native layer and output. */
+	struct sway_layer_surface *host =
+		(struct sway_layer_surface *)weather_host_session.native_host_ref;
+	const struct stage_director_weather_host_native_peer peer =
+		stage_director_weather_host_observe_native_peer(host);
+	if (!peer.native_peer_candidate || !peer.host.candidate_observed ||
+			peer.native_layer_ref != weather_host_session.native_host_ref ||
+			peer.native_client_ref != (uintptr_t)weather_host_session.client ||
+			peer.native_output_ref != weather_host_session.native_output_ref ||
+			!stage_director_news_host_session_update_geometry(
+				&weather_host_session, peer.native_layer_ref,
+				peer.native_client_ref, peer.native_output_ref,
+				weather_host_session.epoch, peer.host.host,
+				peer.host.output)) {
+		stage_director_news_pairing_clear_host();
+		return out;
+	}
+	const struct stage_director_news_host_viewport_receipt receipt =
+		stage_director_news_host_session_report_viewport(
+			&weather_host_session, peer.native_layer_ref,
+			peer.native_client_ref, peer.native_output_ref,
+			weather_host_session.epoch,
+			(struct stage_director_rect){x, y, width, height});
+	out.host_revision = receipt.host_geometry_revision;
+	if (receipt.status == SD_NEWS_HOST_VIEWPORT_HIDDEN) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_HIDDEN;
+	} else if (receipt.status == SD_NEWS_HOST_VIEWPORT_CANDIDATE_ONLY &&
+			stage_director_news_host_session_viewport_current(
+				&weather_host_session, &receipt)) {
+		out.status = SD_NEWS_WATCH_VIEWPORT_CANDIDATE_ONLY;
+	}
+	/* A positive response is still ONLY a geometry hint. No compositor
+	 * crop, browser, focus, pointer or XDG-popup action occurs here. */
+	sway_log(SWAY_DEBUG, "[stage-director][SD1][VIEWPORT_REPORT] "
+		"status=%u epoch=%" PRIu64 " revision=%" PRIu64
+		" native_host=matched authority=NONE",
+		(unsigned)out.status, weather_host_session.epoch,
+		out.host_revision);
+	return out;
+}
+
 /*
  * Called ONLY by the native libinput keyboard -> pointer ceremony. Do not
  * insert a Sway command, IPC command, QML property or public Wayland method.
