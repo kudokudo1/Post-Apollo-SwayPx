@@ -16,6 +16,7 @@ sway_sources = files(
 	'stage_director_company_map.c',
 	'stage_director_company_native_peers.c',
 	'stage_director_company_native_adapter.c',
+	'stage_director_company_candidate_session.c',
 	'stage_director_viewport_clip.c',
 	'stage_director_viewer_session.c',
 	'stage_director_weather_host.c',
