@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "log.h"
 #include "sway/stage_director.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
@@ -12,6 +13,8 @@
 #include "sway/stage_director_weather_host.h"
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_lineage.h"
+#include "sway/stage_director_company_origin.h"
+#include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -836,6 +839,27 @@ void stage_director_view_mapped(struct sway_view *view) {
 					stage_director_company_lineage_status_name(
 						parentage.status),
 					parentage.direct_child_candidate ? "candidate" : "no");
+				/* M27: only the exact physically selected Company wl_client
+				 * can expose an M23 launch intent. App-ID is a LOG filter;
+				 * a near-time direct child is still NOT exact launch custody. */
+				struct stage_director_company_intent_snapshot intent = {0};
+				const bool has_intent =
+					stage_director_company_vector_protocol_intent_snapshot(
+						(struct wl_client *)native_host.native_client_ref,
+						&intent);
+				const long hz = sysconf(_SC_CLK_TCK);
+				const struct stage_director_company_origin_result origin =
+					stage_director_company_origin_check(
+						has_intent ? &intent : NULL, &native_host,
+						&company, &parentage, hz > 0 ? (uint64_t)hz : 0);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M27][ORIGIN] "
+					"status=%s intent=%s candidate=%s "
+					"owner_verified=no actor_custody=NONE "
+					"scene=OFF input=OFF",
+					stage_director_company_origin_status_name(origin.status),
+					has_intent ? "yes" : "no",
+					origin.intent_correlated_candidate ? "yes" : "no");
 			} else {
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M22][PARENTAGE] "

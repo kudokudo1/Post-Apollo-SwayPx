@@ -27,6 +27,13 @@ bool stage_director_company_vector_protocol_is_global(
 bool stage_director_company_vector_protocol_selected_client(
 	struct wl_client *client);
 
+/* M27: compositor-internal native-client query after an actual private M23
+ * launch_intent request. Never export this snapshot to public IPC or QML. */
+struct stage_director_company_intent_snapshot;
+bool stage_director_company_vector_protocol_intent_snapshot(
+	struct wl_client *client,
+	struct stage_director_company_intent_snapshot *out);
+
 /* Bounded future compositor-only activation seam. Not called by M23. */
 bool stage_director_company_vector_protocol_publish(
 	struct wl_resource *native_layer_role,

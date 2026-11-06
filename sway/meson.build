@@ -18,6 +18,7 @@ sway_sources = files(
 	'stage_director_company_native_adapter.c',
 	'stage_director_company_candidate_session.c',
 	'stage_director_company_lineage.c',
+	'stage_director_company_origin.c',
 	'stage_director_company_wire_policy.c',
 	'stage_director_company_vector_protocol.c',
 	'stage_director_company_selection.c',

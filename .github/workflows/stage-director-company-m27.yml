@@ -1,0 +1,105 @@
+name: Stage Director M27 private Company launch intent and XDG process birth
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_origin.h'
+      - 'sway/stage_director_company_origin.c'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_origin.c'
+      - 'docs/stage-director-company-m27-20261106.md'
+      - '.github/workflows/stage-director-company-m27.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-intent-origin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile M27 pure birth-correlation policy and adversarial tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_origin.c \
+            tests/stage_director/test_company_origin.c \
+            -o "$RUNNER_TEMP/sd-company-m27"
+          "$RUNNER_TEMP/sd-company-m27"
+      - name: Preserve native M22 lineage/PID-reuse regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_evidence.c \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_lineage.c \
+            tests/stage_director/test_company_lineage.c \
+            -o "$RUNNER_TEMP/sd-company-m22"
+          "$RUNNER_TEMP/sd-company-m22"
+      - name: Check the only intent producer is private M23, no scene/seat
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          protocol=Path("sway/stage_director_company_vector_protocol.c").read_text()
+          server_header=Path("include/sway/stage_director_company_vector_protocol.h").read_text()
+          origin=Path("sway/stage_director_company_origin.c").read_text()
+          stage=Path("sway/stage_director.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "'stage_director_company_origin.c'," in meson
+          for required in ("clock_gettime(CLOCK_BOOTTIME", "sysconf(_SC_CLK_TCK)",
+                           "last_intent_sequence", "intent_boot_ticks = now",
+                           "bound_is_current(client, bound_resource)",
+                           "fresh_native_host(&host, &revision)",
+                           "stage_director_company_vector_protocol_intent_snapshot("):
+              assert required in protocol,required
+          assert "stage_director_company_vector_protocol_intent_snapshot(" in server_header
+          for required in ("actor->start_ticks", "intent->observed_boot_ticks",
+                           "intent->native_host_client_ref != host->native_client_ref",
+                           "lineage->direct_child_candidate",
+                           "SD_COMPANY_ORIGIN_CANDIDATE_ONLY"):
+              assert required in origin,required
+          assert "stage_director_company_lineage_probe_linux(" in stage
+          assert "stage_director_company_origin_check(" in stage
+          assert "stage_director_company_vector_protocol_intent_snapshot(" in stage
+          assert "owner_verified=no actor_custody=NONE" in stage
+          for src in (origin,protocol):
+              for unsafe in ("wlr_scene_node_set_", "wlr_seat_",
+                             "posix_spawn(", "system(", "execve(", "fork(",
+                             "stage_director_company_candidate_session_record(",
+                             "compositor_selected = true", "can_clip = true",
+                             "can_render = true", "owner_verified = true"):
+                  assert unsafe not in src,unsafe
+          print("M27: fresh same-client private intent and read-only birth evidence; authority NONE")
+          PY
+  full-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile ordinary SwayPX and private Company protocol changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$result/bin/sway"
+          echo "M27 full compositor compiled; no local desktop or compositor started"
