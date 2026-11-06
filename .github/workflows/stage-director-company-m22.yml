@@ -1,0 +1,102 @@
+name: Stage Director M22 Company native Qt process parentage
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_lineage.h'
+      - 'sway/stage_director_company_lineage.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_lineage.c'
+      - 'docs/stage-director-company-m22-20261106.md'
+      - '.github/workflows/stage-director-company-m22.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-child-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact process identity, direct lineage and no authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_evidence.c \
+            sway/stage_director_company_lineage.c \
+            tests/stage_director/test_company_lineage.c \
+            -o "$RUNNER_TEMP/sd-company-m22"
+          "$RUNNER_TEMP/sd-company-m22"
+      - name: Preserve existing SwayPX ancestry tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_evidence.c \
+            tests/stage_director/test_process_evidence.c \
+            -o "$RUNNER_TEMP/sd-process-evidence"
+          "$RUNNER_TEMP/sd-process-evidence"
+      - name: Confirm read-only M22 wiring, keep Weather unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          policy = Path("sway/stage_director_company_lineage.c").read_text()
+          stage = Path("sway/stage_director.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          header = Path("include/sway/stage_director_company_lineage.h").read_text()
+          assert "'stage_director_company_lineage.c'," in meson
+          for phrase in ("stage_director_process_check(",
+                         "child.parent_pid != parent.pid",
+                         "parent.start_time_ticks != host->start_ticks",
+                         "child.start_time_ticks != actor->start_ticks",
+                         "same_process(parent, last_parent)",
+                         "same_process(child, last_child)"):
+              assert phrase in policy, phrase
+          for phrase in (
+              "stage_director_company_native_observe_host(layers[i].surface)",
+              "stage_director_company_lineage_probe_linux(",
+              "native_hosts == 1",
+              "owner_verified=no authority=NONE",
+              "stage_director_news_pairing_select_at(",
+          ):
+              assert phrase in stage, phrase
+          for forbidden in (
+              "wl_global_create(", "wlr_scene_node_set_", "wlr_seat_",
+              "posix_spawn(", "fork(", "execve(", "system(",
+              "compositor_selected = true", "owner_verified = true",
+              "can_pair_actor = true", "can_clip = true",
+          ):
+              assert forbidden not in policy, forbidden
+          assert "can_pair_actor" in header
+          print("STAGE_DIRECTOR_COMPANY_M22: no automatic actor custody PASS")
+          PY
+
+  full-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile complete SwayPX with native M22 observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          built="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$built/bin/sway"
+          echo "SD_COMPANY_M22_FULL_BUILD: PASS no compositor started"
