@@ -24,6 +24,7 @@
 #include "sway/input/tablet.h"
 #include "sway/layers.h"
 #include "sway/stage_director_news_pairing.h"
+#include "sway/stage_director_company_pairing.h"
 #include "sway/output.h"
 #include "sway/scene_descriptor.h"
 #include "sway/server.h"
@@ -375,10 +376,19 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 	}
 
 	cursor_handle_activity_from_device(cursor, &event->pointer->base);
-	if (stage_director_news_pairing_pointer_button(
-			cursor->seat, &event->pointer->base, event->time_msec,
-			server.session_lock.lock != NULL, event->button, event->state,
-			cursor->cursor->x, cursor->cursor->y)) {
+	/* Evaluate both physical pairing ceremonies on a press/release.
+	 * A simultaneous pending Weather F12 and Company F11 arm cannot leak
+	 * its swallowed matching release into a later click: each consumes its
+	 * own state. Their exact scene-hit namespaces are disjoint. */
+	const bool weather_paired = stage_director_news_pairing_pointer_button(
+		cursor->seat, &event->pointer->base, event->time_msec,
+		server.session_lock.lock != NULL, event->button, event->state,
+		cursor->cursor->x, cursor->cursor->y);
+	const bool company_paired = stage_director_company_pairing_pointer_button(
+		cursor->seat, &event->pointer->base, event->time_msec,
+		server.session_lock.lock != NULL, event->button, event->state,
+		cursor->cursor->x, cursor->cursor->y);
+	if (weather_paired || company_paired) {
 		return;
 	}
 	dispatch_cursor_button(cursor, &event->pointer->base,
