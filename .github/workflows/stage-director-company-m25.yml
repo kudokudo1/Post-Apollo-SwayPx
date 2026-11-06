@@ -1,0 +1,91 @@
+name: Stage Director M25 opt-in Company same-QPA QML bridge
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'integrations/company-vector-qml/**'
+      - 'protocols/post-apollo-company-vector-v1.xml'
+      - '.github/workflows/stage-director-company-m25.yml'
+      - 'docs/stage-director-company-m25-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate Company-only native same-Qt-QPA connection and zero authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          base=Path("integrations/company-vector-qml")
+          h=(base/"CompanyVectorBridge.hpp").read_text()
+          cpp=(base/"CompanyVectorBridge.cpp").read_text()
+          cmake=(base/"CMakeLists.txt").read_text()
+          nix=(base/"bridge.nix").read_text()
+          assert "QML_NAMED_ELEMENT(CompanyVectorBridge)" in h
+          assert "bool m_enabled = false;" in h
+          assert "qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()" in cpp
+          assert "native->display()" in cpp
+          assert "wl_display_create_queue(m_display)" in cpp
+          assert "wl_display_dispatch_queue_pending(m_display, m_queue)" in cpp
+          assert "post_apollo_company_vector_v1_launch_intent" in cpp
+          assert "post_apollo_company_vector_v1_report_viewport" in cpp
+          assert "post_apollo_company_vector_v1_close" in cpp
+          assert "COMPANY_INTENT_SENT_UNCONFIRMED" in cpp
+          assert "VIEWPORT_CANDIDATE_ONLY" in cpp
+          assert "COMPANY_PAIRING_REVOKED" in cpp
+          assert "std::isfinite" in cpp
+          assert "frameRect" in h and "mapRect" in h
+          assert "SD_STAGE_DIRECTOR" not in cpp
+          for forbidden in (
+              "wl_display_connect", "wl_display_disconnect",
+              "wl_display_read_events", "wl_display_roundtrip",
+              "posix_spawn", "fork", "execve", "QProcess",
+              "wlr_scene_", "wlr_seat_", "WatchBridge",
+          ):
+              assert not re.search(r"\b"+forbidden+r"\s*\(",cpp), forbidden
+          assert "../../protocols/post-apollo-company-vector-v1.xml" in cmake
+          assert "Qt6::Gui Qt6::Qml" in cmake
+          assert "QT_QPA_PLATFORM=offscreen" in cmake
+          assert "ctest --test-dir build" in nix
+          assert not (base/"post-apollo-company-vector-v1.xml").exists()
+          print("STAGE_DIRECTOR_COMPANY_M25: same-QPA client, no second socket, no launch, default off")
+          PY
+
+  native-qml-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile Qt6 QML module and test offscreen disabled and installed import
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build --impure --expr 'import ./integrations/company-vector-qml/bridge.nix' \
+                    --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -n "$result"
+          module="$result/lib/qt6/qml/PostApollo/CompanyVector"
+          test -f "$module/qmldir"
+          test -f "$module/libpostapollo_company_vectorplugin.so"
+          test -f "$module/libpostapollo_company_vector.so"
+          echo "STAGE_DIRECTOR_COMPANY_M25_QML_PACKAGE: PASS"
+          echo "No real Qt MapLibre actor launched, no Company QML import activated."
