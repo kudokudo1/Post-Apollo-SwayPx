@@ -1,0 +1,273 @@
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <wayland-server-core.h>
+#include "sway/stage_director_company_vector_protocol.h"
+#include "sway/stage_director_company_wire_policy.h"
+#include "post-apollo-company-vector-v1-protocol.h"
+
+/*
+ * Dedicated Company Wayland global, invisible until native selection.
+ * Never reuse Weather's private interface, tokens or session.
+ *
+ * The module is compiled into SwayPX but publish() has NO production caller
+ * at M23. A selection issuer must be independently reviewed in M24.
+ */
+static struct wl_display *company_display;
+static struct wl_global *company_global;
+static struct wl_resource *native_role;
+static struct wl_resource *native_host_surface;
+static struct wl_client *selected_client;
+static struct wl_resource *bound_resource;
+static struct wl_listener role_destroy;
+static struct wl_listener host_destroy;
+static bool listeners_attached;
+static uint64_t selection_epoch;
+static uint64_t last_epoch;
+static stage_director_company_vector_host_probe native_host_probe;
+static void *native_host_context;
+
+struct company_binding {
+	uint64_t epoch;
+	bool launch_intent;
+	bool viewport_candidate;
+};
+
+static bool selection_current(struct wl_client *client) {
+	return client && client == selected_client &&
+		native_role && native_host_surface && company_global &&
+		wl_resource_get_client(native_role) == client &&
+		wl_resource_get_client(native_host_surface) == client &&
+		selection_epoch != 0 && native_host_probe;
+}
+
+bool stage_director_company_vector_protocol_is_global(
+		const struct wl_global *global) {
+	/* wl_global_create advertises before returning the global pointer.
+	 * Match generated interface identity FIRST, not stored global pointer. */
+	return global && wl_global_get_interface(global) ==
+		&post_apollo_company_vector_v1_interface;
+}
+
+bool stage_director_company_vector_protocol_selected_client(
+		struct wl_client *client) {
+	return selection_current(client);
+}
+
+static void send_status(struct wl_resource *resource, uint32_t status,
+		uint64_t revision) {
+	post_apollo_company_vector_v1_send_result(
+		resource, status, (uint32_t)(selection_epoch >> 32),
+		(uint32_t)selection_epoch, (uint32_t)(revision >> 32),
+		(uint32_t)revision);
+}
+
+static bool bound_is_current(struct wl_client *client,
+		struct wl_resource *resource) {
+	if (!client || !resource || client != wl_resource_get_client(resource) ||
+			resource != bound_resource || !selection_current(client)) {
+		return false;
+	}
+	const struct company_binding *b = wl_resource_get_user_data(resource);
+	return b && b->epoch == selection_epoch;
+}
+
+static bool fresh_native_host(struct stage_director_rect *host,
+		uint64_t *revision) {
+	if (!selected_client || !native_host_probe || !host || !revision) {
+		return false;
+	}
+	*host = (struct stage_director_rect){0};
+	*revision = 0;
+	if (!native_host_probe(native_host_context, host, revision) ||
+			!*revision || !stage_director_rect_valid(*host) ||
+			host->x != 0 || host->y != 0) {
+		return false;
+	}
+	return true;
+}
+
+static void handle_launch_intent(struct wl_client *client,
+		struct wl_resource *resource, uint32_t mode) {
+	struct stage_director_rect host = {0};
+	uint64_t revision = 0;
+	if (!bound_is_current(client, resource) ||
+			(mode != POST_APOLLO_COMPANY_VECTOR_V1_MODE_OFFLINE &&
+			 mode != POST_APOLLO_COMPANY_VECTOR_V1_MODE_ONLINE) ||
+			!fresh_native_host(&host, &revision)) {
+		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
+		return;
+	}
+	struct company_binding *b = wl_resource_get_user_data(resource);
+	if (b->launch_intent) {
+		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED,
+			revision);
+		return;
+	}
+	b->launch_intent = true;
+	b->viewport_candidate = false;
+	/* Observed intent only. Neither online consent nor native actor birth
+	 * can be established by this request. No process is started. */
+	send_status(resource,
+		POST_APOLLO_COMPANY_VECTOR_V1_STATUS_LAUNCH_CANDIDATE, revision);
+}
+
+static void handle_report_viewport(struct wl_client *client,
+		struct wl_resource *resource,
+		int32_t fx, int32_t fy, int32_t fw, int32_t fh,
+		int32_t mx, int32_t my, int32_t mw, int32_t mh) {
+	struct company_binding *b = wl_resource_get_user_data(resource);
+	struct stage_director_rect host = {0};
+	uint64_t revision = 0;
+	if (!bound_is_current(client, resource) || !b || !b->launch_intent ||
+			!fresh_native_host(&host, &revision)) {
+		if (b) b->viewport_candidate = false;
+		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
+		return;
+	}
+	/* Geometry is evaluated and acknowledged, NEVER installed as clip. */
+	b->viewport_candidate = false;
+	const struct stage_director_company_wire_result candidate =
+		stage_director_company_wire_check(
+			true, true, host,
+			(struct stage_director_rect){fx, fy, fw, fh},
+			(struct stage_director_rect){mx, my, mw, mh});
+	b->viewport_candidate = candidate.geometry_candidate;
+	send_status(resource, (uint32_t)candidate.state, revision);
+}
+
+static void handle_close(struct wl_client *client,
+		struct wl_resource *resource) {
+	if (!bound_is_current(client, resource)) {
+		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
+		return;
+	}
+	struct company_binding *b = wl_resource_get_user_data(resource);
+	b->launch_intent = false;
+	b->viewport_candidate = false;
+	send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_CLOSED, 0);
+	stage_director_company_vector_protocol_revoke();
+}
+
+static void handle_destroy(struct wl_client *client,
+		struct wl_resource *resource) {
+	(void)client;
+	wl_resource_destroy(resource);
+}
+
+static void destroy_binding(struct wl_resource *resource) {
+	if (bound_resource == resource) bound_resource = NULL;
+	free(wl_resource_get_user_data(resource));
+}
+
+static const struct post_apollo_company_vector_v1_interface company_impl = {
+	.launch_intent = handle_launch_intent,
+	.report_viewport = handle_report_viewport,
+	.close = handle_close,
+	.destroy = handle_destroy,
+};
+
+static void bind_company(struct wl_client *client, void *data,
+		uint32_t version, uint32_t id) {
+	(void)data;
+	if (version != 1 || !selection_current(client) || bound_resource) {
+		wl_client_post_implementation_error(client,
+			"Company vector bind requires the exact selected native host");
+		return;
+	}
+	struct wl_resource *resource = wl_resource_create(client,
+		&post_apollo_company_vector_v1_interface, version, id);
+	if (!resource) {
+		wl_client_post_no_memory(client);
+		return;
+	}
+	struct company_binding *b = calloc(1, sizeof(*b));
+	if (!b) {
+		wl_resource_destroy(resource);
+		wl_client_post_no_memory(client);
+		return;
+	}
+	b->epoch = selection_epoch;
+	wl_resource_set_implementation(resource, &company_impl, b, destroy_binding);
+	bound_resource = resource;
+}
+
+static void native_resource_destroyed(struct wl_listener *listener,
+		void *data) {
+	(void)listener;
+	(void)data;
+	stage_director_company_vector_protocol_revoke();
+}
+
+void stage_director_company_vector_protocol_init(struct wl_display *display) {
+	if (!company_display) company_display = display;
+}
+
+bool stage_director_company_vector_protocol_publish(
+		struct wl_resource *role, struct wl_resource *surface,
+		stage_director_company_vector_host_probe probe, void *context) {
+	if (!company_display || company_global || selected_client ||
+			listeners_attached || !role || !surface || role == surface ||
+			!probe || last_epoch == UINT64_MAX) {
+		return false;
+	}
+	struct wl_client *client = wl_resource_get_client(role);
+	if (!client || wl_resource_get_client(surface) != client) return false;
+	/* The compositor selection producer must prove both resources are the
+	 * exact live native Company layer/host. This API never accepts a PID or
+	 * namespace token from Wayland requests. */
+	native_host_probe = probe;
+	native_host_context = context;
+	selected_client = client;
+	native_role = role;
+	native_host_surface = surface;
+	selection_epoch = ++last_epoch;
+	struct stage_director_rect host = {0};
+	uint64_t revision = 0;
+	if (!fresh_native_host(&host, &revision)) {
+		stage_director_company_vector_protocol_revoke();
+		return false;
+	}
+
+	role_destroy.notify = native_resource_destroyed;
+	host_destroy.notify = native_resource_destroyed;
+	wl_resource_add_destroy_listener(role, &role_destroy);
+	wl_resource_add_destroy_listener(surface, &host_destroy);
+	listeners_attached = true;
+	company_global = wl_global_create(company_display,
+		&post_apollo_company_vector_v1_interface, 1, NULL, bind_company);
+	if (!company_global) {
+		stage_director_company_vector_protocol_revoke();
+		return false;
+	}
+	return true;
+}
+
+void stage_director_company_vector_protocol_revoke(void) {
+	if (company_global) {
+		wl_global_destroy(company_global);
+		company_global = NULL;
+	}
+	/* On destruction callbacks, remove native listeners before resetting
+	 * borrowed wl_resource references. Do not access destroyed resources. */
+	if (listeners_attached) {
+		wl_list_remove(&role_destroy.link);
+		wl_list_remove(&host_destroy.link);
+		wl_list_init(&role_destroy.link);
+		wl_list_init(&host_destroy.link);
+		listeners_attached = false;
+	}
+	native_role = NULL;
+	native_host_surface = NULL;
+	selected_client = NULL;
+	selection_epoch = 0;
+	native_host_probe = NULL;
+	native_host_context = NULL;
+	/* Previously bound resource remains inert: every request checks the
+	 * epoch/client again; on its destruction the binding is freed. */
+}
+
+void stage_director_company_vector_protocol_finish(void) {
+	stage_director_company_vector_protocol_revoke();
+	company_display = NULL;
+}
