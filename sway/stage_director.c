@@ -15,6 +15,7 @@
 #include "sway/stage_director_company_lineage.h"
 #include "sway/stage_director_company_origin.h"
 #include "sway/stage_director_company_executable.h"
+#include "sway/stage_director_company_digest.h"
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
@@ -877,6 +878,19 @@ void stage_director_view_mapped(struct sway_view *view) {
 						executable_evidence.status),
 					executable_evidence.running_current_install_inode_candidate
 						? "candidate" : "no");
+				/* M30a: source-pinned ELF SHA-256 candidate only. The
+				 * production manifest remains UNPINNED until independently
+				 * approved; this never grants scene or seat authority. */
+				const struct stage_director_company_digest_result digest =
+					stage_director_company_vector_protocol_digest_evidence(
+						(struct wl_client *)native_host.native_client_ref,
+						&company, &parentage);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M30A][DIGEST] "
+					"status=%s pin_match=%s owner_verified=no "
+					"scene=OFF input=OFF",
+					stage_director_company_digest_status_name(digest.status),
+					digest.pinned_elf_hash_candidate ? "candidate" : "no");
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M28B][PIDFD_ACTOR] "
 					"kernel_candidate=%s exact_executable=no "

@@ -6,6 +6,7 @@
 #include "sway/stage_director_company_origin.h"
 #include "sway/stage_director_company_birth_pidfd.h"
 #include "sway/stage_director_company_executable.h"
+#include "sway/stage_director_company_digest.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -423,6 +424,23 @@ stage_director_company_vector_protocol_executable_evidence(
 		};
 	}
 	return stage_director_company_executable_check_system_home(&birth_held);
+}
+
+/* M30a never accepts an expected digest from Wayland or QML.
+ * Only after the existing native actor/pidfd gate is current can the
+ * compositor compare the kernel /proc/PID/exe to its compiled manifest. */
+struct stage_director_company_digest_result
+stage_director_company_vector_protocol_digest_evidence(
+		struct wl_client *client,
+		const struct stage_director_company_native_actor *actor,
+		const struct stage_director_company_lineage_result *lineage) {
+	if (!stage_director_company_vector_protocol_birth_actor_candidate(
+			client, actor, lineage)) {
+		return (struct stage_director_company_digest_result) {
+			.status = SD_COMPANY_DIGEST_INODE_UNVERIFIED,
+		};
+	}
+	return stage_director_company_digest_check_system_home(&birth_held);
 }
 
 void stage_director_company_vector_protocol_revoke(void) {
