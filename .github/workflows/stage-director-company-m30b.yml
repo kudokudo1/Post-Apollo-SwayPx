@@ -1,0 +1,105 @@
+name: Stage Director M30b Company asynchronous birth and native actor reconciliation
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30a-digest-candidate-20261106
+    paths:
+      - 'include/sway/stage_director_company_reconcile.h'
+      - 'sway/stage_director_company_reconcile.c'
+      - 'tests/stage_director/test_company_reconcile.c'
+      - 'sway/meson.build'
+      - '.github/workflows/stage-director-company-m30b.yml'
+      - 'docs/stage-director-company-m30b-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install real Wayland server development headers on isolated runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y libwayland-dev pkg-config
+      - name: Validate both receipt orders, kernel pidfd and M21 actual resource listeners
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            sway/stage_director_company_native_peers.c \
+            sway/stage_director_company_candidate_session.c \
+            sway/stage_director_company_reconcile.c \
+            tests/stage_director/test_company_reconcile.c \
+            -o "$RUNNER_TEMP/company-m30b" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/company-m30b"
+      - name: Preserve M21 resource lifetime and geometry tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            sway/stage_director_company_native_peers.c \
+            sway/stage_director_company_candidate_session.c \
+            tests/stage_director/test_company_candidate_session.c \
+            -o "$RUNNER_TEMP/company-m21" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/company-m21"
+      - name: Require zero actor and scene authority in isolated reconciler
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          c = Path("sway/stage_director_company_reconcile.c").read_text()
+          h = Path("include/sway/stage_director_company_reconcile.h").read_text()
+          stage = Path("sway/stage_director.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          for piece in ("stage_director_company_birth_pidfd_match_actor(",
+                        "stage_director_company_candidate_session_record(",
+                        "stage_director_company_candidate_session_refresh(",
+                        "wl_resource_add_destroy_listener(",
+                        "stage_director_company_reconcile_unmap("):
+              assert piece in c, piece
+          assert "'stage_director_company_reconcile.c'," in meson
+          assert "stage_director_company_reconcile_try(" not in stage
+          assert "SD_COMPANY_RECONCILE_M21_CANDIDATE_ONLY" in h
+          for forbidden in ("wl_global_create(", "wlr_scene_node_set_",
+                            "wlr_seat_", "posix_spawn(", "fork(", "execve(",
+                            "system(", "can_render = true", "can_clip = true",
+                            "can_accept_input = true", "owner_verified = true"):
+              assert forbidden not in c, forbidden
+          print("M30b: native ordering reconciliation is compiled but NOT production wired")
+          PY
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile ordinary compositor without production activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$result/bin/sway"
