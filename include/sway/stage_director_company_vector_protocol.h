@@ -81,6 +81,26 @@ stage_director_company_vector_protocol_digest_evidence(
 	const struct stage_director_company_native_actor *actor,
 	const struct stage_director_company_lineage_result *lineage);
 
+/* M30c: compositor-private read-only selection and launch snapshot.
+ * Host and intent are obtained from the active M24 native probes, NEVER
+ * from an app ID, title, untrusted QML path or public IPC request. */
+bool stage_director_company_vector_protocol_current_host_intent(
+	struct stage_director_company_native_host *host,
+	struct stage_director_company_intent_snapshot *intent);
+
+/* Compositor-only held birth view. Borrowed, never stored beyond a
+ * synchronous callback; both M28 and M30b recheck kernel process lifetime. */
+struct stage_director_company_birth_pidfd;
+bool stage_director_company_vector_protocol_current_birth(
+	const struct stage_director_company_birth_pidfd **held,
+	struct wl_resource **host_role, struct wl_resource **host_surface);
+
+/* Registered at server startup, NULL during standalone protocol tests.
+ * The birth callback is invoked only after a real accepted v2 pidfd.
+ * The revoke callback clears all native actor listener-backed state. */
+void stage_director_company_vector_protocol_set_lifecycle_observers(
+	void (*birth_observer)(void), void (*revoke_observer)(void));
+
 void stage_director_company_vector_protocol_revoke(void);
 void stage_director_company_vector_protocol_finish(void);
 
