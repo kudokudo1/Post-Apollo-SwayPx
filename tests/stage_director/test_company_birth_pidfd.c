@@ -75,7 +75,7 @@ static void real_kernel_pidfd_lifecycle(void) {
 	if (child == 0) {
 		close(pipefd[1]);
 		char byte = 0;
-		(void)read(pipefd[0], &byte, 1);
+		if (read(pipefd[0], &byte, 1) < 0) _exit(2);
 		close(pipefd[0]);
 		_exit(0);
 	}
