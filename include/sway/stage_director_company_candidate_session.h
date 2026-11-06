@@ -50,6 +50,7 @@ struct stage_director_company_candidate_session {
 	bool initialized;
 	bool candidate;
 	bool viewport_valid;
+	bool fresh_observation_for_report;
 	uint64_t epoch;
 	uint64_t last_epoch;
 	uint64_t revision;
