@@ -1,0 +1,66 @@
+name: Stage Director M24 physically selected Company native host
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_pairing.h'
+      - 'include/sway/stage_director.h'
+      - 'sway/stage_director_company_pairing.c'
+      - 'sway/stage_director_company_selection.c'
+      - 'sway/input/keyboard.c'
+      - 'sway/input/cursor.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_physical_selection_boundary.py'
+      - 'docs/stage-director-company-m24-20261106.md'
+      - '.github/workflows/stage-director-company-m24.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  physical-selection-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate Company physical-only F11, exact scene-hit and Weather isolation
+        run: python3 -B tests/stage_director/test_company_physical_selection_boundary.py
+      - name: Ensure M23 private Company wire and shared geometry remain candidate-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source=Path("sway/stage_director_company_vector_protocol.c").read_text()
+          policy=Path("sway/stage_director_company_wire_policy.c").read_text()
+          assert "stage_director_company_vector_protocol_publish(" in source
+          assert "wl_global_get_interface(global)" in source
+          assert "wl_resource_add_destroy_listener(" in source
+          assert "SD_COMPANY_WIRE_VIEWPORT_CANDIDATE" in policy
+          assert "can_clip = true" not in policy
+          print("M24: selected private wire still has no map renderer/crop/input authority")
+          PY
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build complete SwayPX with native Company physical selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M24: ordinary compositor builds, not installed or started"
