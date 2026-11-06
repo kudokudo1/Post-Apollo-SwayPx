@@ -220,14 +220,17 @@ stage_director_company_candidate_session_report(
 			wl_resource_get_client(reporter) != s->host_client) {
 		return result(SD_COMPANY_SESSION_FOREIGN_REPORTER);
 	}
+	/* An invalid/stale request from the paired reporting client must
+	 * revoke its previous geometry. Never retain an older crop after a
+	 * failed replacement, even if the host/actor themselves still exist. */
+	s->viewport_valid = false;
+	s->viewport_global = (struct stage_director_rect){0};
+	s->actor_local_crop = (struct stage_director_rect){0};
 	if (epoch != s->epoch || revision != s->revision ||
 			r->epoch != epoch ||
 			r->host_geometry_revision != revision) {
 		return result(SD_COMPANY_SESSION_STALE_NATIVE);
 	}
-	s->viewport_valid = false;
-	s->viewport_global = (struct stage_director_rect){0};
-	s->actor_local_crop = (struct stage_director_rect){0};
 	if (!r->company_open || !r->coverage_active || !r->native_map_running ||
 			(!r->map_in_frame.x && !r->map_in_frame.y &&
 			 !r->map_in_frame.width && !r->map_in_frame.height)) {
