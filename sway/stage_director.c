@@ -14,6 +14,7 @@
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_lineage.h"
 #include "sway/stage_director_company_origin.h"
+#include "sway/stage_director_company_executable.h"
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
@@ -859,6 +860,23 @@ void stage_director_view_mapped(struct sway_view *view) {
 					stage_director_company_vector_protocol_birth_actor_candidate(
 						(struct wl_client *)native_host.native_client_ref,
 						&company, &parentage);
+				/* M29 checks actual executing ELF inode under the native
+				 * host's passwd home, but it is NOT a pinned digest or
+				 * approved-actor authority. All scene/input stays disabled. */
+				const struct stage_director_company_executable_result
+					executable_evidence =
+					stage_director_company_vector_protocol_executable_evidence(
+						(struct wl_client *)native_host.native_client_ref,
+						&company, &parentage);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M29][EXECUTABLE] "
+					"status=%s current_install_inode=%s "
+					"trusted_digest=no approved_launch=no "
+					"owner_verified=no scene=OFF input=OFF",
+					stage_director_company_executable_status_name(
+						executable_evidence.status),
+					executable_evidence.running_current_install_inode_candidate
+						? "candidate" : "no");
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M28B][PIDFD_ACTOR] "
 					"kernel_candidate=%s exact_executable=no "
