@@ -79,7 +79,7 @@ static bool probe_paired_native_host(void *context,
 void stage_director_company_pairing_clear_host(void) {
 	/* Clear local native references before destroying the published global.
 	 * Any remaining bound resource is unusable until the next native epoch. */
-	company_selection = (typeof(company_selection)){0};
+	memset(&company_selection, 0, sizeof(company_selection));
 	stage_director_company_vector_protocol_revoke();
 }
 
