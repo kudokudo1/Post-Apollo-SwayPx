@@ -1,0 +1,92 @@
+name: Stage Director M28a kernel pidfd child lifetime proof
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_birth_pidfd.h'
+      - 'sway/stage_director_company_birth_pidfd.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_birth_pidfd.c'
+      - 'docs/stage-director-company-m28a-20261106.md'
+      - '.github/workflows/stage-director-company-m28a.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-kernel-pidfd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile actual process lifetime ledger with strict C11
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            tests/stage_director/test_company_birth_pidfd.c \
+            -o "$RUNNER_TEMP/company-m28a-pidfd"
+          "$RUNNER_TEMP/company-m28a-pidfd"
+      - name: Retain M27 bounded intent correlation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_origin.c \
+            tests/stage_director/test_company_origin.c \
+            -o "$RUNNER_TEMP/company-m27-origin"
+          "$RUNNER_TEMP/company-m27-origin"
+      - name: Refuse automatic compositor selection and every scene/input grant
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source=Path("sway/stage_director_company_birth_pidfd.c").read_text()
+          header=Path("include/sway/stage_director_company_birth_pidfd.h").read_text()
+          stage=Path("sway/stage_director.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "'stage_director_company_birth_pidfd.c'," in meson
+          assert "stage_director_company_birth_pidfd_record(" in source
+          assert "stage_director_company_birth_pidfd_match_actor(" in source
+          assert "pidfd_send_signal" in source
+          assert "/proc/self/fdinfo/" in source
+          assert "F_DUPFD_CLOEXEC" in source
+          assert "stage_director_company_birth_pidfd_revoke(" in source
+          assert "stage_director_company_birth_pidfd_record(" not in stage
+          for forbidden in ("wlr_scene_node_set_", "wlr_seat_", "wl_global_create(",
+                            "posix_spawn(", "fork(", "execve(", "system(",
+                            "compositor_selected = true", "owner_verified = true",
+                            "can_clip = true", "can_accept_input = true",
+                            "exact_executable_attested = true"):
+              assert forbidden not in source, forbidden
+          assert "exact_executable_attested" in header
+          print("M28a: pidfd is kernel lifetime evidence; exact executable/scene authority NONE")
+          PY
+
+  full-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile standard SwayPX with inert pidfd ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M28a: production SwayPX compiled, compositor not launched"
