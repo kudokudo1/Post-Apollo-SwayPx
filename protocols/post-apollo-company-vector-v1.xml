@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="post_apollo_company_vector_v1">
+  <copyright>Copyright (c) Post-Apollo contributors. MIT license.</copyright>
+  <interface name="post_apollo_company_vector_v1" version="1">
+    <description summary="private Company native map launch intent and geometry candidates">
+      This interface is advertised ONLY to the compositor-selected native
+      Company layer-shell Wayland client. Each bind and request revalidates the
+      exact wl_client and native role/surface selection. The compositor never
+      publishes the interface on normal startup.
+
+      Every status and geometry is observational/candidate-only. This protocol
+      does NOT launch, resize, crop, render, focus, authorize keyboard/pointer,
+      allow popups, or prove ownership of a native Qt MapLibre actor.
+    </description>
+    <enum name="mode">
+      <entry name="offline" value="0" summary="local synthetic grid; no network"/>
+      <entry name="online" value="1" summary="user selected online map separately"/>
+    </enum>
+    <enum name="status">
+      <entry name="denied" value="0" summary="no trusted native selection or stale client"/>
+      <entry name="launch_candidate" value="1" summary="intent observed, no launch/custody"/>
+      <entry name="viewport_candidate" value="2" summary="frame/map geometry bounded, no pixels/input"/>
+      <entry name="hidden" value="3" summary="zero geometry clears viewport"/>
+      <entry name="closed" value="4" summary="candidate revoked"/>
+      <entry name="invalid_geometry" value="5" summary="malformed frame/map data"/>
+    </enum>
+    <request name="launch_intent">
+      <arg name="mode" type="uint" enum="mode" summary="fixed token, not URL or process PID"/>
+    </request>
+    <request name="report_viewport">
+      <arg name="frame_x" type="int" summary="Company frame x relative to paired native layer"/>
+      <arg name="frame_y" type="int" summary="Company frame y relative to paired native layer"/>
+      <arg name="frame_w" type="int" summary="Company frame width"/>
+      <arg name="frame_h" type="int" summary="Company frame height"/>
+      <arg name="map_x" type="int" summary="map canvas x relative to Company frame"/>
+      <arg name="map_y" type="int" summary="map canvas y relative to Company frame"/>
+      <arg name="map_w" type="int" summary="map canvas width"/>
+      <arg name="map_h" type="int" summary="map canvas height"/>
+    </request>
+    <request name="close"/>
+    <request name="destroy" type="destructor"/>
+    <event name="result">
+      <arg name="status" type="uint" enum="status"/>
+      <arg name="epoch_hi" type="uint" summary="compositor epoch high bits"/>
+      <arg name="epoch_lo" type="uint" summary="compositor epoch low bits"/>
+      <arg name="revision_hi" type="uint" summary="current compositor host geometry revision high bits"/>
+      <arg name="revision_lo" type="uint" summary="current compositor host geometry revision low bits"/>
+    </event>
+  </interface>
+</protocol>
