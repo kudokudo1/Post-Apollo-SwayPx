@@ -99,7 +99,11 @@ static void duplicate_and_foreign_roots(void) {
 		&f.inv, r1, &first, 7, 8, &a1));
 	assert(!stage_director_company_mapped_inventory_remember(
 		&f.inv, r2, &first, 7, 8, &a2));
-	assert(count(&f) == 1);
+	/* A conflicting root for the same view MUST revoke the previous
+	 * candidate, not silently retain a possibly stale pointer. */
+	assert(count(&f) == 0);
+	assert(stage_director_company_mapped_inventory_remember(
+		&f.inv, r1, &first, 7, 8, &a1));
 	a2.native_client_ref = (uintptr_t)r1; // Not the owning wl_client
 	assert(!stage_director_company_mapped_inventory_remember(
 		&f.inv, r2, &second, 7, 8, &a2));
