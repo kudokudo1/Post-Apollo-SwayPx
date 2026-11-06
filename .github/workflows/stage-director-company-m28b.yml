@@ -49,6 +49,7 @@ jobs:
             sway/stage_director_company_wire_policy.c \
             sway/stage_director_company_vector_protocol.c \
             sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_company_executable.c \
             sway/stage_director_process_linux.c \
             "$RUNNER_TEMP/m28b/post-apollo-company-vector-v1-protocol.c" \
             tests/stage_director/test_company_private_wire.c \

@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "sway/stage_director_company_origin.h"
 #include "sway/stage_director_company_birth_pidfd.h"
+#include "sway/stage_director_company_executable.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -404,6 +405,24 @@ bool stage_director_company_vector_protocol_birth_actor_candidate(
 		!result.exact_executable_attested && !result.owner_verified &&
 		!result.can_pair_actor && !result.can_clip &&
 		!result.can_accept_input;
+}
+
+/* M29 can run only after the exact M24 selected host, active M27
+ * request, held M28b pidfd, M20 XDG peer, and M22 lineage all match.
+ * The passwd home path is obtained inside the compositor, not from QML.
+ * Even a successful same-inode match never creates executable approval. */
+struct stage_director_company_executable_result
+stage_director_company_vector_protocol_executable_evidence(
+		struct wl_client *client,
+		const struct stage_director_company_native_actor *actor,
+		const struct stage_director_company_lineage_result *lineage) {
+	if (!stage_director_company_vector_protocol_birth_actor_candidate(
+			client, actor, lineage)) {
+		return (struct stage_director_company_executable_result) {
+			.status = SD_COMPANY_EXE_NO_PIDFD,
+		};
+	}
+	return stage_director_company_executable_check_system_home(&birth_held);
 }
 
 void stage_director_company_vector_protocol_revoke(void) {

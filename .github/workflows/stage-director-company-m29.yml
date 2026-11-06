@@ -1,0 +1,103 @@
+name: Stage Director M29 Company runtime executable inode evidence
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_executable.h'
+      - 'sway/stage_director_company_executable.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_executable.c'
+      - '.github/workflows/stage-director-company-m23.yml'
+      - '.github/workflows/stage-director-company-m28b.yml'
+      - '.github/workflows/stage-director-company-m29.yml'
+      - 'docs/stage-director-company-m29-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-executable-inode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build strict Linux pidfd executable inode and file-replacement adversarial tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_company_executable.c \
+            tests/stage_director/test_company_executable.c \
+            -o "$RUNNER_TEMP/company-m29-executable"
+          "$RUNNER_TEMP/company-m29-executable"
+      - name: Retain real M28a native kernel pidfd lifecycle proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            tests/stage_director/test_company_birth_pidfd.c \
+            -o "$RUNNER_TEMP/company-m28a-birth"
+          "$RUNNER_TEMP/company-m28a-birth"
+      - name: Assert exact compositor-side owner path and zero scene authority
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          exe = Path("sway/stage_director_company_executable.c").read_text()
+          header = Path("include/sway/stage_director_company_executable.h").read_text()
+          server = Path("sway/stage_director_company_vector_protocol.c").read_text()
+          native = Path("sway/stage_director.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "'stage_director_company_executable.c'," in meson
+          for token in ("getpwuid_r", "postapollo-vector-lab", "company-vector-build",
+                        "company-vector-probe", "O_NOFOLLOW", "O_PATH",
+                        "fstatat(build", "AT_SYMLINK_NOFOLLOW",
+                        "same_file(&executing, &expected)",
+                        "stage_director_read_linux_process(",
+                        "SYS_pidfd_send_signal"):
+              assert token in exe,token
+          assert "SD_COMPANY_EXE_CURRENT_INSTALL_INODE_CANDIDATE" in exe
+          assert "trusted_content_digest_verified" in header
+          assert "executable_approved" in header
+          assert "stage_director_company_executable_check_system_home(" in server
+          assert "stage_director_company_vector_protocol_birth_actor_candidate(" in server
+          assert "stage_director_company_vector_protocol_executable_evidence(" in native
+          assert "trusted_digest=no approved_launch=no" in native
+          for forbidden in ("wlr_scene_node_set_", "wlr_seat_", "wl_global_create(",
+                            "posix_spawn(", "fork(", "execve(", "system(", "swaymsg",
+                            "executable_approved = true", "launch_authenticated = true",
+                            "owner_verified = true", "can_pair_actor = true",
+                            "can_clip = true", "can_accept_input = true"):
+              assert forbidden not in exe,forbidden
+          print("M29: kernel-backed running ELF inode evidence; NO digest trust or scene rights")
+          PY
+
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary compositor without activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M29: production compositor compiled; desktop untouched"

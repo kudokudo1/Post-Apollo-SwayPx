@@ -63,6 +63,15 @@ bool stage_director_company_vector_protocol_birth_actor_candidate(
 	const struct stage_director_company_native_actor *actor,
 	const struct stage_director_company_lineage_result *lineage);
 
+/* M29 read-only, compositor-side executable-inode evidence. No path or
+ * command from QML/Wayland is accepted. The result cannot authorize scene. */
+struct stage_director_company_executable_result;
+struct stage_director_company_executable_result
+stage_director_company_vector_protocol_executable_evidence(
+	struct wl_client *selected_host_client,
+	const struct stage_director_company_native_actor *actor,
+	const struct stage_director_company_lineage_result *lineage);
+
 void stage_director_company_vector_protocol_revoke(void);
 void stage_director_company_vector_protocol_finish(void);
 
