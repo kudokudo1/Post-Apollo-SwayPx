@@ -1,0 +1,108 @@
+name: Stage Director M23 private Company vector geometry wire
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'protocols/post-apollo-company-vector-v1.xml'
+      - 'protocols/meson.build'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'include/sway/stage_director_company_wire_policy.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director_company_wire_policy.c'
+      - 'sway/server.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_private_wire.c'
+      - 'docs/stage-director-company-m23-20261106.md'
+      - '.github/workflows/stage-director-company-m23.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-private-wire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install protocol scanner and native Wayland server headers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev libwayland-bin pkg-config
+      - name: Compile generated private protocol and test native server selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/company-wire"
+          wayland-scanner server-header \
+            protocols/post-apollo-company-vector-v1.xml \
+            "$RUNNER_TEMP/company-wire/post-apollo-company-vector-v1-protocol.h"
+          wayland-scanner private-code \
+            protocols/post-apollo-company-vector-v1.xml \
+            "$RUNNER_TEMP/company-wire/post-apollo-company-vector-v1-protocol.c"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iinclude -I"$RUNNER_TEMP/company-wire" \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_vector_protocol.c \
+            "$RUNNER_TEMP/company-wire/post-apollo-company-vector-v1-protocol.c" \
+            tests/stage_director/test_company_private_wire.c \
+            -o "$RUNNER_TEMP/company-wire/m23" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/company-wire/m23"
+      - name: Assert no automatic publication or scene and input authority
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          server = Path("sway/server.c").read_text()
+          protocol = Path("sway/stage_director_company_vector_protocol.c").read_text()
+          header = Path("include/sway/stage_director_company_vector_protocol.h").read_text()
+          policy = Path("sway/stage_director_company_wire_policy.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          protomeson = Path("protocols/meson.build").read_text()
+          assert "'post-apollo-company-vector-v1.xml'" in protomeson
+          for name in ("stage_director_company_wire_policy.c",
+                       "stage_director_company_vector_protocol.c"):
+              assert f"'{name}'" in meson
+          assert "stage_director_company_vector_protocol_is_global(global)" in server
+          assert "stage_director_company_vector_protocol_selected_client(" in server
+          assert "stage_director_company_vector_protocol_init(server->wl_display)" in server
+          assert "stage_director_company_vector_protocol_finish()" in server
+          assert "stage_director_company_vector_protocol_publish(" not in server
+          assert "publish(" in header
+          assert "wl_resource_add_destroy_listener(" in protocol
+          assert "wl_global_get_interface(global)" in protocol
+          for bad in ("wlr_scene_node_set_", "wlr_seat_", "posix_spawn(",
+                      "execve(", "fork(", "system(", "swaymsg",
+                      "stage_director_company_candidate_session_record(",
+                      "stage_director_company_map_probe("):
+              assert bad not in protocol and bad not in policy, bad
+          assert "can_clip = true" not in policy
+          assert "can_accept_input = true" not in policy
+          print("STAGE_DIRECTOR_COMPANY_M23: private protocol off by default, authority NONE")
+          PY
+
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile ordinary SwayPX with private Company ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M23 ordinary compositor build PASS; not installed or started"
