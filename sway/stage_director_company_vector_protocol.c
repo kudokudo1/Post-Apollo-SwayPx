@@ -1,4 +1,9 @@
+#define _GNU_SOURCE
 #include <stdbool.h>
+#include <limits.h>
+#include <time.h>
+#include <unistd.h>
+#include "sway/stage_director_company_origin.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -24,6 +29,7 @@ static struct wl_listener host_destroy;
 static bool listeners_attached;
 static uint64_t selection_epoch;
 static uint64_t last_epoch;
+static uint64_t last_intent_sequence;
 static stage_director_company_vector_host_probe native_host_probe;
 static void *native_host_context;
 
@@ -31,6 +37,9 @@ struct company_binding {
 	uint64_t epoch;
 	bool launch_intent;
 	bool viewport_candidate;
+	uint64_t intent_sequence;
+	uint64_t intent_boot_ticks;
+	uint32_t mode;
 };
 
 static bool selection_current(struct wl_client *client) {
@@ -52,6 +61,23 @@ bool stage_director_company_vector_protocol_is_global(
 bool stage_director_company_vector_protocol_selected_client(
 		struct wl_client *client) {
 	return selection_current(client);
+}
+
+/* Read the same boot-relative clock as /proc/<pid>/stat starttime.
+ * Unknown ticks are fail-closed; no timing assertion from a client.
+ */
+static uint64_t boot_ticks_now(void) {
+	struct timespec stamp = {0};
+	const long frequency = sysconf(_SC_CLK_TCK);
+	if (frequency <= 0 || frequency > 1000000 ||
+			clock_gettime(CLOCK_BOOTTIME, &stamp) != 0 ||
+			stamp.tv_sec <= 0 || stamp.tv_nsec < 0 ||
+			stamp.tv_nsec >= 1000000000L ||
+			(uint64_t)stamp.tv_sec > UINT64_MAX / (uint64_t)frequency) {
+		return 0;
+	}
+	return (uint64_t)stamp.tv_sec * (uint64_t)frequency +
+		((uint64_t)stamp.tv_nsec * (uint64_t)frequency) / 1000000000ULL;
 }
 
 static void send_status(struct wl_resource *resource, uint32_t status,
@@ -87,6 +113,31 @@ static bool fresh_native_host(struct stage_director_rect *host,
 	return true;
 }
 
+bool stage_director_company_vector_protocol_intent_snapshot(
+		struct wl_client *client,
+		struct stage_director_company_intent_snapshot *out) {
+	if (!out) return false;
+	*out = (struct stage_director_company_intent_snapshot){0};
+	if (!bound_is_current(client, bound_resource)) return false;
+	const struct company_binding *binding =
+		wl_resource_get_user_data(bound_resource);
+	struct stage_director_rect host = {0};
+	uint64_t revision = 0;
+	if (!binding || !binding->launch_intent ||
+			!binding->intent_sequence || !binding->intent_boot_ticks ||
+			!fresh_native_host(&host, &revision)) return false;
+	*out = (struct stage_director_company_intent_snapshot) {
+		.present = true,
+		.selection_epoch = selection_epoch,
+		.sequence = binding->intent_sequence,
+		.observed_boot_ticks = binding->intent_boot_ticks,
+		.host_revision = revision,
+		.native_host_client_ref = (uintptr_t)client,
+		.mode = binding->mode,
+	};
+	return true;
+}
+
 static void handle_launch_intent(struct wl_client *client,
 		struct wl_resource *resource, uint32_t mode) {
 	struct stage_director_rect host = {0};
@@ -104,6 +155,18 @@ static void handle_launch_intent(struct wl_client *client,
 			revision);
 		return;
 	}
+	/* A real selection-client request creates one M27 intent generation.
+	 * No process is launched by this protocol. Reject clock failures and
+	 * sequence exhaustion rather than reusing an old generation. */
+	const uint64_t now = boot_ticks_now();
+	if (!now || last_intent_sequence == UINT64_MAX) {
+		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED,
+			revision);
+		return;
+	}
+	b->intent_boot_ticks = now;
+	b->intent_sequence = ++last_intent_sequence;
+	b->mode = mode;
 	b->launch_intent = true;
 	b->viewport_candidate = false;
 	/* Observed intent only. Neither online consent nor native actor birth
@@ -145,6 +208,8 @@ static void handle_close(struct wl_client *client,
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	b->launch_intent = false;
 	b->viewport_candidate = false;
+	b->intent_boot_ticks = 0;
+	b->intent_sequence = 0;
 	send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_CLOSED, 0);
 	stage_director_company_vector_protocol_revoke();
 }
