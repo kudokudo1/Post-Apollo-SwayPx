@@ -35,7 +35,7 @@ struct company_binding {
 
 static bool selection_current(struct wl_client *client) {
 	return client && client == selected_client &&
-		native_role && native_host_surface && company_global &&
+		native_role && native_host_surface &&
 		wl_resource_get_client(native_role) == client &&
 		wl_resource_get_client(native_host_surface) == client &&
 		selection_epoch != 0 && native_host_probe;
@@ -263,6 +263,7 @@ void stage_director_company_vector_protocol_revoke(void) {
 	selection_epoch = 0;
 	native_host_probe = NULL;
 	native_host_context = NULL;
+	bound_resource = NULL;
 	/* Previously bound resource remains inert: every request checks the
 	 * epoch/client again; on its destruction the binding is freed. */
 }
