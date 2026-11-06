@@ -23,7 +23,7 @@ assert "raw_keysyms[0] != XKB_KEY_F12" in weather
 assert "PAIR_WINDOW_MSEC 3000U" in company
 assert "raw_modifiers != COMPANY_PAIR_MODIFIERS" in company
 assert "WLR_MODIFIER_CTRL | WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT" in company
-assert "libinput_device_is_libinput(device)" in company
+assert "wlr_input_device_is_libinput(device)" in company
 assert "shortcuts_inhibited" in company and "session_locked" in company
 assert "seat == company_pairing.armed_seat" in company
 assert "button == BTN_LEFT" in company
