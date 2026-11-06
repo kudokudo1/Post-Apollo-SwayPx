@@ -11,6 +11,7 @@
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
 #include "sway/stage_director_company_native.h"
+#include "sway/stage_director_company_lineage.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -804,6 +805,44 @@ void stage_director_view_mapped(struct sway_view *view) {
 				"[stage-director][COMPANY_M20][XDG] state=%d "
 				"candidate=%s authority=NONE",
 				(int)company.state, company.candidate ? "yes" : "no");
+			/*
+			 * M22 read-only diagnostic. Identify exactly ONE live Company
+			 * host among the existing compositor-owned layer registry; no
+			 * client-supplied host pointer, PID, title or app-id pairs it.
+			 * Even a direct Qt child remains UNAUTHORIZED without an
+			 * explicit trusted Company launch / operator selection.
+			 */
+			int native_hosts = 0;
+			struct stage_director_company_native_host native_host = {0};
+			if (company.candidate) {
+				for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+					if (!layers[i].occupied || !layers[i].surface) continue;
+					const struct stage_director_company_native_host h =
+						stage_director_company_native_observe_host(layers[i].surface);
+					if (!h.candidate) continue;
+					native_host = h;
+					native_hosts++;
+					if (native_hosts > 1) break;
+				}
+			}
+			if (company.candidate && native_hosts == 1) {
+				const struct stage_director_company_lineage_result parentage =
+					stage_director_company_lineage_probe_linux(
+						&native_host, &company);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M22][PARENTAGE] "
+					"state=%s direct_child=%s owner_verified=no "
+					"authority=NONE",
+					stage_director_company_lineage_status_name(
+						parentage.status),
+					parentage.direct_child_candidate ? "candidate" : "no");
+			} else {
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M22][PARENTAGE] "
+					"unique_company_host=no host_candidates=%d "
+					"owner_verified=no authority=NONE",
+					native_hosts);
+			}
 		}
 	}
 	classify(view, "map");
