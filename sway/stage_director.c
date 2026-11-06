@@ -10,6 +10,7 @@
 #endif
 #include "sway/stage_director_profile.h"
 #include "sway/stage_director_weather_host.h"
+#include "sway/stage_director_company_native.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -623,6 +624,19 @@ static void observe_layer(struct sway_layer_surface *surface,
 			native_host.client_start_time_ticks);
 		shadow_write(line);
 	}
+
+	/* M20: read-only Company-namespace observation on a material layer
+	 * change only. A spoofed namespace is never an authenticated host. */
+	if (layer_surface->namespace &&
+			strcmp(layer_surface->namespace,
+				SD_COMPANY_NATIVE_NAMESPACE) == 0) {
+		const struct stage_director_company_native_host company =
+			stage_director_company_native_observe_host(surface);
+		sway_log(SWAY_DEBUG,
+			"[stage-director][COMPANY_M20][LAYER] state=%d "
+			"candidate=%s authority=NONE",
+			(int)company.state, company.candidate ? "yes" : "no");
+	}
 }
 
 static struct stage_director_actor *find_actor(struct sway_view *view) {
@@ -778,6 +792,20 @@ static void classify(struct sway_view *view, const char *reason) {
 }
 
 void stage_director_view_mapped(struct sway_view *view) {
+	/* The Qt probe's app_id is a cheap READ-ONLY diagnostic filter,
+	 * never actor provenance, native pairing or process custody. Any
+	 * future authenticated actor selection must use exact wl_resources. */
+	if (view && view->type == SWAY_VIEW_XDG_SHELL) {
+		const char *app_id = view_get_app_id(view);
+		if (app_id && strstr(app_id, "CompanyVectorProbe")) {
+			const struct stage_director_company_native_actor company =
+				stage_director_company_native_observe_actor(view);
+			sway_log(SWAY_DEBUG,
+				"[stage-director][COMPANY_M20][XDG] state=%d "
+				"candidate=%s authority=NONE",
+				(int)company.state, company.candidate ? "yes" : "no");
+		}
+	}
 	classify(view, "map");
 	if (view && view->container) {
 		stage_director_observe_container(view->container, "map");

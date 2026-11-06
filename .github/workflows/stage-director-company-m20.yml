@@ -1,0 +1,80 @@
+name: Stage Director M20 native Company host and XDG observer
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m19-native-actor-preflight-20261106
+    paths:
+      - 'include/sway/stage_director_company_native.h'
+      - 'sway/stage_director_company_native_peers.c'
+      - 'sway/stage_director_company_native_adapter.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_native_peers.c'
+      - 'tests/stage_director/test_company_native_observer_boundary.py'
+      - 'docs/stage-director-company-m20-20261106.md'
+      - '.github/workflows/stage-director-company-m20.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-peers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect native observer authority boundary
+        run: python3 -B tests/stage_director/test_company_native_observer_boundary.py
+      - name: Install Wayland server headers in disposable runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev pkg-config
+      - name: Verify real wl_resource clients, spoof and separate XDG actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_company_native_peers.c \
+            tests/stage_director/test_company_native_peers.c \
+            -o "$RUNNER_TEMP/sd-company-m20-native" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/sd-company-m20-native"
+      - name: Preserve M19 preflight and shared viewport policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            tests/stage_director/test_company_map_candidate.c \
+            -o "$RUNNER_TEMP/sd-company-m19"
+          "$RUNNER_TEMP/sd-company-m19"
+
+  full-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile ordinary SwayPX with the real native observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          output="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -n "$output"
+          test -x "$output/bin/sway"
+          echo "STAGE_DIRECTOR_COMPANY_M20_FULL_BUILD: PASS"
+          echo "No compositor started; no desktop or Qt map modified."
