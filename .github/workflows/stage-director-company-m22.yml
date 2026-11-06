@@ -30,6 +30,7 @@ jobs:
           set -euo pipefail
           cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
             sway/stage_director_process_evidence.c \
+            sway/stage_director_process_linux.c \
             sway/stage_director_company_lineage.c \
             tests/stage_director/test_company_lineage.c \
             -o "$RUNNER_TEMP/sd-company-m22"
