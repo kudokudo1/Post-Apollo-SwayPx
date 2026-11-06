@@ -1,0 +1,153 @@
+name: Stage Director M28b Company private Wayland v2 pidfd birth transport
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'protocols/post-apollo-company-vector-v1.xml'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director_company_selection.c'
+      - 'sway/stage_director.c'
+      - 'integrations/company-vector-qml/**'
+      - 'tests/stage_director/test_company_private_wire.c'
+      - '.github/workflows/stage-director-company-m23.yml'
+      - '.github/workflows/stage-director-company-m28b.yml'
+      - 'docs/stage-director-company-m28b-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-v2-fd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install native Wayland protocol scanner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev libwayland-bin pkg-config
+      - name: Compile actual v2 server protocol and preserve v1 native client behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/m28b"
+          wayland-scanner server-header \
+            protocols/post-apollo-company-vector-v1.xml \
+            "$RUNNER_TEMP/m28b/post-apollo-company-vector-v1-protocol.h"
+          wayland-scanner private-code \
+            protocols/post-apollo-company-vector-v1.xml \
+            "$RUNNER_TEMP/m28b/post-apollo-company-vector-v1-protocol.c"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iinclude -I"$RUNNER_TEMP/m28b" \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_vector_protocol.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_process_linux.c \
+            "$RUNNER_TEMP/m28b/post-apollo-company-vector-v1-protocol.c" \
+            tests/stage_director/test_company_private_wire.c \
+            -o "$RUNNER_TEMP/m28b/native" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/m28b/native"
+      - name: Compile real kernel pidfd and M27 origin tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            tests/stage_director/test_company_birth_pidfd.c \
+            -o "$RUNNER_TEMP/m28b/kernel"
+          "$RUNNER_TEMP/m28b/kernel"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -Iinclude \
+            sway/stage_director_company_origin.c \
+            tests/stage_director/test_company_origin.c \
+            -o "$RUNNER_TEMP/m28b/origin"
+          "$RUNNER_TEMP/m28b/origin"
+      - name: Check versioned wire, selected native host and no scene authority
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p = Path("protocols/post-apollo-company-vector-v1.xml").read_text()
+          c = Path("sway/stage_director_company_vector_protocol.c").read_text()
+          h = Path("include/sway/stage_director_company_vector_protocol.h").read_text()
+          s = Path("sway/stage_director_company_selection.c").read_text()
+          view = Path("sway/stage_director.c").read_text()
+          qt = Path("integrations/company-vector-qml/CompanyVectorBridge.cpp").read_text()
+          qth = Path("integrations/company-vector-qml/CompanyVectorBridge.hpp").read_text()
+          assert 'name="post_apollo_company_vector_v1" version="2"' in p
+          assert 'name="report_child_pidfd" since="2"' in p
+          assert 'name="birth_result" since="2"' in p
+          assert 'name="launch_intent"' in p and 'name="report_viewport"' in p
+          for v in ("stage_director_company_vector_protocol_intent_snapshot(",
+                    "stage_director_company_birth_pidfd_record(",
+                    "wl_resource_get_version(resource) >= 2",
+                    "close(incoming_fd)",
+                    "post_apollo_company_vector_v1_send_birth_result(",
+                    "stage_director_company_birth_pidfd_revoke("):
+              assert v in c, v
+          assert 'post_apollo_company_vector_v1_interface, 2, NULL, bind_company' in c
+          assert "stage_director_company_vector_protocol_attach_birth_probe(" in c
+          assert "stage_director_company_vector_protocol_attach_birth_probe(" in s
+          assert "probe_paired_native_host(context, &local, &revision)" in s
+          assert "stage_director_company_vector_protocol_birth_actor_candidate(" in view
+          assert "owner_verified=no scene=OFF input=OFF" in view
+          assert "reportNativeChildPid(qlonglong processId)" in qth
+          assert "syscall(SYS_pidfd_open" in qt
+          assert "post_apollo_company_vector_v1_report_child_pidfd(" in qt
+          assert "qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()" in qt
+          for source in (c, s, qt):
+              for denied in ("wlr_scene_node_set_", "wlr_seat_", "posix_spawn(",
+                             "fork(", "execve(", "system(", "swaymsg",
+                             "owner_verified = true", "can_clip = true",
+                             "can_render = true", "compositor_selected = true"):
+                  assert denied not in source, denied
+          print("M28b: private v2 kernel fd transfer, exact native client and no actor authority")
+          PY
+
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile production SwayPX with v2 native fd transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          built="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$built/bin/sway"
+          echo "M28b: ordinary compositor builds; not started"
+  native-qml-plugin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile Qt6 QPA protocol v2 plugin and disabled-by-default QML test
+        shell: bash
+        run: |
+          set -euo pipefail
+          built="$(nix build --impure --expr 'import ./integrations/company-vector-qml/bridge.nix' \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -f "$built/lib/qt6/qml/PostApollo/CompanyVector/qmldir"
+          test -f "$built/lib/qt6/qml/PostApollo/CompanyVector/libpostapollo_company_vector.so"
+          echo "M28b: optional same-QPA Qt module compiled; no user installation"
