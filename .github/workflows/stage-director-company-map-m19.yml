@@ -1,0 +1,84 @@
+name: Stage Director M19 Company native map actor candidate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_map.h'
+      - 'sway/stage_director_company_map.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_map_candidate.c'
+      - 'docs/stage-director-company-map-m19-20261106.md'
+      - '.github/workflows/stage-director-company-map-m19.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  company-native-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile native M19 actor/host policy and real viewport arithmetic
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            tests/stage_director/test_company_map_candidate.c \
+            -o "$RUNNER_TEMP/stage-director-company-m19"
+          "$RUNNER_TEMP/stage-director-company-m19"
+      - name: Confirm existing viewport and crop unit regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_source in test_viewport test_clip_policy; do
+            cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+              -Iinclude sway/stage_director_viewport.c \
+              "tests/stage_director/${test_source}.c" \
+              -o "$RUNNER_TEMP/${test_source}"
+            "$RUNNER_TEMP/${test_source}"
+          done
+      - name: Enforce no Company actor admission or SceneFX actuation in this milestone
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source = Path("sway/stage_director_company_map.c").read_text()
+          header = Path("include/sway/stage_director_company_map.h").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "'stage_director_company_map.c'," in meson
+          for required in (
+              "stage_director_viewport_from_host_local(",
+              "stage_director_viewport_plan(&geometry)",
+              "now->actor_start_ticks != lease->actor_start_ticks",
+              "report->host_geometry_revision != now->host_geometry_revision",
+              "native_peers_match(lease, now)",
+              "SD_COMPANY_MAP_CANDIDATE_ONLY",
+          ):
+              assert required in source, required
+          for bad in (
+              "wl_global_create(", "wl_display_connect(", "swaymsg",
+              "wlr_scene_", "wlr_seat_", "posix_spawn(", "fork(",
+              "execve(", "system(", "kill(", "setenv(", "WatchBridge",
+              "POST_APOLLO_STAGE_DIRECTOR_PAIRING",
+          ):
+              assert bad not in source, bad
+          assert "can_change_focus" in header
+          assert "can_show_popup" in header
+          assert "compositor_selected" in header
+          assert "frame_in_host" in header and "map_in_frame" in header
+          print("SD_COMPANY_M19: standalone native policy only, no compositor actor admission PASS")
+          PY
+
+  # The repository's existing full compositor Nix workflow triggers too:
+  # changes to sway/meson.build and include/sway are in its path filters.
+  # This job must not claim that simple native policy tests prove live
+  # clipping, Wayland peer pairing, QT window sizing or keyboard/mouse.
