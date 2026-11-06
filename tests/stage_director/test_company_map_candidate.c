@@ -158,6 +158,7 @@ static void stale_epoch_and_reused_pid_are_not_continuity(void) {
 	/* The compositor moves the host and advances its revision. The old
 	 * report is rejected even though its rectangle is still positive. */
 	o.host_global.x += 200;
+	o.actor_global.x += 200; // compositor's actor observation moves too
 	o.host_geometry_revision++;
 	check(l, o, r, SD_COMPANY_MAP_STALE_HOST);
 	r.host_geometry_revision = o.host_geometry_revision;
