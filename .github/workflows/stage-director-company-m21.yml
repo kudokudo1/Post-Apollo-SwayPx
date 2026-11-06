@@ -1,0 +1,110 @@
+name: Stage Director M21 Company native candidate revocation and geometry receipt
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m20-native-readonly-observer-20261106
+    paths:
+      - 'include/sway/stage_director_company_candidate_session.h'
+      - 'sway/stage_director_company_candidate_session.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_candidate_session.c'
+      - 'docs/stage-director-company-m21-20261106.md'
+      - '.github/workflows/stage-director-company-m21.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Wayland native development headers on disposable runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y libwayland-dev pkg-config
+      - name: Compile and exercise real wl_resource teardown and epoch receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            sway/stage_director_company_native_peers.c \
+            sway/stage_director_company_candidate_session.c \
+            tests/stage_director/test_company_candidate_session.c \
+            -o "$RUNNER_TEMP/sd-company-m21" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/sd-company-m21"
+      - name: Preserve M20 actual Wayland client separation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_company_native_peers.c \
+            tests/stage_director/test_company_native_peers.c \
+            -o "$RUNNER_TEMP/sd-company-m20" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/sd-company-m20"
+      - name: Enforce no production lease issuer, private protocol, seat, or scene actuation
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source=Path("sway/stage_director_company_candidate_session.c").read_text()
+          header=Path("include/sway/stage_director_company_candidate_session.h").read_text()
+          stage=Path("sway/stage_director.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "'stage_director_company_candidate_session.c'," in meson
+          for expected in (
+              "wl_resource_add_destroy_listener(",
+              "stage_director_company_candidate_session_close(s)",
+              "wl_resource_get_client(reporter) != s->host_client",
+              "fresh_observation_for_report",
+              "stage_director_viewport_from_host_local(",
+              "stage_director_viewport_plan(",
+              "SD_COMPANY_SESSION_GEOMETRY_CANDIDATE_ONLY",
+          ):
+              assert expected in source, expected
+          for denied in (
+              "wl_global_create(", "wlr_scene_node_set_", "wlr_scene_buffer_set_",
+              "wlr_seat_", "posix_spawn(", "fork(", "execve(",
+              "system(", "swaymsg", "compositor_selected = true",
+              "operator_enabled = true",
+          ):
+              assert denied not in source, denied
+          for forbidden in ("can_clip = true", "can_launch = true",
+                            "can_render = true", "can_accept_input = true"):
+              assert forbidden not in source, forbidden
+          assert "stage_director_company_candidate_session_record(" not in stage
+          assert "wl_global_create(" not in header
+          print("STAGE_DIRECTOR_COMPANY_M21_AUTHORITY: NONE")
+          PY
+
+  ordinary-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Link full standard SwayPX compositor with inert M21 ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          result="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$result/bin/sway"
+          echo "M21: full compositor compiled, not started, no desktop mutation"
