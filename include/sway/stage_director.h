@@ -43,6 +43,16 @@ void stage_director_news_pairing_clear_host(void);
 bool stage_director_news_pairing_select_at(
 	struct sway_seat *seat, double lx, double ly);
 
+/* M24: independent opt-in physical Company host selection. Publishes only
+ * private geometry/intent candidate wire and NEVER assigns XDG actor/seat. */
+void stage_director_company_pairing_clear_host(void);
+bool stage_director_company_pairing_select_at(
+	struct sway_seat *seat, double lx, double ly);
+void stage_director_company_pairing_host_changed(
+	struct sway_layer_surface *host);
+void stage_director_company_pairing_host_lost(
+	struct sway_layer_surface *host);
+
 struct wl_client;
 struct wl_resource;
 /* Exact selected Wayland peer and fresh mapped-host validation, private to

@@ -14,6 +14,7 @@
 #include "sway/input/seat.h"
 #include "sway/input/cursor.h"
 #include "sway/stage_director_news_pairing.h"
+#include "sway/stage_director_company_pairing.h"
 #include "sway/ipc-server.h"
 #include "sway/server.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
@@ -540,6 +541,14 @@ static void handle_key_event(struct sway_keyboard *keyboard,
 	 */
 	if (!handled && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		handled = stage_director_news_pairing_key_press(
+			seat, wlr_device, locked, shortcuts_inhibited,
+			keyinfo.raw_keysyms, keyinfo.raw_keysyms_len,
+			keyinfo.raw_modifiers, event->time_msec);
+	}
+	/* M24 Company uses a distinct F11 gesture and protocol; never borrows
+	 * Weather's F12 selection state or WATCH authorization. */
+	if (!handled && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		handled = stage_director_company_pairing_key_press(
 			seat, wlr_device, locked, shortcuts_inhibited,
 			keyinfo.raw_keysyms, keyinfo.raw_keysyms_len,
 			keyinfo.raw_modifiers, event->time_msec);

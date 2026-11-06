@@ -999,6 +999,9 @@ void stage_director_layer_mapped(struct sway_layer_surface *surface) {
 
 void stage_director_layer_committed(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+	/* Company M24 revalidates native layer/client/output on every commit
+	 * and revokes its private geometry interface on identity loss. */
+	stage_director_company_pairing_host_changed(surface);
 	if (stage_director_news_host_session_tracks(&weather_host_session,
 			(uintptr_t)surface)) {
 		/* Recheck a reserved native candidate against actual compositor
@@ -1039,6 +1042,7 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {
 		stage_director_news_pairing_clear_host();
@@ -1060,6 +1064,7 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {
 		stage_director_news_pairing_clear_host();
