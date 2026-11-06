@@ -16,6 +16,8 @@
 #include "sway/stage_director_company_origin.h"
 #include "sway/stage_director_company_executable.h"
 #include "sway/stage_director_company_digest.h"
+#include "sway/stage_director_company_reconcile.h"
+#include "sway/stage_director_company_mapped_inventory.h"
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
@@ -68,6 +70,11 @@ struct stage_director_layer_observation {
 static struct stage_director_actor actors[STAGE_DIRECTOR_MAX_ACTORS];
 static struct stage_director_layer_observation
 	layers[STAGE_DIRECTOR_MAX_LAYERS];
+/* Independent from the SD0 profile registry: Company XDG MapLibre may not
+ * have any recognized Stage Director profile. These records are bounded,
+ * root-destroy-listener backed and cleared on unmap/selection revocation. */
+static struct stage_director_company_mapped_inventory company_m30c_mapped;
+static struct stage_director_company_reconcile company_m30c_ledger;
 static FILE *shadow_log;
 static bool announced;
 static int last_news_hosts = -1;
@@ -797,6 +804,172 @@ static void classify(struct sway_view *view, const char *reason) {
 	}
 }
 
+/*
+ * M30c: production event seams, still diagnostic only.
+ *
+ * The native M28 v2 pidfd receipt can precede or follow mapping a real
+ * Company Qt XDG toplevel. The ordinary SD0 actor registry includes only
+ * recognized profiles, so reuse would silently drop unknown MapLibre views.
+ * Our bounded inventory tracks actual native wl_resource roots instead.
+ *
+ * The pointer to a sway_view is opaque and only re-observed during the
+ * current compositor event loop, never after a root destroy or unmap.
+ * Only M24 selected host + M27 intent + M22 lineage + M28 held pidfd can
+ * reach M21's candidate ledger. No rendering, clip, keyboard, popup,
+ * seat, focus or actor authority is issued at any point.
+ */
+static void company_m30c_attempt_reconcile(void) {
+	if (!company_m30c_mapped.initialized) return;
+	struct stage_director_company_native_host host = {0};
+	struct stage_director_company_intent_snapshot intent = {0};
+	const struct stage_director_company_birth_pidfd *held = NULL;
+	struct wl_resource *host_role = NULL, *host_surface = NULL;
+	if (!stage_director_company_vector_protocol_current_host_intent(
+			&host, &intent) ||
+			!stage_director_company_vector_protocol_current_birth(
+				&held, &host_role, &host_surface)) return;
+
+	/* Do not choose by app_id, title, insertion order or the first
+	 * close-enough Qt window. Demand a UNIQUE exact kernel pidfd match. */
+	int matches = 0;
+	struct wl_resource *winner_root = NULL;
+	struct stage_director_company_native_actor winner = {0};
+	struct stage_director_company_lineage_result winner_lineage = {0};
+	const long hz = sysconf(_SC_CLK_TCK);
+	for (size_t i = 0; i < SD_COMPANY_M30C_MAX_MAPPED; ++i) {
+		const struct stage_director_company_mapped_slot *slot =
+			stage_director_company_mapped_inventory_at(
+				&company_m30c_mapped, i);
+		if (!slot) continue;
+		struct wl_resource *root = slot->root;
+		if (slot->selection_epoch != intent.selection_epoch ||
+				slot->intent_sequence != intent.sequence) {
+			stage_director_company_reconcile_unmap(&company_m30c_ledger, root);
+			stage_director_company_mapped_inventory_forget_root(
+				&company_m30c_mapped, root);
+			continue;
+		}
+		const struct stage_director_company_native_actor actor =
+			stage_director_company_native_observe_actor(
+				(struct sway_view *)slot->view_context);
+		if (!stage_director_company_mapped_slot_same_actor(slot, &actor)) {
+			stage_director_company_reconcile_unmap(&company_m30c_ledger, root);
+			stage_director_company_mapped_inventory_forget_root(
+				&company_m30c_mapped, root);
+			continue;
+		}
+		const struct stage_director_company_lineage_result lineage =
+			stage_director_company_lineage_probe_linux(&host, &actor);
+		const struct stage_director_company_origin_result origin =
+			stage_director_company_origin_check(
+				&intent, &host, &actor, &lineage,
+				hz > 0 ? (uint64_t)hz : 0);
+		if (!origin.intent_correlated_candidate ||
+				!stage_director_company_vector_protocol_birth_actor_candidate(
+					(struct wl_client *)host.native_client_ref,
+					&actor, &lineage)) continue;
+		++matches;
+		winner_root = root;
+		winner = actor;
+		winner_lineage = lineage;
+	}
+	if (matches != 1) {
+		/* Ambiguous siblings or stale/no process candidate must never
+		 * keep an old M21 geometry receipt active. */
+		if (company_m30c_ledger.m21.candidate ||
+				matches > 1) {
+			stage_director_company_reconcile_revoke(&company_m30c_ledger);
+		}
+		if (matches > 1) {
+			sway_log(SWAY_DEBUG,
+				"[stage-director][COMPANY_M30C][LIVE] "
+				"ambiguous_native_actors=%d authority=NONE", matches);
+		}
+		return;
+	}
+	stage_director_company_reconcile_init(&company_m30c_ledger);
+	if (!company_m30c_ledger.born &&
+			!stage_director_company_reconcile_birth(
+				&company_m30c_ledger, held, &host)) return;
+	if (!company_m30c_ledger.mapped &&
+			!stage_director_company_reconcile_map(
+				&company_m30c_ledger, host_role, host_surface,
+				winner_root, &host, &winner)) {
+		stage_director_company_reconcile_revoke(&company_m30c_ledger);
+		return;
+	}
+	if (company_m30c_ledger.actor_root != winner_root) {
+		stage_director_company_reconcile_revoke(&company_m30c_ledger);
+		return;
+	}
+	const bool first_candidate = !company_m30c_ledger.m21.candidate;
+	const struct stage_director_company_reconcile_result result =
+		stage_director_company_reconcile_try(
+			&company_m30c_ledger, held, &winner_lineage,
+			&host, &winner);
+	if (first_candidate) {
+		sway_log(SWAY_DEBUG,
+			"[stage-director][COMPANY_M30C][LIVE] "
+			"pidfd_m21_candidate=%s authority=NONE scene=OFF input=OFF",
+			result.status == SD_COMPANY_RECONCILE_M21_CANDIDATE_ONLY &&
+				result.native_candidate &&
+				!result.owner_verified && !result.can_render &&
+				!result.can_clip && !result.can_accept_input &&
+				!result.can_focus && !result.can_show_popup
+				? "yes" : "no");
+	}
+}
+
+/* Native v2 Wayland receive callback. Used after M28 records a kernel fd;
+ * existing inventory supports a map event that already occurred. */
+void stage_director_company_m30c_birth_ready(void) {
+	company_m30c_attempt_reconcile();
+}
+void stage_director_company_m30c_selection_revoked(void) {
+	stage_director_company_reconcile_revoke(&company_m30c_ledger);
+	stage_director_company_mapped_inventory_clear(&company_m30c_mapped);
+}
+static void company_m30c_record_mapped_view(struct sway_view *view) {
+	if (!view || view->type != SWAY_VIEW_XDG_SHELL ||
+			!view->surface || !view->surface->resource) return;
+	struct stage_director_company_native_host host = {0};
+	struct stage_director_company_intent_snapshot intent = {0};
+	if (!stage_director_company_vector_protocol_current_host_intent(
+			&host, &intent)) return;
+	const struct stage_director_company_native_actor actor =
+		stage_director_company_native_observe_actor(view);
+	if (!actor.candidate) return;
+	const struct stage_director_company_lineage_result lineage =
+		stage_director_company_lineage_probe_linux(&host, &actor);
+	const long hz = sysconf(_SC_CLK_TCK);
+	const struct stage_director_company_origin_result origin =
+		stage_director_company_origin_check(
+			&intent, &host, &actor, &lineage,
+			hz > 0 ? (uint64_t)hz : 0);
+	if (!origin.intent_correlated_candidate) return;
+	stage_director_company_mapped_inventory_init(&company_m30c_mapped);
+	stage_director_company_reconcile_init(&company_m30c_ledger);
+	if (stage_director_company_mapped_inventory_remember(
+			&company_m30c_mapped, view->surface->resource, view,
+			intent.selection_epoch, intent.sequence, &actor)) {
+		company_m30c_attempt_reconcile();
+	}
+}
+static void company_m30c_forget_mapped_view(struct sway_view *view) {
+	if (!view || !company_m30c_mapped.initialized) return;
+	for (size_t i = 0; i < SD_COMPANY_M30C_MAX_MAPPED; ++i) {
+		const struct stage_director_company_mapped_slot *slot =
+			stage_director_company_mapped_inventory_at(
+				&company_m30c_mapped, i);
+		if (slot && slot->view_context == view) {
+			stage_director_company_reconcile_unmap(
+				&company_m30c_ledger, slot->root);
+		}
+	}
+	stage_director_company_mapped_inventory_forget_view(
+		&company_m30c_mapped, view);
+}
+
 void stage_director_view_mapped(struct sway_view *view) {
 	/* The Qt probe's app_id is a cheap READ-ONLY diagnostic filter,
 	 * never actor provenance, native pairing or process custody. Any
@@ -917,6 +1090,8 @@ void stage_director_view_mapped(struct sway_view *view) {
 	if (view && view->container) {
 		stage_director_observe_container(view->container, "map");
 	}
+	/* Independent of SD0 profile classification and untrusted app IDs. */
+	company_m30c_record_mapped_view(view);
 }
 
 void stage_director_view_identity_changed(struct sway_view *view) {
@@ -924,6 +1099,8 @@ void stage_director_view_identity_changed(struct sway_view *view) {
 }
 
 void stage_director_view_unmapped(struct sway_view *view) {
+	/* This must run even when SD0 never classified the map window. */
+	company_m30c_forget_mapped_view(view);
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe_restore(view);
 #endif
@@ -965,6 +1142,9 @@ void stage_director_observe_container(struct sway_container *container,
 		return;
 	}
 
+	/* A Qt XDG actor may acquire its live container after the initial
+	 * map callback. This also catches it without any app_id assumption. */
+	company_m30c_record_mapped_view(container->view);
 	classify(container->view, reason ? reason : "geometry");
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe(container->view);
