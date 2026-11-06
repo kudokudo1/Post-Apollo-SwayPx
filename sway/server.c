@@ -64,6 +64,7 @@
 #include "sway/output.h"
 #include "sway/server.h"
 #include "sway/stage_director_weather_watch_protocol.h"
+#include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director.h"
 #include "sway/input/cursor.h"
 #include "sway/tree/root.h"
@@ -144,6 +145,13 @@ static bool filter_global(const struct wl_client *client,
 	 */
 	if (stage_director_weather_watch_protocol_is_global(global)) {
 		return stage_director_news_watch_selected_client(
+			(struct wl_client *)client);
+	}
+	/* Company M23 is separate from Weather's WATCH pairing. Its global is
+	 * absent on startup and, when explicitly published later, visible
+	 * only to the exact selected Company host wl_client. */
+	if (stage_director_company_vector_protocol_is_global(global)) {
+		return stage_director_company_vector_protocol_selected_client(
 			(struct wl_client *)client);
 	}
 
@@ -268,6 +276,8 @@ bool server_init(struct sway_server *server) {
 
 	wl_display_set_global_filter(server->wl_display, filter_global, NULL);
 	stage_director_weather_watch_protocol_init(server->wl_display);
+	/* Does not publish a Company global or select a client. */
+	stage_director_company_vector_protocol_init(server->wl_display);
 	wl_display_set_default_max_buffer_size(server->wl_display, 1024 * 1024);
 
 	if (!wlr_fixes_create(server->wl_display, 1)) {
@@ -732,6 +742,7 @@ bool server_init(struct sway_server *server) {
 }
 
 void server_fini(struct sway_server *server) {
+	stage_director_company_vector_protocol_finish();
 	stage_director_weather_watch_protocol_finish();
 	// remove listeners
 	wl_list_remove(&server->renderer_lost.link);
