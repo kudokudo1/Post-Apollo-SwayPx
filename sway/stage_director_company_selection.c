@@ -76,6 +76,28 @@ static bool probe_paired_native_host(void *context,
 	return *revision != 0;
 }
 
+/* Private M28b callback runs on every pidfd receipt and XDG candidate
+ * query. The physically selected native Company role/client/process must
+ * still be the exact same object at that moment. */
+static bool probe_paired_birth_host(void *context,
+		struct stage_director_company_native_host *out) {
+	if (!out) return false;
+	struct stage_director_rect local = {0};
+	uint64_t revision = 0;
+	if (!probe_paired_native_host(context, &local, &revision)) return false;
+	*out = stage_director_company_native_observe_host(
+		company_selection.host);
+	return out->candidate &&
+		out->native_layer_ref == company_selection.layer_ref &&
+		out->native_layer_role_ref == company_selection.role_ref &&
+		out->native_surface_ref == company_selection.surface_ref &&
+		out->native_client_ref == company_selection.client_ref &&
+		out->native_output_ref == company_selection.output_ref &&
+		out->pid == company_selection.pid &&
+		out->uid == company_selection.uid &&
+		out->start_ticks == company_selection.start_ticks;
+}
+
 void stage_director_company_pairing_clear_host(void) {
 	/* Clear local native references before destroying the published global.
 	 * Any remaining bound resource is unusable until the next native epoch. */
@@ -132,7 +154,10 @@ bool stage_director_company_pairing_select_at(
 	company_selection.revision = 1;
 	if (!stage_director_company_vector_protocol_publish(
 			role->resource, root->resource,
-			probe_paired_native_host, NULL)) {
+			probe_paired_native_host, NULL) ||
+			!stage_director_company_vector_protocol_attach_birth_probe(
+				role->resource, root->resource,
+				probe_paired_birth_host, NULL)) {
 		stage_director_company_pairing_clear_host();
 		return false;
 	}
