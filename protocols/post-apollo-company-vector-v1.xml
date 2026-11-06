@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="post_apollo_company_vector_v1">
   <copyright>Copyright (c) Post-Apollo contributors. MIT license.</copyright>
-  <interface name="post_apollo_company_vector_v1" version="1">
+  <interface name="post_apollo_company_vector_v1" version="2">
     <description summary="private Company native map launch intent and geometry candidates">
       This interface is advertised ONLY to the compositor-selected native
       Company layer-shell Wayland client. Each bind and request revalidates the
@@ -37,14 +37,28 @@
       <arg name="map_w" type="int" summary="map canvas width"/>
       <arg name="map_h" type="int" summary="map canvas height"/>
     </request>
+    <!-- v2 is additive; v1 launch-intent/geometry requests and result event
+         remain byte-for-byte compatible for previously installed clients. -->
+    <request name="report_child_pidfd" since="2">
+      <arg name="pid" type="uint" summary="Quickshell attached Process.processId, checked against kernel pidfd"/>
+      <arg name="pidfd" type="fd" summary="Linux pidfd opened by same-QPA Company client; server closes received fd"/>
+    </request>
     <request name="close"/>
     <request name="destroy" type="destructor"/>
+    <enum name="birth_status">
+      <entry name="denied" value="0" summary="not selected/stale/mismatched pidfd"/>
+      <entry name="kernel_candidate" value="1" summary="kernel child reference held, no executable custody or scene rights"/>
+      <entry name="exhausted" value="2" summary="birth receipt unavailable"/>
+    </enum>
     <event name="result">
       <arg name="status" type="uint" enum="status"/>
       <arg name="epoch_hi" type="uint" summary="compositor epoch high bits"/>
       <arg name="epoch_lo" type="uint" summary="compositor epoch low bits"/>
       <arg name="revision_hi" type="uint" summary="current compositor host geometry revision high bits"/>
       <arg name="revision_lo" type="uint" summary="current compositor host geometry revision low bits"/>
+    </event>
+    <event name="birth_result" since="2">
+      <arg name="status" type="uint" enum="birth_status"/>
     </event>
   </interface>
 </protocol>

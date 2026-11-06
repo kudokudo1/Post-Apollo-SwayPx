@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "sway/stage_director_company_origin.h"
+#include "sway/stage_director_company_birth_pidfd.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -32,6 +33,9 @@ static uint64_t last_epoch;
 static uint64_t last_intent_sequence;
 static stage_director_company_vector_host_probe native_host_probe;
 static void *native_host_context;
+static stage_director_company_vector_native_host_probe birth_native_host_probe;
+static void *birth_native_host_context;
+static struct stage_director_company_birth_pidfd birth_held;
 
 struct company_binding {
 	uint64_t epoch;
@@ -199,6 +203,45 @@ static void handle_report_viewport(struct wl_client *client,
 	send_status(resource, (uint32_t)candidate.state, revision);
 }
 
+/* A v2 Wayland fd is transferred by the selected host client. It remains
+ * untrusted until the kernel proves the pidfd, process generation and
+ * Quickshell direct parent. No M15 executable/scene authority is granted. */
+static void handle_report_child_pidfd(struct wl_client *client,
+		struct wl_resource *resource, uint32_t claimed_pid, int32_t incoming_fd) {
+	struct stage_director_company_birth_result birth = {
+		.status = SD_COMPANY_BIRTH_NO_INTENT,
+	};
+	struct stage_director_company_intent_snapshot intent = {0};
+	struct stage_director_company_native_host host = {0};
+	if (wl_resource_get_version(resource) >= 2 &&
+			!birth_held.held &&
+			bound_is_current(client, resource) &&
+			birth_native_host_probe &&
+			stage_director_company_vector_protocol_intent_snapshot(
+				client, &intent) &&
+			birth_native_host_probe(birth_native_host_context, &host) &&
+			host.candidate &&
+			host.native_layer_role_ref == (uintptr_t)native_role &&
+			host.native_surface_ref == (uintptr_t)native_host_surface &&
+			host.native_client_ref == (uintptr_t)client) {
+		birth = stage_director_company_birth_pidfd_record(
+			&birth_held, incoming_fd, claimed_pid, &intent, &host,
+			stage_director_read_linux_process, NULL);
+	}
+	/* libwayland-server delivers an owned fd with the request. Always
+	 * close it, even on denial. M28a holds only a separate CLOEXEC dup. */
+	if (incoming_fd >= 0) close(incoming_fd);
+	if (wl_resource_get_version(resource) >= 2) {
+		const uint32_t state =
+			birth.status == SD_COMPANY_BIRTH_HELD_CANDIDATE_ONLY
+				? POST_APOLLO_COMPANY_VECTOR_V1_BIRTH_STATUS_KERNEL_CANDIDATE
+				: birth.status == SD_COMPANY_BIRTH_EXHAUSTED
+					? POST_APOLLO_COMPANY_VECTOR_V1_BIRTH_STATUS_EXHAUSTED
+					: POST_APOLLO_COMPANY_VECTOR_V1_BIRTH_STATUS_DENIED;
+		post_apollo_company_vector_v1_send_birth_result(resource, state);
+	}
+}
+
 static void handle_close(struct wl_client *client,
 		struct wl_resource *resource) {
 	if (!bound_is_current(client, resource)) {
@@ -228,6 +271,7 @@ static void destroy_binding(struct wl_resource *resource) {
 static const struct post_apollo_company_vector_v1_interface company_impl = {
 	.launch_intent = handle_launch_intent,
 	.report_viewport = handle_report_viewport,
+	.report_child_pidfd = handle_report_child_pidfd,
 	.close = handle_close,
 	.destroy = handle_destroy,
 };
@@ -235,7 +279,8 @@ static const struct post_apollo_company_vector_v1_interface company_impl = {
 static void bind_company(struct wl_client *client, void *data,
 		uint32_t version, uint32_t id) {
 	(void)data;
-	if (version != 1 || !selection_current(client) || bound_resource) {
+	if ((version != 1 && version != 2) ||
+			!selection_current(client) || bound_resource) {
 		wl_client_post_implementation_error(client,
 			"Company vector bind requires the exact selected native host");
 		return;
@@ -266,6 +311,7 @@ static void native_resource_destroyed(struct wl_listener *listener,
 
 void stage_director_company_vector_protocol_init(struct wl_display *display) {
 	if (!company_display) company_display = display;
+	stage_director_company_birth_pidfd_init(&birth_held);
 }
 
 bool stage_director_company_vector_protocol_publish(
@@ -300,12 +346,64 @@ bool stage_director_company_vector_protocol_publish(
 	wl_resource_add_destroy_listener(surface, &host_destroy);
 	listeners_attached = true;
 	company_global = wl_global_create(company_display,
-		&post_apollo_company_vector_v1_interface, 1, NULL, bind_company);
+		&post_apollo_company_vector_v1_interface, 2, NULL, bind_company);
 	if (!company_global) {
 		stage_director_company_vector_protocol_revoke();
 		return false;
 	}
 	return true;
+}
+
+bool stage_director_company_vector_protocol_attach_birth_probe(
+		struct wl_resource *role, struct wl_resource *surface,
+		stage_director_company_vector_native_host_probe probe,
+		void *context) {
+	if (!role || !surface || !probe || role != native_role ||
+			surface != native_host_surface || !company_global ||
+			!selected_client || birth_native_host_probe ||
+			wl_resource_get_client(role) != selected_client ||
+			wl_resource_get_client(surface) != selected_client) {
+		return false;
+	}
+	struct stage_director_company_native_host observed = {0};
+	if (!probe(context, &observed) || !observed.candidate ||
+			observed.native_layer_role_ref != (uintptr_t)role ||
+			observed.native_surface_ref != (uintptr_t)surface ||
+			observed.native_client_ref != (uintptr_t)selected_client) {
+		return false;
+	}
+	birth_native_host_probe = probe;
+	birth_native_host_context = context;
+	return true;
+}
+
+bool stage_director_company_vector_protocol_birth_actor_candidate(
+		struct wl_client *client,
+		const struct stage_director_company_native_actor *actor,
+		const struct stage_director_company_lineage_result *lineage) {
+	if (!selection_current(client) || !birth_held.held ||
+			!birth_native_host_probe) return false;
+	struct stage_director_company_intent_snapshot intent = {0};
+	struct stage_director_company_native_host host = {0};
+	if (!stage_director_company_vector_protocol_intent_snapshot(
+				client, &intent) ||
+			!birth_native_host_probe(birth_native_host_context, &host) ||
+			!host.candidate ||
+			intent.selection_epoch != birth_held.selection_epoch ||
+			intent.sequence != birth_held.intent_sequence ||
+			intent.host_revision != birth_held.host_revision ||
+			intent.mode != birth_held.mode) {
+		return false;
+	}
+	const struct stage_director_company_birth_result result =
+		stage_director_company_birth_pidfd_match_actor(
+			&birth_held, &host, actor, lineage,
+			stage_director_read_linux_process, NULL);
+	return result.status == SD_COMPANY_BIRTH_ACTOR_CANDIDATE_ONLY &&
+		result.mapped_actor_candidate &&
+		!result.exact_executable_attested && !result.owner_verified &&
+		!result.can_pair_actor && !result.can_clip &&
+		!result.can_accept_input;
 }
 
 void stage_director_company_vector_protocol_revoke(void) {
@@ -328,6 +426,9 @@ void stage_director_company_vector_protocol_revoke(void) {
 	selection_epoch = 0;
 	native_host_probe = NULL;
 	native_host_context = NULL;
+	birth_native_host_probe = NULL;
+	birth_native_host_context = NULL;
+	stage_director_company_birth_pidfd_revoke(&birth_held);
 	bound_resource = NULL;
 	/* Previously bound resource remains inert: every request checks the
 	 * epoch/client again; on its destruction the binding is freed. */

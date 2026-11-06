@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <wayland-client.h>
 #include "post-apollo-company-vector-v1-client-protocol.h"
 
@@ -39,6 +41,12 @@ void CompanyVectorBridge::setViewportCandidate(bool value) {
 	if (m_viewportCandidate == value) return;
 	m_viewportCandidate = value;
 	emit viewportCandidateChanged();
+}
+
+void CompanyVectorBridge::setKernelBirthCandidate(bool value) {
+	if (m_kernelBirthCandidate == value) return;
+	m_kernelBirthCandidate = value;
+	emit kernelBirthCandidateChanged();
 }
 
 void CompanyVectorBridge::setEpoch(qulonglong value) {
@@ -192,7 +200,7 @@ void CompanyVectorBridge::registryGlobal(
 	}
 	self->m_vector = static_cast<post_apollo_company_vector_v1 *>(
 		wl_registry_bind(registry, name,
-			&post_apollo_company_vector_v1_interface, 1));
+			&post_apollo_company_vector_v1_interface, version >= 2 ? 2 : 1));
 	if (!self->m_vector) {
 		self->setStatus(QStringLiteral("COMPANY_WIRE_BIND_FAILED"));
 		return;
@@ -201,7 +209,8 @@ void CompanyVectorBridge::registryGlobal(
 	wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(self->m_vector),
 		self->m_queue);
 	static const post_apollo_company_vector_v1_listener listener = {
-		&CompanyVectorBridge::vectorResult
+		&CompanyVectorBridge::vectorResult,
+		&CompanyVectorBridge::vectorBirthResult
 	};
 	if (post_apollo_company_vector_v1_add_listener(
 			self->m_vector, &listener, self) != 0) {
@@ -231,6 +240,9 @@ void CompanyVectorBridge::releaseVector() {
 	m_globalName = 0;
 	setLaunchCandidate(false);
 	setViewportCandidate(false);
+	setKernelBirthCandidate(false);
+	m_birthSent = false;
+	m_pendingChildPid = 0;
 	setEpoch(0);
 	setHostRevision(0);
 	if (wasBound) emit wireBoundChanged();
@@ -251,6 +263,7 @@ void CompanyVectorBridge::vectorResult(void *data,
 		self->setLaunchCandidate(true);
 		self->setViewportCandidate(false);
 		self->setStatus(QStringLiteral("LAUNCH_INTENT_CANDIDATE_ONLY"));
+		self->tryReportBirth();
 		self->sendViewport();
 		break;
 	case POST_APOLLO_COMPANY_VECTOR_V1_STATUS_VIEWPORT_CANDIDATE:
@@ -275,6 +288,61 @@ void CompanyVectorBridge::vectorResult(void *data,
 		self->setViewportCandidate(false);
 		self->setStatus(QStringLiteral("COMPANY_WIRE_DENIED"));
 	}
+}
+
+void CompanyVectorBridge::vectorBirthResult(void *data,
+		post_apollo_company_vector_v1 *, uint32_t status) {
+	auto *self = static_cast<CompanyVectorBridge *>(data);
+	if (!self) return;
+	const bool held =
+		status == POST_APOLLO_COMPANY_VECTOR_V1_BIRTH_STATUS_KERNEL_CANDIDATE;
+	self->setKernelBirthCandidate(held);
+	self->setStatus(held
+		? QStringLiteral("KERNEL_PIDFD_CANDIDATE_ONLY")
+		: QStringLiteral("KERNEL_PIDFD_DENIED"));
+}
+
+/* This PID must originate from Quickshell's attached QProcess.processId,
+ * not a user-entered ID. C++ asks Linux for an actual pidfd, and transmits
+ * it via the SAME QPA wl_client that owns Company's physical layer.
+ * No secret in environment, argv, disk or a separate Wayland connection. */
+bool CompanyVectorBridge::reportNativeChildPid(qlonglong processId) {
+	if (!m_enabled || !m_vector || processId <= 0 ||
+			processId > std::numeric_limits<int32_t>::max() ||
+			m_birthSent || m_pendingChildPid != 0 ||
+			wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_vector)) < 2) {
+		return false;
+	}
+	m_pendingChildPid = processId;
+	tryReportBirth();
+	return true;
+}
+
+void CompanyVectorBridge::tryReportBirth() {
+	if (!m_enabled || !m_vector || !m_launchCandidate ||
+			m_birthSent || m_pendingChildPid <= 0 ||
+			wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_vector)) < 2) {
+		return;
+	}
+#if defined(SYS_pidfd_open)
+	const int fd = static_cast<int>(syscall(SYS_pidfd_open,
+		static_cast<pid_t>(m_pendingChildPid), 0));
+	if (fd < 0) {
+		setStatus(QStringLiteral("CHILD_PIDFD_UNAVAILABLE"));
+		return;
+	}
+	post_apollo_company_vector_v1_report_child_pidfd(
+		m_vector, static_cast<uint32_t>(m_pendingChildPid), fd);
+	/* Wayland marshals and transfers the fd; this client-owned fd is
+	 * closed immediately. The compositor will own a separate CLOEXEC dup
+	 * only after rechecking native host, intent and kernel identity. */
+	::close(fd);
+	m_birthSent = true;
+	setStatus(QStringLiteral("CHILD_PIDFD_SENT_UNCONFIRMED"));
+	flush();
+#else
+	setStatus(QStringLiteral("CHILD_PIDFD_NOT_SUPPORTED"));
+#endif
 }
 
 bool CompanyVectorBridge::requestLaunch(bool online) {
@@ -329,6 +397,9 @@ void CompanyVectorBridge::sendViewport() {
 
 void CompanyVectorBridge::close() {
 	m_geometryDebounce.stop();
+	m_pendingChildPid = 0;
+	m_birthSent = false;
+	setKernelBirthCandidate(false);
 	if (m_enabled && m_vector) {
 		if (m_launchCandidate) {
 			post_apollo_company_vector_v1_report_viewport(

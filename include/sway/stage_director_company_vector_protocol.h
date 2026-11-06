@@ -40,6 +40,29 @@ bool stage_director_company_vector_protocol_publish(
 	struct wl_resource *native_host_surface,
 	stage_director_company_vector_host_probe probe,
 	void *probe_context);
+/* M28b: this callback is provided only by a physically selected M24
+ * compositor-side Company layer. No user/client sends native pointers. */
+struct stage_director_company_native_host;
+struct stage_director_company_native_actor;
+struct stage_director_company_lineage_result;
+typedef bool (*stage_director_company_vector_native_host_probe)(
+	void *context, struct stage_director_company_native_host *out);
+
+/* After M24 publishes its exact real layer resources, attach the native
+ * host snapshot observer. Legacy v1 publication stays compatible but cannot
+ * admit v2 birth receipts without this additional compositor proof. */
+bool stage_director_company_vector_protocol_attach_birth_probe(
+	struct wl_resource *native_layer_role,
+	struct wl_resource *native_host_surface,
+	stage_director_company_vector_native_host_probe probe,
+	void *probe_context);
+
+/* Returns ONLY kernel child candidate evidence; never actor/scene authority. */
+bool stage_director_company_vector_protocol_birth_actor_candidate(
+	struct wl_client *selected_host_client,
+	const struct stage_director_company_native_actor *actor,
+	const struct stage_director_company_lineage_result *lineage);
+
 void stage_director_company_vector_protocol_revoke(void);
 void stage_director_company_vector_protocol_finish(void);
 
