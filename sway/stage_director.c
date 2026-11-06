@@ -852,6 +852,18 @@ void stage_director_view_mapped(struct sway_view *view) {
 					stage_director_company_origin_check(
 						has_intent ? &intent : NULL, &native_host,
 						&company, &parentage, hz > 0 ? (uint64_t)hz : 0);
+				/* This is an exact kernel pidfd/Wayland XDG peer match
+				 * from a selected Company v2 child receipt. Still NO M15
+				 * executable attestation, actor custody, clipping or seat. */
+				const bool pidfd_candidate =
+					stage_director_company_vector_protocol_birth_actor_candidate(
+						(struct wl_client *)native_host.native_client_ref,
+						&company, &parentage);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M28B][PIDFD_ACTOR] "
+					"kernel_candidate=%s exact_executable=no "
+					"owner_verified=no scene=OFF input=OFF",
+					pidfd_candidate ? "yes" : "no");
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M27][ORIGIN] "
 					"status=%s intent=%s candidate=%s "
