@@ -31,6 +31,7 @@ class CompanyVectorBridge : public QObject {
 	Q_PROPERTY(bool wireBound READ wireBound NOTIFY wireBoundChanged)
 	Q_PROPERTY(bool launchCandidate READ launchCandidate NOTIFY launchCandidateChanged)
 	Q_PROPERTY(bool viewportCandidate READ viewportCandidate NOTIFY viewportCandidateChanged)
+	Q_PROPERTY(bool kernelBirthCandidate READ kernelBirthCandidate NOTIFY kernelBirthCandidateChanged)
 	Q_PROPERTY(QString status READ status NOTIFY statusChanged)
 	Q_PROPERTY(qulonglong epoch READ epoch NOTIFY epochChanged)
 	Q_PROPERTY(qulonglong hostRevision READ hostRevision NOTIFY hostRevisionChanged)
@@ -45,6 +46,7 @@ public:
 	bool wireBound() const { return m_vector != nullptr; }
 	bool launchCandidate() const { return m_launchCandidate; }
 	bool viewportCandidate() const { return m_viewportCandidate; }
+	bool kernelBirthCandidate() const { return m_kernelBirthCandidate; }
 	QString status() const { return m_status; }
 	qulonglong epoch() const { return m_epoch; }
 	qulonglong hostRevision() const { return m_hostRevision; }
@@ -56,6 +58,10 @@ public:
 	/* Only SENDs a fixed offline/online intent to paired native Company.
 	 * No shell command, process, map open, or online consent is created here. */
 	Q_INVOKABLE bool requestLaunch(bool online);
+	/* Only Quickshell's attached Process.processId belongs here. C++ opens
+	 * a real pidfd, transmits fd on existing Qt QPA Wayland connection.
+	 * This does not authenticate the M15 executable or grant scene rights. */
+	Q_INVOKABLE bool reportNativeChildPid(qlonglong processId);
 	Q_INVOKABLE void close();
 
 signals:
@@ -65,6 +71,7 @@ signals:
 	void wireBoundChanged();
 	void launchCandidateChanged();
 	void viewportCandidateChanged();
+	void kernelBirthCandidateChanged();
 	void statusChanged();
 	void epochChanged();
 	void hostRevisionChanged();
@@ -74,6 +81,8 @@ private:
 		uint32_t name, const char *interface, uint32_t version);
 	static void registryRemoved(void *data, wl_registry *registry,
 		uint32_t name);
+	static void vectorBirthResult(void *data,
+		post_apollo_company_vector_v1 *, uint32_t status);
 	static void vectorResult(void *data, post_apollo_company_vector_v1 *,
 		uint32_t status, uint32_t epochHi, uint32_t epochLo,
 		uint32_t revisionHi, uint32_t revisionLo);
@@ -87,11 +96,16 @@ private:
 	void setStatus(const QString &status);
 	void setLaunchCandidate(bool candidate);
 	void setViewportCandidate(bool candidate);
+	void setKernelBirthCandidate(bool candidate);
+	void tryReportBirth();
 	void setEpoch(qulonglong epoch);
 	void setHostRevision(qulonglong revision);
 
 	bool m_enabled = false;
 	bool m_launchCandidate = false;
+	bool m_kernelBirthCandidate = false;
+	bool m_birthSent = false;
+	qlonglong m_pendingChildPid = 0;
 	bool m_viewportCandidate = false;
 	QRectF m_frameRect;
 	QRectF m_mapRect;
