@@ -20,6 +20,7 @@ sway_sources = files(
 	'stage_director_company_lineage.c',
 	'stage_director_company_origin.c',
 	'stage_director_company_birth_pidfd.c',
+	'stage_director_company_executable.c',
 	'stage_director_company_wire_policy.c',
 	'stage_director_company_vector_protocol.c',
 	'stage_director_company_selection.c',
