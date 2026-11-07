@@ -69,12 +69,22 @@ INJECT_COVERAGE = '''    // M30i disposable CI-copy observability ONLY; not inst
         if (!mapCanvas.visible || mapCanvas.width <= 0 ||
                 mapCanvas.height <= 0)
             return Qt.rect(0, 0, 0, 0);
-        // mapCanvas->Coverage root crosses this Loader boundary and
-        // incorrectly adds the Coverage scene origin in headless Qt6.
-        // Map to the immediate owned Column first, then add its direct
-        // Coverage-local x/y. Do not depend on compositor screen position.
-        const p = mapCanvas.mapToItem(column, 0, 0);
-        return Qt.rect(column.x + p.x, column.y + p.y,
+        // This particular UI has a known untransformed, direct parent
+        // chain: column -> mapRow -> mapSurface -> mapCanvas. The real
+        // Qt6 CI session also mis-reports mapToItem(column) by +312px, so
+        // record direct source-item geometry instead of guessing scene
+        // offsets. Future rotations/scales must fail the guard.
+        if (mapCanvas.parent !== mapSurface ||
+                mapSurface.parent !== mapRow ||
+                mapRow.parent !== column ||
+                column.parent !== root ||
+                mapCanvas.scale !== 1 || mapSurface.scale !== 1 ||
+                mapRow.scale !== 1 || column.scale !== 1 ||
+                mapCanvas.rotation !== 0 || mapSurface.rotation !== 0 ||
+                mapRow.rotation !== 0 || column.rotation !== 0)
+            return Qt.rect(0, 0, 0, 0);
+        return Qt.rect(column.x + mapRow.x + mapSurface.x + mapCanvas.x,
+                       column.y + mapRow.y + mapSurface.y + mapCanvas.y,
                        mapCanvas.width, mapCanvas.height);
     }
 '''
@@ -192,9 +202,21 @@ def prepare(source: Path, out: Path) -> Path:
     coverage_file = temp / "widgets/CompanyCoveragePane.qml"
     coverage_source = coverage_file.read_text(encoding="utf-8")
     old_canvas = "const origin = mapCanvas.mapToItem(root, 0, 0);"
-    new_canvas = ("const originInColumn = mapCanvas.mapToItem(column, 0, 0);\n"
-                  "        const origin = Qt.point(column.x + originInColumn.x,\n"
-                  "                                column.y + originInColumn.y);")
+    new_canvas = ("if (mapCanvas.parent !== mapSurface ||\n"
+                  "                mapSurface.parent !== mapRow ||\n"
+                  "                mapRow.parent !== column ||\n"
+                  "                column.parent !== root ||\n"
+                  "                mapCanvas.scale !== 1 ||\n"
+                  "                mapSurface.scale !== 1 ||\n"
+                  "                mapRow.scale !== 1 || column.scale !== 1 ||\n"
+                  "                mapCanvas.rotation !== 0 ||\n"
+                  "                mapSurface.rotation !== 0 ||\n"
+                  "                mapRow.rotation !== 0 ||\n"
+                  "                column.rotation !== 0)\n"
+                  "            return Qt.rect(0, 0, 0, 0);\n"
+                  "        const origin = Qt.point(\n"
+                  "            column.x + mapRow.x + mapSurface.x + mapCanvas.x,\n"
+                  "            column.y + mapRow.y + mapSurface.y + mapCanvas.y);")
     if coverage_source.count(old_canvas) != 1:
         raise RuntimeError("M30I_COMPANY_COVERAGE_COORDINATE_ANCHOR_DRIFT")
     coverage_file.write_text(coverage_source.replace(old_canvas, new_canvas, 1),
@@ -215,7 +237,7 @@ def prepare(source: Path, out: Path) -> Path:
         raise RuntimeError("M30I_COMPANY_COORDINATE_FIX_ANCHOR_DRIFT")
     network.write_text(source.replace(old_map, new_map, 1), encoding="utf-8")
     print("SD_COMPANY_M30I_CI_COPY_FIX proposed_scene_transform=1 " 
-          "proposed_coverage_ancestor_transform=1 "
+          "proposed_direct_parent_geometry_guard=1 "
           "original_company_checkout=UNCHANGED "
           "actual_production_fix=NOT_LANDED", flush=True)
     original = Path("tests/stage_director/ci_company_real_quickshell_shell.qml")
