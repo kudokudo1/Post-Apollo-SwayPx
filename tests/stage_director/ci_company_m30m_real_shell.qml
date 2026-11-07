@@ -40,43 +40,43 @@ ShellRoot {
         onTriggered: proof.report("standard")
     }
     Timer {
-        interval: 19000
+        interval: 24000
         running: true
         repeat: false
         onTriggered: company.chassisLevel = "compact"
     }
     Timer {
-        interval: 21000
+        interval: 26000
         running: true
         repeat: false
         onTriggered: proof.report("compact")
     }
     Timer {
-        interval: 31000
+        interval: 40000
         running: true
         repeat: false
         onTriggered: company.chassisLevel = "fullscreen"
     }
     Timer {
-        interval: 33000
+        interval: 42000
         running: true
         repeat: false
         onTriggered: proof.report("fullscreen")
     }
     Timer {
-        interval: 43000
+        interval: 55000
         running: true
         repeat: false
         onTriggered: company.chassisLevel = "standard"
     }
     Timer {
-        interval: 45000
+        interval: 57000
         running: true
         repeat: false
         onTriggered: proof.report("standard")
     }
     Timer {
-        interval: 57000
+        interval: 75000
         running: true
         repeat: false
         onTriggered: {
