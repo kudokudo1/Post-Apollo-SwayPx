@@ -282,6 +282,22 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 ]]; then
   python3 -B tests/stage_director/ci_company_m30k_dynamic.py
 fi
 
+# M30l: ORIGINAL Company MapLibre v3 QtLocation executable from a
+# pinned disposable Nix derivation, using OFFLINE synthetic geographic
+# style only. It is NOT yet admitted into Company's production viewport.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30L:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
+    echo "BLOCKED_M30L_NATIVE_MAPLIBRE_OUTSIDE_PRIVATE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30l_real_maplibre.py
+fi
+
 kill -TERM "$child"
 for _ in {1..40}; do
   if ! kill -0 "$child" 2>/dev/null; then
