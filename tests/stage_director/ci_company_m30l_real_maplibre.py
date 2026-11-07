@@ -227,6 +227,16 @@ def main():
               "same_maplibre_pid=1 xdg_removed=1 "
               "production_company_actor=OFF PASS", flush=True)
     finally:
+        # The compositor tears down its private runtime on failure. Preserve
+        # only the tail of this public-fixture Qt startup log for CI diagnosis.
+        # No owner-local records, online viewport, or secret material is used.
+        if stdout.is_file():
+            try:
+                (temp / "sd-company-m30l-maplibre-diagnostics.log").write_bytes(
+                    stdout.read_bytes()[-65536:])
+            except OSError as ex:
+                print("SD_COMPANY_M30L_DIAGNOSTIC_COPY_FAILED",
+                      type(ex).__name__, file=sys.stderr, flush=True)
         for p in (pointer, process):
             if p and p.poll() is None:
                 p.terminate()
