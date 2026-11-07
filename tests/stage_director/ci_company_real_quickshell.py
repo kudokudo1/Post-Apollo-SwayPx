@@ -69,8 +69,13 @@ INJECT_COVERAGE = '''    // M30i disposable CI-copy observability ONLY; not inst
         if (!mapCanvas.visible || mapCanvas.width <= 0 ||
                 mapCanvas.height <= 0)
             return Qt.rect(0, 0, 0, 0);
-        const p = mapCanvas.mapToItem(root, 0, 0);
-        return Qt.rect(p.x, p.y, mapCanvas.width, mapCanvas.height);
+        // mapCanvas->Coverage root crosses this Loader boundary and
+        // incorrectly adds the Coverage scene origin in headless Qt6.
+        // Map to the immediate owned Column first, then add its direct
+        // Coverage-local x/y. Do not depend on compositor screen position.
+        const p = mapCanvas.mapToItem(column, 0, 0);
+        return Qt.rect(column.x + p.x, column.y + p.y,
+                       mapCanvas.width, mapCanvas.height);
     }
 '''
 INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without granting
@@ -180,6 +185,20 @@ def prepare(source: Path, out: Path) -> Path:
                     ignore=shutil.ignore_patterns(".git", "__pycache__"),
                     symlinks=False, dirs_exist_ok=False)
     temp = out / "company"
+    # Another Qt/QML coordinate issue verified in native CI:
+    # mapCanvas.mapToItem(root) returns scene-origin-relative y even though
+    # mapRow is inside the same Coverage root, leaking its parent's offset.
+    # Test the smallest ancestor-relative mapping only in the CI copy.
+    coverage_file = temp / "widgets/CompanyCoveragePane.qml"
+    coverage_source = coverage_file.read_text(encoding="utf-8")
+    old_canvas = "const origin = mapCanvas.mapToItem(root, 0, 0);"
+    new_canvas = ("const originInColumn = mapCanvas.mapToItem(column, 0, 0);\n"
+                  "        const origin = Qt.point(column.x + originInColumn.x,\n"
+                  "                                column.y + originInColumn.y);")
+    if coverage_source.count(old_canvas) != 1:
+        raise RuntimeError("M30I_COMPANY_COVERAGE_COORDINATE_ANCHOR_DRIFT")
+    coverage_file.write_text(coverage_source.replace(old_canvas, new_canvas, 1),
+                             encoding="utf-8")
     patch_read_only(temp / "widgets/CompanyCoveragePane.qml",
                     "Item {\n    id: root\n", INJECT_COVERAGE)
     patch_read_only(temp / "widgets/CompanyNetworkW.qml",
@@ -195,7 +214,8 @@ def prepare(source: Path, out: Path) -> Path:
     if source.count(old_map) != 1 or source.count(new_map) != 0:
         raise RuntimeError("M30I_COMPANY_COORDINATE_FIX_ANCHOR_DRIFT")
     network.write_text(source.replace(old_map, new_map, 1), encoding="utf-8")
-    print("SD_COMPANY_M30I_CI_COPY_FIX proposed_scene_transform=1 "
+    print("SD_COMPANY_M30I_CI_COPY_FIX proposed_scene_transform=1 " 
+          "proposed_coverage_ancestor_transform=1 "
           "original_company_checkout=UNCHANGED "
           "actual_production_fix=NOT_LANDED", flush=True)
     original = Path("tests/stage_director/ci_company_real_quickshell_shell.qml")
