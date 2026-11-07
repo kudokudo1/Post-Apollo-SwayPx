@@ -16,6 +16,53 @@ import time
 
 import ci_social_real_wayland_pair as b
 
+def check_inflight_seam(grim, path, env, host_rect, guest_rect, label):
+    """Sample actual rendered perimeter pixels while native seatop is active.
+
+    This checks eight deliberate steps, NOT every presentation frame.
+    Such captures cannot prove the operator's zero-gap requirement by
+    themselves, but catch wrong stacking and exposed boundary gaps.
+    """
+    if guest_rect != b.guest_from_chassis(host_rect):
+        raise RuntimeError("SD_CI_SOCIAL_INFLIGHT_PLAN_MISMATCH "+label)
+    x,y,w,h=host_rect
+    gx,gy,gw,gh=guest_rect
+    if not (0 <= x < gx < x+w <= b.WIDTH and
+            0 <= y < gy < y+h <= b.HEIGHT and
+            w > 500 and h > 400):
+        raise RuntimeError("SD_CI_SOCIAL_INFLIGHT_OUTSIDE_OUTPUT "+label)
+
+    samples=[]
+    def expect(name,px,py,color):
+        samples.append((name,(px,py),color))
+    for row in (y+40,y+h//2,y+h-41):
+        for offset in (4,55,109,110):
+            expect("rail",x+offset,row,b.HOST_COLOR)
+        for px in (gx+2,gx+gw//2,gx+gw-2):
+            expect("guest",px,row,b.GUEST_COLOR)
+        expect("right-border",x+w-1,row,b.HOST_COLOR)
+    for px in (gx+30,gx+gw//2,gx+gw-30):
+        expect("top-border",px,y,b.HOST_COLOR)
+        expect("top-guest",px,gy+2,b.GUEST_COLOR)
+        expect("bottom-guest",px,gy+gh-3,b.GUEST_COLOR)
+        expect("bottom-border",px,y+h-1,b.HOST_COLOR)
+    expect("unrelated",1650,770,b.OTHER_COLOR)
+    expect("background",25,25,(0,0,0))
+    b.run(str(grim),"-t","ppm",str(path),env=env)
+    data=path.read_bytes()
+    for name,(px,py),expected in samples:
+        actual=b.ppm_pixel(data,px,py)
+        if max(abs(got-want) for got,want in zip(actual,expected))>25:
+            raise RuntimeError(
+                "SD_CI_SOCIAL_INFLIGHT_SEAM_FAIL "
+                f"stage={label} area={name} point={px},{py} "
+                f"observed={actual} expected={expected}")
+    print(f"SD_CI_SOCIAL_INFLIGHT_SEAM stage={label} "
+          f"samples={len(samples)} rendered_pixels=PASS "
+          "snapshot_between_steps=1 all_frames=NOT_VERIFIED",
+          flush=True)
+
+
 def ci_require():
     e=os.environ
     if not (e.get("GITHUB_ACTIONS")=="true" and e.get("CI")=="true" and
@@ -33,7 +80,7 @@ def cmd(swaymsg,ipc,env,action):
     return b.sway_command(swaymsg,ipc,env,action)
 
 def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
-                   follower_app,follower_proc,steps):
+                   follower_app,follower_proc,steps,witness=None):
     c=f'[con_id="{leader_id}"]'
     cmd(swaymsg,ipc,env,f"{c} focus")
     leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
@@ -44,16 +91,21 @@ def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
         f'seat - cursor set {box["x"]+45} {box["y"]+135}')
     cmd(swaymsg,ipc,env,f"{c} focus")
     cmd(swaymsg,ipc,env,"seat - cursor ci-social-start-move 1")
+    running_dx=running_dy=0
     try:
-        for dx,dy in steps:
+        for step,(dx,dy) in enumerate(steps,start=1):
             cmd(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
+            running_dx+=dx
+            running_dy+=dy
+            if witness is not None:
+                witness(running_dx,running_dy,step)
     finally:
         cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
-    return sum(x for x,_ in steps),sum(y for _,y in steps)
+    return running_dx,running_dy
 
 
 def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
-                     follower_app, follower_proc, steps):
+                     follower_app, follower_proc, steps, witness=None):
     c=f'[con_id="{leader_id}"]'
     cmd(swaymsg,ipc,env,f"{c} focus")
     leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
@@ -82,6 +134,11 @@ def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
             # continuous pointer-frame timing.
             b.wait_for(swaymsg,ipc,env,leader_app,leader_proc.pid,target)
             b.wait_for(swaymsg,ipc,env,follower_app,follower_proc.pid,other)
+            if witness is not None:
+                if leader_app==b.APP_HOST:
+                    witness(target,other,step)
+                else:
+                    witness(other,target,step)
             print(f"SD_CI_SOCIAL_NATIVE_RESIZE_STEP leader={leader_app} "
                   f"step={step} settled_host_guest=1 "
                   f"leader_size={target[2]}x{target[3]}",flush=True)
@@ -170,10 +227,22 @@ def main():
                          f"{host.pid} {guest.pid}\n",encoding="utf-8")
         lease.chmod(0o600)
 
+        def in_flight(hrect,grect,stage):
+            b.wait_for(swaymsg,ipc,env,b.APP_HOST,host.pid,hrect)
+            b.wait_for(swaymsg,ipc,env,b.APP_GUEST,guest.pid,grect)
+            b.wait_for(swaymsg,ipc,env,b.APP_OTHER,other.pid,unrelated_box)
+            check_inflight_seam(
+                grim,runtime/f"{stage}.ppm",env,hrect,grect,stage)
+
         # HOST-LED: the test-only cursor starter enters *real native seatop*.
         # Every subsequent step executes the native pointer-motion handler.
         dx,dy=ci_leased_move(swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,
-                            host,b.APP_GUEST,guest,[(55,25),(40,20)])
+                            host,b.APP_GUEST,guest,[(55,25),(40,20)],
+                            witness=lambda ox,oy,step: in_flight(
+                                (host_box[0]+ox,host_box[1]+oy,*host_box[2:]),
+                                b.guest_from_chassis((
+                                    host_box[0]+ox,host_box[1]+oy,*host_box[2:])),
+                                f"host-drag-{step}"))
         host_box=(host_box[0]+dx,host_box[1]+dy,*host_box[2:])
         guest_box=b.guest_from_chassis(host_box)
         exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
@@ -192,7 +261,12 @@ def main():
 
         # GUEST-LED: native seatop must carry chassis using the same lease.
         dx,dy=ci_leased_move(swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,
-                            guest,b.APP_HOST,host,[(-35,35),(-20,10)])
+                            guest,b.APP_HOST,host,[(-35,35),(-20,10)],
+                            witness=lambda ox,oy,step: in_flight(
+                                (host_box[0]+ox,host_box[1]+oy,*host_box[2:]),
+                                b.guest_from_chassis((
+                                    host_box[0]+ox,host_box[1]+oy,*host_box[2:])),
+                                f"guest-drag-{step}"))
         host_box=(host_box[0]+dx,host_box[1]+dy,*host_box[2:])
         guest_box=b.guest_from_chassis(host_box)
         exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
@@ -212,7 +286,9 @@ def main():
         # HOST-LED NATIVE RESIZE. The guest slot follows the actual
         # native leader's pending size within one seatop commit.
         dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,
-                              host,b.APP_GUEST,guest,[(70,40),(20,20)])
+                              host,b.APP_GUEST,guest,[(70,40),(20,20)],
+                              witness=lambda hr,gr,step: in_flight(
+                                  hr,gr,f"host-resize-{step}"))
         host_box=(host_box[0],host_box[1],
                   host_box[2]+dw,host_box[3]+dh)
         guest_box=b.guest_from_chassis(host_box)
@@ -234,7 +310,9 @@ def main():
         # GUEST-LED NATIVE RESIZE. Its content rect stays right of the
         # chassis rail, retaining exact selector+inset and outer geometry.
         dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,
-                              guest,b.APP_HOST,host,[(-35,-15),(-20,-15)])
+                              guest,b.APP_HOST,host,[(-35,-15),(-20,-15)],
+                              witness=lambda hr,gr,step: in_flight(
+                                  hr,gr,f"guest-resize-{step}"))
         host_box=(host_box[0],host_box[1],
                   host_box[2]+dw,host_box[3]+dh)
         guest_box=b.guest_from_chassis(host_box)
@@ -277,6 +355,10 @@ def main():
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_STALE_NOT_DENIED")
         if logs.count("SD_CI_SOCIAL_NATIVE_RESIZE_BEFORE_COMMIT") < 4:
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_RESIZE_NOT_PRECOMMITTED")
+        print("SD_CI_SOCIAL_INFLIGHT_SUMMARY "
+              "move_samples=4 resize_samples=4 "
+              "pixel_seam_checked_each_step=1 "
+              "all_compositor_frames=NOT_VERIFIED",flush=True)
         print("SD_CI_SOCIAL_NATIVE_MOVE final=PASS "
               "native_seatop=1 same_precommit=1 "
               "real_physical_pointer=NOT_TESTED "
