@@ -81,6 +81,7 @@ static void sd_ci_social_attach(struct seatop_move_floating_event *e) {
     }
     struct sway_container *peer = e->con == host ? guest : host;
     e->sd_ci_peer = peer;
+    e->sd_ci_host_leader = e->con == host;
     e->sd_ci_peer_dx = peer->pending.x - e->con->pending.x;
     e->sd_ci_peer_dy = peer->pending.y - e->con->pending.y;
     fprintf(stderr, "SD_CI_SOCIAL_NATIVE_ATTACH accepted=1 leader_id=%zu peer_id=%zu\n",
@@ -106,6 +107,7 @@ def patch_move(s: str) -> str:
 	double dx, dy; // cursor offset in container
 	struct sway_container *sd_ci_peer;
 	double sd_ci_peer_dx, sd_ci_peer_dy;
+	bool sd_ci_host_leader;
 };
 ''' + C_HELPERS
     s = only(s, struct_old, struct_new, "move_struct")
@@ -150,7 +152,22 @@ def patch_move(s: str) -> str:
 
 	con->animation_state.seat_is_moving_float = true;
 '''
-    return only(s, attach_old, attach_new, "seatop_attach")
+    s = only(s, attach_old, attach_new, "seatop_attach")
+    # In the actual Sway seatop start, the leader is raised. When Social
+    # is the leader, that would cover the app despite perfect geometry.
+    # The selected guest must remain above the opaque chassis throughout
+    # native movement, not merely after focusing it at the end.
+    start_old='''	container_raise_floating(con);
+	transaction_commit_dirty();
+'''
+    start_new='''	container_raise_floating(con);
+	if (e->sd_ci_peer && e->sd_ci_host_leader) {
+		container_raise_floating(e->sd_ci_peer);
+		fprintf(stderr, "SD_CI_SOCIAL_GUEST_STACKING during_move=1 guest_above_host=1\\n");
+	}
+	transaction_commit_dirty();
+'''
+    return only(s,start_old,start_new,"move_group_stack_start")
 
 
 
@@ -178,10 +195,7 @@ def patch_resize(s: str) -> str:
             '    e->sd_ci_peer_dx = peer->pending.x - e->con->pending.x;\n','')
         .replace(
             '    e->sd_ci_peer_dy = peer->pending.y - e->con->pending.y;\n','')
-        .replace(
-            '    e->sd_ci_peer = peer;\n',
-            '    e->sd_ci_peer = peer;\n'
-            '    e->sd_ci_host_leader = e->con == host;\n'))
+        )
     new=old.replace('};\n','\tstruct sway_container *sd_ci_peer;\n'
                     '\tbool sd_ci_host_leader;\n};\n',1)+helpers
     s=only(s,old,new,"resize_event_and_lease")
@@ -256,7 +270,20 @@ def patch_resize(s: str) -> str:
 
 	seat->seatop_impl = &seatop_impl;
 '''
-    return only(s,attach_old,attach_new,"resize_attach")
+    s=only(s,attach_old,attach_new,"resize_attach")
+    start_old='''	container_set_resizing(con, true);
+	container_raise_floating(con);
+	transaction_commit_dirty();
+'''
+    start_new='''	container_set_resizing(con, true);
+	container_raise_floating(con);
+	if (e->sd_ci_peer && e->sd_ci_host_leader) {
+		container_raise_floating(e->sd_ci_peer);
+		fprintf(stderr, "SD_CI_SOCIAL_GUEST_STACKING during_resize=1 guest_above_host=1\\n");
+	}
+	transaction_commit_dirty();
+'''
+    return only(s,start_old,start_new,"resize_group_stack_start")
 
 
 C_CURSOR = r'''
