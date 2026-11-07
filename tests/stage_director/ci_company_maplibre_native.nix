@@ -23,6 +23,24 @@ pkgs.stdenv.mkDerivation {
       --replace-fail 'M30L_NIX_OUTPUT_ROOT' "$out"
   '';
   cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
+  # MapLibre v3 installs its QML module and QtLocation provider in package-
+  # relative qml/ and plugins/, not in Qt's lib/qt-6/qml tree. The normal Qt
+  # wrapper does not infer those custom locations from a linked library.
+  # Pin them to the same Nix MapLibre derivation used to build this exact app.
+  preFixup = ''
+    test -f "${qt.maplibre-native-qt}/qml/MapLibre/qmldir" || {
+      echo "M30L_MAPLIBRE_QML_MODULE_NOT_INSTALLED" >&2
+      exit 1
+    }
+    test -d "${qt.maplibre-native-qt}/plugins/geoservices" || {
+      echo "M30L_MAPLIBRE_GEOSERVICES_PLUGIN_NOT_INSTALLED" >&2
+      exit 1
+    }
+    qtWrapperArgs+=(
+      --prefix QML_IMPORT_PATH : "${qt.maplibre-native-qt}/qml"
+      --prefix QT_PLUGIN_PATH : "${qt.maplibre-native-qt}/plugins"
+    )
+  '';
   installPhase = ''
     runHook preInstall
     install -Dm755 company-vector-probe "$out/bin/company-vector-probe"
