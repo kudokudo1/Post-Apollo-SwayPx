@@ -53,7 +53,7 @@ def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
 
 
 def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
-                     steps):
+                     follower_app, follower_proc, steps):
     c=f'[con_id="{leader_id}"]'
     cmd(swaymsg,ipc,env,f"{c} focus")
     leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
@@ -64,12 +64,30 @@ def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
         f'seat - cursor set {rect["x"]+60} {rect["y"]+140}')
     cmd(swaymsg,ipc,env,f"{c} focus")
     cmd(swaymsg,ipc,env,"seat - cursor ci-social-start-resize 1")
+    running_dx=running_dy=0
     try:
-        for dx,dy in steps:
+        for step,(dx,dy) in enumerate(steps,start=1):
             cmd(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
+            running_dx+=dx
+            running_dy+=dy
+            target=(rect["x"],rect["y"],
+                    rect["width"]+running_dx,
+                    rect["height"]+running_dy)
+            other=(b.guest_from_chassis(target)
+                   if leader_app==b.APP_HOST else b.chassis_from_guest(target))
+            # Each native resize configure can wait for a real Wayland client
+            # buffer/ACK. Assert the exact intermediate native rectangles
+            # before sending the next synthetic motion command. This test
+            # demonstrates paired native correctness at paced commits, not
+            # continuous pointer-frame timing.
+            b.wait_for(swaymsg,ipc,env,leader_app,leader_proc.pid,target)
+            b.wait_for(swaymsg,ipc,env,follower_app,follower_proc.pid,other)
+            print(f"SD_CI_SOCIAL_NATIVE_RESIZE_STEP leader={leader_app} "
+                  f"step={step} settled_host_guest=1 "
+                  f"leader_size={target[2]}x{target[3]}",flush=True)
     finally:
         cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
-    return sum(x for x,_ in steps),sum(y for _,y in steps)
+    return running_dx,running_dy
 
 
 def main():
@@ -194,7 +212,7 @@ def main():
         # HOST-LED NATIVE RESIZE. The guest slot follows the actual
         # native leader's pending size within one seatop commit.
         dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,
-                              host,[(70,40),(20,20)])
+                              host,b.APP_GUEST,guest,[(70,40),(20,20)])
         host_box=(host_box[0],host_box[1],
                   host_box[2]+dw,host_box[3]+dh)
         guest_box=b.guest_from_chassis(host_box)
@@ -216,7 +234,7 @@ def main():
         # GUEST-LED NATIVE RESIZE. Its content rect stays right of the
         # chassis rail, retaining exact selector+inset and outer geometry.
         dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,
-                              guest,[(-35,-15),(-20,-15)])
+                              guest,b.APP_HOST,host,[(-35,-15),(-20,-15)])
         host_box=(host_box[0],host_box[1],
                   host_box[2]+dw,host_box[3]+dh)
         guest_box=b.guest_from_chassis(host_box)
