@@ -105,8 +105,11 @@ jobs:
               assert token in m30m, token
           assert "CompanyNetworkW" in m30m_shell
           assert 'vectorBridgeOptIn: false' in m30m_shell
-          assert "STAGE_DIRECTOR_CI_COMPANY_M30M" in Path(
-              "tests/stage_director/headless_sway_smoke.sh").read_text()
+          smoke=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert "STAGE_DIRECTOR_CI_COMPANY_M30M" in smoke
+          assert "BLOCKED_M30M_FLOAT_RULE_OUTSIDE_PRIVATE_CI" in smoke
+          assert 'for_window [title="SD-CI-CompanyVectorProbe-crop"] floating enable' in smoke
+          assert "M30M_REAL_MAPLIBRE_SOURCE_NOT_840x540" in m30m
           assert "SD_CI_COMPANY_M30M_REAL" not in Path(
               "sway/stage_director.c").read_text()
           ci_scene = Path("sway/stage_director_ci_company_crop.c").read_text()
