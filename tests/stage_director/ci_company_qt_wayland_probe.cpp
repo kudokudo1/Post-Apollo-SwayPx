@@ -41,7 +41,9 @@ int main(int argc, char **argv) {
 	window.resize(which == QStringLiteral("frame") ? 1100 : 840,
 		which == QStringLiteral("frame") ? 740 : 540);
 	window.show();
-	QTimer::singleShot((which == QStringLiteral("frame") ||\n\t\twhich == QStringLiteral("map")) ? 90000 : 30000,\n\t\t&app, &QCoreApplication::quit);
+	QTimer::singleShot((which == QStringLiteral("frame") ||
+		which == QStringLiteral("map")) ? 90000 : 30000,
+		&app, &QCoreApplication::quit);
 	std::fprintf(stdout,
 		"SD_CI_COMPANY_QT_QPA_READY case=%s pid=%ld wayland_display=1\n",
 		which.toUtf8().constData(), (long)getpid());
