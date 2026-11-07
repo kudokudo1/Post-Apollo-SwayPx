@@ -16,16 +16,11 @@ pkgs.stdenv.mkDerivation {
     qt.qtbase qt.qtdeclarative qt.qtlocation qt.qtpositioning
     qt.qtwayland qt.maplibre-native-qt
   ];
+  # Original CMake style-file paths were changed to a dedicated marker
+  # in a disposable source copy. Avoid Nix/CMake interpolation collisions.
   postPatch = ''
     substituteInPlace CMakeLists.txt \
-      --replace-fail '''${CMAKE_CURRENT_SOURCE_DIR}/style-fixture.json' \
-        "$out/share/post-apollo-company-m30l/style-fixture.json" \
-      --replace-fail '''${CMAKE_CURRENT_SOURCE_DIR}/style-post-apollo-online.json' \
-        "$out/share/post-apollo-company-m30l/style-post-apollo-online.json" \
-      --replace-fail '''${CMAKE_CURRENT_SOURCE_DIR}/fixture-hubs.json' \
-        "$out/share/post-apollo-company-m30l/fixture-hubs.json" \
-      --replace-fail '''${CMAKE_CURRENT_SOURCE_DIR}/../../services/company/CompanyHubMapReadOnly.py' \
-        "$out/share/post-apollo-company-m30l/NO_OWNER_LOCAL_DATA"
+      --replace-fail 'M30L_NIX_OUTPUT_ROOT' "$out"
   '';
   cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
   installPhase = ''

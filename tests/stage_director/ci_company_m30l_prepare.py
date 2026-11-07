@@ -149,6 +149,23 @@ def main():
         '    if (benchMotion) {',
         "NATIVE_QT_READY_MARKER")
     (out / "main.cpp").write_text(cpp)
+    cmake_file = out / "CMakeLists.txt"
+    cmake = cmake_file.read_text()
+    old_root = "$" + "{CMAKE_CURRENT_SOURCE_DIR}"
+    for suffix in ("style-fixture.json",
+                   "style-post-apollo-online.json",
+                   "fixture-hubs.json"):
+        cmake = replace_exact(
+            cmake,
+            old_root + "/" + suffix,
+            "M30L_NIX_OUTPUT_ROOT/share/post-apollo-company-m30l/" + suffix,
+            "RELOCATE_" + suffix)
+    cmake = replace_exact(
+        cmake,
+        old_root + "/../../services/company/CompanyHubMapReadOnly.py",
+        "M30L_NIX_OUTPUT_ROOT/share/post-apollo-company-m30l/NO_OWNER_LOCAL_DATA",
+        "OWNER_LOCAL_DISABLED")
+    cmake_file.write_text(cmake)
     # This is a dedicated, non-network CI-only scene, not a production app
     # edit. Report precisely what was modified for a reviewer.
     print("SD_COMPANY_M30L_SOURCE_COPY "
