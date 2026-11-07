@@ -164,7 +164,7 @@ def foot_process(foot, app_id, title, color, runtime, env):
 
 
 def ppm_pixel(blob, x, y):
-    if not blob.startswith(b"P6\\n"):
+    if not blob.startswith(b"P6\n"):
         raise RuntimeError("CI_SOCIAL_SCREENSHOT_NOT_PPM")
     # Grim's PPM output has a plain binary P6 header.
     cursor = 3
