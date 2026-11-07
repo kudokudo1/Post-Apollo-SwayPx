@@ -52,6 +52,21 @@ output * resolution 1920x1080
 for_window [app_id="post-apollo-weather-news"] floating enable
 EOF
 
+# M30m: the real MapLibre window must start floating. Otherwise the
+# normal compositor tiles it to the virtual output and its first native
+# buffer is ~1920x1080, not the pinned 840x540 map source. Never change
+# the compositor's authoritative 840x540 geometry check to accommodate it.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30M_FLOAT_RULE_OUTSIDE_PRIVATE_CI" >&2
+    exit 2
+  fi
+  printf '\nfor_window [title="SD-CI-CompanyVectorProbe-crop"] floating enable\n' >> "$config"
+  echo "SD_CI_COMPANY_M30M_NATIVE_FLOAT_RULE exact_test_title=1 private_ci=1"
+fi
+
 # The ordinary Sway titlebar remains enabled for unrelated windows.
 # A CI-only native process/cgroup-matched Chrome actor receives a per-view
 # B_NONE policy in view_map() before its first container layout transaction.
