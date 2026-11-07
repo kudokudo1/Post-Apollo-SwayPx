@@ -151,7 +151,7 @@ def chassis_from_guest(rect):
 
 def make_foot_config(path, color):
     path.write_text(
-        "[main]\nfont=monospace:size=12\n"
+        "[main]\nfont=monospace:size=12\nresize-by-cells=no\nresize-delay-ms=0\n"
         "[colors]\n"
         f"background={color[0]:02x}{color[1]:02x}{color[2]:02x}\n"
         "foreground=ffffff\n", encoding="utf-8")
