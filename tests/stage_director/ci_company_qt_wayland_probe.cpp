@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 	window.setStyleSheet(QStringLiteral("background-color: #55cfca;"));
 	const QString title = QStringLiteral("SD-CI-CompanyVectorProbe-") +
 		which;
-	window.setTitle(title);
+	window.setWindowTitle(title);
 	window.resize(840, 540);
 	window.show();
 	QTimer::singleShot(30000, &app, &QCoreApplication::quit);
