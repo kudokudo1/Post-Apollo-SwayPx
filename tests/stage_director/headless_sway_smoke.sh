@@ -268,7 +268,8 @@ fi
 
 # M30k: exact source-pinned native host geometry changes, one Qt actor.
 # Fullscreen MUST hide its too-small backing source and revoke input.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
@@ -280,6 +281,25 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_m30k_dynamic.py
+fi
+
+# M30m: real MapLibre v3 inside REAL pinned Company PanelWindow.
+# Only the independent disposable CI compositor gets M30k's scene test hook.
+# The Company side remains unchanged, and production custody remains OFF.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30L:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30M_REAL_MAPLIBRE_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30m_real_in_company.py
 fi
 
 # M30l: ORIGINAL Company MapLibre v3 QtLocation executable from a
