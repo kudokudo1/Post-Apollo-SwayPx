@@ -120,6 +120,8 @@ def main():
                "QT_WAYLAND_DISABLE_WINDOWDECORATION": "1",
                "QSG_RHI_BACKEND": "opengl",
                "LIBGL_ALWAYS_SOFTWARE": "1",
+               "QT_DEBUG_PLUGINS": "1",
+               "QML_IMPORT_TRACE": "1",
                "STAGE_DIRECTOR_CI_COMPANY_M30L": "1"}
         with stdout.open("w", encoding="utf-8") as stream:
             process = subprocess.Popen(
@@ -131,8 +133,11 @@ def main():
         deadline = time.monotonic() + 25
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise RuntimeError("M30L_MAPLIBRE_NATIVE_EXITED " +
-                    stdout.read_text(errors="replace")[-5500:])
+                raise RuntimeError(
+                    "M30L_MAPLIBRE_NATIVE_EXITED returncode=" +
+                    str(process.returncode) + " executable=" +
+                    str(binary) + " plugin_diagnostics=" +
+                    stdout.read_text(errors="replace")[-13000:])
             if expected in stdout.read_text(errors="replace"):
                 break
             time.sleep(0.15)
