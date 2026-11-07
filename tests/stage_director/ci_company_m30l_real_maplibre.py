@@ -182,6 +182,26 @@ def main():
         if "MAPLIBRE_COMPAT_PROBE" not in data or (
                 "offline" not in data or "OpenGLRhi" not in data):
             raise RuntimeError("M30L_COMPANY_MAPLIBRE_OFFLINE_PROVENANCE_MISSING")
+        # QML mapReady can precede the first actual EGL frame. Require a
+        # real Qt frameSwapped signal before evaluating compositor pixels.
+        swap_deadline = time.monotonic() + 7
+        while time.monotonic() < swap_deadline:
+            data = stdout.read_text(errors="replace")
+            if "SD_COMPANY_M30L_SCENEGRAPH_ERROR" in data:
+                raise RuntimeError("M30L_MAPLIBRE_SCENEGRAPH_FAILURE " +
+                                   data[-4200:])
+            if "SD_COMPANY_M30L_FRAME_SWAPPED count=" in data:
+                break
+            if process.poll() is not None:
+                raise RuntimeError("M30L_MAPLIBRE_EXITED_BEFORE_FRAME")
+            time.sleep(0.12)
+        else:
+            screenshot("no-frame-diagnostic")
+            raise RuntimeError("M30L_MAPLIBRE_NO_QT_FRAME_SWAPPED " +
+                               stdout.read_text(errors="replace")[-3500:])
+        # The compositor can commit after Qt reports a frame swap. Keep a
+        # stable, bounded opportunity for the actual presented pixels.
+        time.sleep(1.5)
         map_image = screenshot("actual-native-maplibre")
         actual_map_colors(map_image, *pos)
         print("SD_COMPANY_M30L_REAL_MAPLIBRE "
