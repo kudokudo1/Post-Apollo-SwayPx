@@ -40,8 +40,16 @@ compact, fullscreen-hidden, standard-return and close.
 - Private source diagnostics and compositor screenshots are preserved as
   short-lived CI artifacts only. The original locally reported Company hubs,
   user files, online street requests, and production actor rights are OFF.
-- Only `headless_sway_smoke.sh` dispatch and new M30m files/workflow change;
-  existing M30j, M30k, M30l tests and original source are not replaced.
+- The **CI-only** `sway/stage_director_ci_company_crop.c` actor selector
+  permits the actual pinned MapLibre Nix test executable only when all
+  explicit M30m test flags are enabled; the existing synthetic Qt actor
+  remains accepted only when M30m is OFF. Neither path exists in the
+  ordinary production compositor build. This repair followed the first
+  M30m CI failure where the unchanged synthetic-only name rejected
+  genuine MapLibre before clipping.
+- The `headless_sway_smoke.sh` dispatcher and new M30m runner/workflow
+  participate only in disposable GitHub CI. Existing M30j/M30k/M30l
+  regression tests and original Company source are not replaced.
 
 ## HOW TO USE
 
