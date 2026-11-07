@@ -12,6 +12,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include <scenefx/types/fx/blur_data.h>
 #include "sway/stage_director_process_evidence.h"
 #include "sway/stage_director_ci_company_crop.h"
 #include "sway/tree/view.h"
