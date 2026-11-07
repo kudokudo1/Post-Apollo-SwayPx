@@ -1,0 +1,32 @@
+name: Stage Director Social W grouped geometry candidate (CI only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/stage_director/ci_social_group_geometry.h"
+      - "tests/stage_director/ci_social_group_geometry.c"
+      - "tests/stage_director/test_ci_social_group_geometry.c"
+      - ".github/workflows/stage-director-social-group-geometry.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  social-group-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run isolated geometry-only native plan
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iinclude -Itests/stage_director \
+            sway/stage_director_viewport.c \
+            tests/stage_director/ci_social_group_geometry.c \
+            tests/stage_director/test_ci_social_group_geometry.c \
+            -o "$RUNNER_TEMP/ci-social-group-geometry"
+          "$RUNNER_TEMP/ci-social-group-geometry"
+          echo "CI geometry-only plan. No production scene, native pairing, frame sync, or live activation."
