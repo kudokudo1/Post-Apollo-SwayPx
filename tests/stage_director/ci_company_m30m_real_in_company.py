@@ -366,11 +366,25 @@ def main():
                     "resize set width 840 px height 540 px",
                     "move position 626 390"):
             sway_control(wid, cmd)
-        time.sleep(0.35)
+        # Real MapLibre may emit a Wayland configure/frame after Sway
+        # accepts floating+resize. Do NOT weaken the compositor's exact
+        # source 840x540 condition; wait boundedly for its real FOLLOW log.
         sway_log = (runtime / "sway.log")
-        if PROFILE_LOG["standard"] not in sway_log.read_text(errors="replace"):
-            raise RuntimeError("M30K_COMPOSITOR_STANDARD_PROFILE_NOT_MATCHED " +
-                               sway_log.read_text(errors="replace")[-2200:])
+        geometry_deadline = time.monotonic() + 14
+        while time.monotonic() < geometry_deadline:
+            trace = sway_log.read_text(errors="replace")
+            if PROFILE_LOG["standard"] in trace:
+                break
+            if actor.poll() is not None:
+                raise RuntimeError("M30M_NATIVE_DIED_BEFORE_EXACT_SOURCE " +
+                                   qt_log.read_text(errors="replace")[-3500:])
+            time.sleep(0.13)
+        else:
+            actual_rect = native_actor(actor.pid).get("rect", {})
+            raise RuntimeError("M30M_REAL_MAPLIBRE_SOURCE_NOT_840x540 " +
+                               f"sway_rect={actual_rect} " +
+                               "compositor=" +
+                               sway_log.read_text(errors="replace")[-6500:])
         assert_no_unwanted_qt([], CANVAS["standard"][2:])
         time.sleep(1.5)
         standard_native = screenshot("standard-native")
@@ -482,7 +496,8 @@ def main():
     finally:
         # Private compositor runtime is deleted after this test; retain
         # bounded, synthetic-only source logs before teardown for diagnosis.
-        for label, source in (("maplibre", qt_log), ("company", company_log)):
+        for label, source in (("maplibre", qt_log), ("company", company_log),
+                              ("sway", runtime / "sway.log")):
             if source.is_file():
                 try:
                     (temp / f"sd-company-m30m-{label}.log").write_bytes(
