@@ -191,6 +191,7 @@ jobs:
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/sd-company-m30l-*.ppm
+            ${{ runner.temp }}/sd-company-m30l-*.log
       - name: Record strict M30l boundary
         if: always()
         shell: bash
