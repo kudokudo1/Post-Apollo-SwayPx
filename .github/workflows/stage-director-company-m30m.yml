@@ -1,0 +1,288 @@
+name: Stage Director M30m real MapLibre inside Company Quickshell dynamic viewport
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30l-real-maplibre-native-ci-20261107
+    paths:
+      - 'sway/stage_director_ci_company_crop.c'
+      - 'tests/stage_director/ci_company_m30m_real_shell.qml'
+      - 'tests/stage_director/ci_company_m30m_real_in_company.py'
+      - 'tests/stage_director/ci_company_m30l_prepare.py'
+      - 'tests/stage_director/ci_company_maplibre_native.nix'
+      - 'tests/stage_director/ci_company_real_quickshell_shell.qml'
+      - 'tests/stage_director/ci_company_real_quickshell.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30m.yml'
+      - 'docs/stage-director-company-m30m-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-company-native-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source-only geometry diagnostics and no production bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          script = Path("tests/stage_director/ci_company_real_quickshell.py").read_text()
+          shell = Path("tests/stage_director/ci_company_real_quickshell_shell.qml").read_text()
+          ast.parse(script)
+          assert 'e3595b0035bb3d89aa87c6ba2bd1aac04a975181' in script
+          assert 'BLOCKED_M30I_COMPANY_SOURCE_NOT_EXACT_AND_CLEAN' in script
+          assert 'BLOCKED_M30I_NOT_DISPOSABLE_QUICKSHELL' in script
+          assert 'ciM30iActualCanvasHostRect' in script
+          assert 'ciM30iActualCanvasRect' in script
+          assert 'activeVectorViewportRect' in script
+          assert 'NO_COLOR' in script and 'QT_QPA_PLATFORM' in script
+          assert 'maplibre=NOT_EXECUTED' in script
+          assert 'native_actor_scene=OFF input=OFF' in script
+          assert 'bridge_enabled=' in shell
+          assert 'ShellRoot' in shell and 'CompanyNetworkW' in shell
+          assert 'chassisLevel = "compact"' in shell
+          assert 'chassisLevel = "fullscreen"' in shell
+          assert 'company.menuOpen = false' in shell
+          assert 'vectorBridgeOptIn: false' in shell
+          assert 'STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL' in Path(
+              "tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert 'owner_verified=no scene=OFF input=OFF' in Path(
+              'sway/stage_director.c').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in Path(
+              'sway/stage_director_company_digest.c').read_text()
+          import ast
+          c=Path('sway/stage_director_ci_company_crop.c').read_text()
+          script=Path('tests/stage_director/ci_company_m30k_dynamic.py').read_text()
+          shell=Path('tests/stage_director/ci_company_m30k_dynamic_shell.qml').read_text()
+          ast.parse(script)
+          for key in ('ci_company_m30j_enabled', 'ci_m30j_real_company_layer',
+                      'wlr_scene_node_reparent', 'wlr_scene_node_raise_to_top',
+                      'COMPANY_TEST_M30J_WIDTH 573', 'COMPANY_TEST_M30J_HEIGHT 369',
+                      'COMPANY_TEST_M30K_COMPACT_CROP_W 441',
+                      'COMPANY_TEST_M30K_COMPACT_CROP_H 128',
+                      'ci_company_m30k_enabled',
+                      'STAGE_DIRECTOR_CI_COMPANY_M30K',
+                      'SD_CI_COMPANY_M30K_FULLSCREEN',
+                      'SD_CI_COMPANY_M30K_FOLLOW'):
+              assert key in c, key
+          for key in ('M30K_QT_INPUT_OUTSIDE_VISIBLE_CROP',
+                      'M30K_HIDDEN_NATIVE_INPUT_LEAK',
+                      'M30K_NATIVE_CLIENT_REPLACED_DURING_RESIZE',
+                      'M30K_FULLSCREEN_INPUT_REACHED_HIDDEN_QT',
+                      'M30K_CLOSED_REAL_COMPANY_STALE',
+                      'real.check_geometry(m, expected)',
+                      'os.pidfd_open(actor.pid'):
+              assert key in script, key
+          assert 'CompanyNetworkW' in shell
+          assert 'vectorBridgeOptIn: false' in shell
+          assert 'company.chassisLevel = "compact"' in shell
+          assert 'company.chassisLevel = "fullscreen"' in shell
+          assert 'company.chassisLevel = "standard"' in shell
+          m30m=Path("tests/stage_director/ci_company_m30m_real_in_company.py").read_text()
+          m30m_shell=Path("tests/stage_director/ci_company_m30m_real_shell.qml").read_text()
+          ast.parse(m30m)
+          for token in ("STAGE_DIRECTOR_CI_COMPANY_M30M",
+                        "STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE",
+                        "SD_COMPANY_M30L_MAP_READY real_maplibre=1",
+                        "SD_COMPANY_M30L_FRAME_SWAPPED count=",
+                        "check_real_geographic_pixels",
+                        "M30M_FULLSCREEN_NATIVE_PIXEL_LEAK",
+                        "M30K_FULLSCREEN_INPUT_REACHED_HIDDEN_QT",
+                        "M30K_HIDDEN_NATIVE_INPUT_LEAK",
+                        "os.pidfd_open(actor.pid",
+                        "SD_COMPANY_M30M_REAL_MAP_IN_COMPANY"):
+              assert token in m30m, token
+          assert "CompanyNetworkW" in m30m_shell
+          assert 'vectorBridgeOptIn: false' in m30m_shell
+          assert "STAGE_DIRECTOR_CI_COMPANY_M30M" in Path(
+              "tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert "SD_CI_COMPANY_M30M_REAL" not in Path(
+              "sway/stage_director.c").read_text()
+          print("M30m original Company + real MapLibre CI-only compositor "
+                "source and fail-closed geometry/input gates PASS")
+          PY
+
+  actual-company-native-viewport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exactly reviewed original Company QML source
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: e3595b0035bb3d89aa87c6ba2bd1aac04a975181
+          path: company-source
+          persist-credentials: false
+      - name: Check original Company M30e source and geometry ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_maplibre_source_contract.py \
+            --company company-source --sway .
+          python3 -B - <<'PY'
+          from pathlib import Path
+          root=Path("company-source")
+          network=(root/"widgets/CompanyNetworkW.qml").read_text()
+          coverage=(root/"widgets/CompanyCoveragePane.qml").read_text()
+          for token in ("activeVectorFrameInHostRect",
+                        "activeVectorViewportRect",
+                        "property bool vectorBridgeOptIn: false",
+                        'WlrLayershell.namespace: "post-apollo-company-network"',
+                        'CompanyVectorBridgeLink'):
+              assert token in network, token
+          for token in ("mapCanvas.mapToItem(root, 0, 0)",
+                        "VectorViewportPolicy.owner(",
+                        "vectorController.running",
+                        "id: mapCanvas"):
+              assert token in coverage, token
+          print("M30i pinned original Company QML viewport source PASS")
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual normal SwayPX for disposable Wayland session
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$sway/bin/sway"; then
+            echo 'FAIL M30i must use unchanged normal SwayPX' >&2
+            exit 1
+          fi
+          echo "SD_M30I_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build separately compiled CI-only Company native clip compositor
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_crop_compositor.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$ci/bin/sway"
+          test -x "$ci/bin/swaymsg"
+          grep -aFq 'SD_CI_COMPANY_M30J_REAL_PANEL' "$ci/bin/sway"
+          echo "SD_M30J_COMPOSITOR=$ci/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build actual pinned Nixpkgs Quickshell on matching Qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then
+            bin="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then
+            bin="$qs/bin/qs"
+          else
+            echo 'FAIL no Quickshell executable from pinned Nix' >&2
+            exit 1
+          fi
+          echo "STAGE_DIRECTOR_TEST_QUICKSHELL=$bin" >> "$GITHUB_ENV"
+      - name: Build original Company MapLibre v3 Qt application with offline data
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+        run: |
+          set -euo pipefail
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          export STAGE_DIRECTOR_M30L_CI_SOURCE="$RUNNER_TEMP/sd-company-m30l-native-src"
+          python3 -B tests/stage_director/ci_company_m30l_prepare.py
+          # Each source and plugin comes from the same CI pinned Nixpkgs tree.
+          app="$(nix build --impure --expr \
+              'import ./tests/stage_director/ci_company_maplibre_native.nix {
+                 source = builtins.path {
+                   path = builtins.getEnv "STAGE_DIRECTOR_M30L_CI_SOURCE";
+                   name = "company-m30l-exact-review-source";
+                 };
+               }' \
+              --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$app/bin/company-vector-probe"
+          test -f "$app/share/post-apollo-company-m30l/style-fixture.json"
+          echo "STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE=$app/bin/company-vector-probe" >> "$GITHUB_ENV"
+      - name: Build real private Wayland virtual-pointer helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          pointer="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_virtual_pointer.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          echo "STAGE_DIRECTOR_TEST_COMPANY_POINTER=$pointer/bin/sd-company-m30h-pointer" >> "$GITHUB_ENV"
+      - name: Include matching pinned Qt5Compat GraphicalEffects QML module
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          if [[ -z "$module" ]]; then
+            echo 'FAIL pinned Qt5Compat.GraphicalEffects QML module unavailable' >&2
+            find "$compat" -type f -name qmldir | head -n 30 >&2 || true
+            exit 1
+          fi
+          qmlroot="${module%/Qt5Compat/GraphicalEffects/qmldir}"
+          test -d "$qmlroot/Qt5Compat/GraphicalEffects"
+          echo "STAGE_DIRECTOR_M30I_QML_IMPORT_PATH=$qmlroot" >> "$GITHUB_ENV"
+      - name: Prepare pinned Mesa renderer and actual output screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Verify actual MapLibre inside real Company standard compact fullscreen and return
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_CROP: '1'
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30J: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30K: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30M: '1'
+        run: |
+          set -euo pipefail
+          echo "STAGE_DIRECTOR_COMPANY_PINNED_SOURCE=$GITHUB_WORKSPACE/company-source" >> "$GITHUB_ENV"
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30J_COMPOSITOR"
+      - name: Retain genuine MapLibre and Company combined screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30m-real-maplibre-in-company
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30m-*.ppm
+            ${{ runner.temp }}/sd-company-m30m-*.log
+      - name: Publish exact combined runtime acceptance boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30m genuine offline MapLibre inside real Company QML'
+            echo 'Original Company QML standard, compact and fullscreen'
+            echo 'drive a CI-only compositor. The same 840x540 native Qt'
+            echo 'root follows 573x369 standard / 441x128 compact crops.'
+            echo 'Fullscreen 1493x788 exceeds the source: HIDE, NO INPUT.'
+            echo 'Return to standard must re-show same XDG/Qt process.'
+            echo 'Real pointer and screenshot proof required at each stage.'
+            echo 'The real native MapLibre app is required to show geography.'
+            echo 'No approved native host, production'
+            echo 'scene/input authority, local install or operator acceptance.'
+          } >> "$GITHUB_STEP_SUMMARY"
