@@ -232,6 +232,21 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
   python3 -B tests/stage_director/ci_company_input_containment.py
 fi
 
+# M30i: real source-pinned Company Quickshell PanelWindow. Capture actual
+# frame/canvas geometry + pixels across chassis sizes. Never launch MapLibre,
+# enable the QPA bridge, or touch the user's desktop.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
+    echo "BLOCKED_M30I_QUICKSHELL_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_real_quickshell.py
+fi
+
 kill -TERM "$child"
 for _ in {1..40}; do
   if ! kill -0 "$child" 2>/dev/null; then
