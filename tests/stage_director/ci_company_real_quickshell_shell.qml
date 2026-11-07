@@ -30,7 +30,13 @@ ShellRoot {
             " frame_visible=" + (company.ciM30iFrameItemVisible ? "1" : "0") +
             " coverage_present=" + (company.ciM30iCoverageItemPresent ? "1" : "0") +
             " frame_raw=" + proof.formatRect(company.ciM30iFrameRawRect) +
-            " frame_mapped=" + proof.formatRect(company.ciM30iFrameMappedRect));
+            " frame_mapped=" + proof.formatRect(company.ciM30iFrameMappedRect) +
+            " coverage_root=" + proof.formatRect(company.ciM30iCoverageRootRect) +
+            " column=" + proof.formatRect(company.ciM30iColumnRect) +
+            " map_row=" + proof.formatRect(company.ciM30iMapRowRect) +
+            " canvas_raw=" + proof.formatRect(company.ciM30iCanvasRawRect) +
+            " canvas_in_coverage=" +
+              proof.formatRect(company.ciM30iCanvasCoverageRect));
         const host = company.activeVectorFrameInHostRect;
         const candidate = company.activeVectorViewportRect;
         const canvas = company.ciM30iActualCanvasHostRect;

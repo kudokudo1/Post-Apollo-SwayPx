@@ -45,6 +45,12 @@ EXPECTED = {
 INJECT_COVERAGE = '''    // M30i disposable CI-copy observability ONLY; not installed in Company.
     // This reports the actual Canvas and its mapToItem transform even
     // while the native-running policy correctly denies bridge geometry.
+    readonly property rect ciM30iColumnRect:
+        Qt.rect(column.x, column.y, column.width, column.height)
+    readonly property rect ciM30iMapRowRect:
+        Qt.rect(mapRow.x, mapRow.y, mapRow.width, mapRow.height)
+    readonly property rect ciM30iCanvasRawRect:
+        Qt.rect(mapCanvas.x, mapCanvas.y, mapCanvas.width, mapCanvas.height)
     readonly property rect ciM30iActualCanvasRect: {
         if (!mapCanvas.visible || mapCanvas.width <= 0 ||
                 mapCanvas.height <= 0)
@@ -58,6 +64,23 @@ INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without
     readonly property bool ciM30iFrameItemVisible: companyFrame.visible
     readonly property bool ciM30iCoverageItemPresent:
         coverageLoader.active && coverageLoader.item !== null
+    readonly property rect ciM30iCoverageRootRect:
+        coverageLoader.item ? Qt.rect(coverageLoader.item.x,
+            coverageLoader.item.y, coverageLoader.item.width,
+            coverageLoader.item.height) : Qt.rect(0,0,0,0)
+    readonly property rect ciM30iColumnRect:
+        coverageLoader.item ? coverageLoader.item.ciM30iColumnRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iMapRowRect:
+        coverageLoader.item ? coverageLoader.item.ciM30iMapRowRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iCanvasCoverageRect:
+        coverageLoader.item ? coverageLoader.item.ciM30iActualCanvasRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iCanvasRawRect:
+        coverageLoader.item ? coverageLoader.item.ciM30iCanvasRawRect :
+            Qt.rect(0,0,0,0)
+
     readonly property rect ciM30iFrameRawRect:
         Qt.rect(companyFrame.x, companyFrame.y,
                 companyFrame.width, companyFrame.height)
