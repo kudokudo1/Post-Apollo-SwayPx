@@ -62,7 +62,7 @@ INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without
         Qt.rect(companyFrame.x, companyFrame.y,
                 companyFrame.width, companyFrame.height)
     readonly property rect ciM30iFrameMappedRect: {
-        const p = companyFrame.mapToItem(root, 0, 0);
+        const p = companyFrame.mapToItem(null, 0, 0);
         return Qt.rect(p.x, p.y, companyFrame.width, companyFrame.height);
     }
     readonly property rect ciM30iActualCanvasHostRect: {
@@ -72,7 +72,7 @@ INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without
         const canvas = coverageLoader.item.ciM30iActualCanvasRect;
         if (canvas.width <= 0 || canvas.height <= 0)
             return Qt.rect(0, 0, 0, 0);
-        const p = coverageLoader.item.mapToItem(root, canvas.x, canvas.y);
+        const p = coverageLoader.item.mapToItem(null, canvas.x, canvas.y);
         return Qt.rect(p.x, p.y, canvas.width, canvas.height);
     }
 '''
@@ -134,6 +134,20 @@ def prepare(source: Path, out: Path) -> Path:
                     "Item {\n    id: root\n", INJECT_COVERAGE)
     patch_read_only(temp / "widgets/CompanyNetworkW.qml",
                     "PanelWindow {\n    id: root\n", INJECT_NETWORK)
+    # M30i isolated compatibility experiment: original Company incorrectly
+    # passes a Quickshell PanelWindow QObject to Item.mapToItem(Item).
+    # Qt 6 rejects this. The proposed source fix is tested ONLY in a
+    # disposable copy. The original pinned Company checkout remains clean.
+    network = temp / "widgets/CompanyNetworkW.qml"
+    source = network.read_text(encoding="utf-8")
+    old_map = "const origin = companyFrame.mapToItem(root, 0, 0);"
+    new_map = "const origin = companyFrame.mapToItem(null, 0, 0);"
+    if source.count(old_map) != 1 or source.count(new_map) != 0:
+        raise RuntimeError("M30I_COMPANY_COORDINATE_FIX_ANCHOR_DRIFT")
+    network.write_text(source.replace(old_map, new_map, 1), encoding="utf-8")
+    print("SD_COMPANY_M30I_CI_COPY_FIX proposed_scene_transform=1 "
+          "original_company_checkout=UNCHANGED "
+          "actual_production_fix=NOT_LANDED", flush=True)
     original = Path("tests/stage_director/ci_company_real_quickshell_shell.qml")
     if not original.is_file() or original.is_symlink():
         raise RuntimeError("M30I_MISSING_CI_ONLY_SHELL")
