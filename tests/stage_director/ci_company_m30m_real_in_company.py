@@ -480,6 +480,16 @@ def main():
               "same_native_pidfd_xdg=1 no_overflow=1 "
               "production_scene_input=OFF PASS",flush=True)
     finally:
+        # Private compositor runtime is deleted after this test; retain
+        # bounded, synthetic-only source logs before teardown for diagnosis.
+        for label, source in (("maplibre", qt_log), ("company", company_log)):
+            if source.is_file():
+                try:
+                    (temp / f"sd-company-m30m-{label}.log").write_bytes(
+                        source.read_bytes()[-65536:])
+                except OSError as ex:
+                    print("SD_COMPANY_M30M_LOG_ARCHIVE_FAILED",
+                          label, type(ex).__name__, file=sys.stderr, flush=True)
         for p in (pointer, actor, company):
             if p is not None and p.poll() is None:
                 p.terminate()
