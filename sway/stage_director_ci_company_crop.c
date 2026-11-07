@@ -87,6 +87,15 @@ static bool ci_company_m30k_enabled(void) {
         strcmp(flag, "1") == 0;
 }
 
+/* M30m is a separate genuine MapLibre TEST actor in the exact same
+ * disposable Company clipping compositor. This flag never exists in
+ * ordinary SwayPX and cannot grant production native actor custody. */
+static bool ci_company_m30m_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30M");
+    return ci_company_m30k_enabled() && flag &&
+        strcmp(flag, "1") == 0;
+}
+
 static int ci_company_crop_width(void) {
     if (ci_company_m30k_enabled())
         return ci_company_active_layout.width;
@@ -282,8 +291,30 @@ static bool ci_exact_native_qt(struct sway_view *view) {
         return false;
     const char *base = strrchr(exe, '/');
     if (!base) return false;
-    return strcmp(base + 1, "sd-company-qt-wayland-probe") == 0 ||
+    const bool synthetic =
+        strcmp(base + 1, "sd-company-qt-wayland-probe") == 0 ||
         strcmp(base + 1, ".sd-company-qt-wayland-probe-wrapped") == 0;
+    if (synthetic) return !ci_company_m30m_enabled();
+    /* M30m retains the original MapLibre v3 executable from the
+     * exact source-pinned Nix derivation. A title/number alone is
+     * insufficient; require the exact test-only derivation NAME, the
+     * actual /proc/PID/exe and already-checked kernel identity. This
+     * check is not production authentication or a content digest. */
+    const bool real_maplibre = ci_company_m30m_enabled() &&
+        (strcmp(base + 1, "company-vector-probe") == 0 ||
+         strcmp(base + 1, ".company-vector-probe-wrapped") == 0) &&
+        strstr(exe,
+          "-stage-director-company-m30l-native-maplibre-probe-3.0.0-ci1/") != NULL;
+    static pid_t last_reported_m30m_pid = -1;
+    if (real_maplibre && last_reported_m30m_pid != pid) {
+        last_reported_m30m_pid = pid;
+        wlr_log(WLR_INFO,
+            "SD_CI_COMPANY_M30M_REAL_MAPLIBRE_SELECTED "
+            "actual_proc_exe=1 exact_nix_derivation_name=1 "
+            "native_pid=%ld test_only=1 authority=NONE",
+            (long)pid);
+    }
+    return real_maplibre;
 }
 
 static void ci_company_crop_buffer(struct wlr_scene_buffer *buffer,
