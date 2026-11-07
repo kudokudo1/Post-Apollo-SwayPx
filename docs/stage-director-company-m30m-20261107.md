@@ -37,6 +37,12 @@ compact, fullscreen-hidden, standard-return and close.
 - Fullscreen Company Canvas is `1493×788`, larger than 840×540 MapLibre
   source. **The real renderer must be hidden and receive zero input**,
   while the Company QML receives clicks. Return must re-show the same actor.
+- The test-only private SwayPX configuration opens exactly the M30m
+  MapLibre title as floating from its first configure, avoiding a tiled
+  approximately 1920×1080 initial source. The runner still requires
+  **actual 840×540 native geometry** and waits only boundedly for a
+  compositor-confirmed match, never bypassing the size guard. This
+  followed a red CI test where the original startup geometry was too large.
 - Private source diagnostics and compositor screenshots are preserved as
   short-lived CI artifacts only. The original locally reported Company hubs,
   user files, online street requests, and production actor rights are OFF.
