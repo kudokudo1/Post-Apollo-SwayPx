@@ -26,6 +26,11 @@ ShellRoot {
     }
 
     function capture(phase) {
+        console.log("SD_COMPANY_M30I_DEBUG phase=" + phase +
+            " frame_visible=" + (company.ciM30iFrameItemVisible ? "1" : "0") +
+            " coverage_present=" + (company.ciM30iCoverageItemPresent ? "1" : "0") +
+            " frame_raw=" + proof.formatRect(company.ciM30iFrameRawRect) +
+            " frame_mapped=" + proof.formatRect(company.ciM30iFrameMappedRect));
         const host = company.activeVectorFrameInHostRect;
         const candidate = company.activeVectorViewportRect;
         const canvas = company.ciM30iActualCanvasHostRect;

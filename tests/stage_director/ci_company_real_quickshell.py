@@ -55,6 +55,16 @@ INJECT_COVERAGE = '''    // M30i disposable CI-copy observability ONLY; not inst
 '''
 INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without granting
     // viewport ownership; activeVectorViewportRect stays protected.
+    readonly property bool ciM30iFrameItemVisible: companyFrame.visible
+    readonly property bool ciM30iCoverageItemPresent:
+        coverageLoader.active && coverageLoader.item !== null
+    readonly property rect ciM30iFrameRawRect:
+        Qt.rect(companyFrame.x, companyFrame.y,
+                companyFrame.width, companyFrame.height)
+    readonly property rect ciM30iFrameMappedRect: {
+        const p = companyFrame.mapToItem(root, 0, 0);
+        return Qt.rect(p.x, p.y, companyFrame.width, companyFrame.height);
+    }
     readonly property rect ciM30iActualCanvasHostRect: {
         if (!root.menuOpen || !coverageLoader.active ||
                 !coverageLoader.item || !coverageLoader.item.visible)
@@ -264,6 +274,8 @@ def main():
                 if m.group(1) != phase:
                     raise RuntimeError(f"M30I_QML_PHASE_OUT_OF_ORDER {line}")
                 print("SD_COMPANY_M30I_QML_RAW " + line.strip(), flush=True)
+                print("SD_COMPANY_M30I_QS_LOG_CONTEXT " +
+                      logfile.read_text(errors="replace")[-3500:], flush=True)
                 result = check_geometry(m, phase)
                 time.sleep(0.15)
                 screenshot(grim, temp, result)
