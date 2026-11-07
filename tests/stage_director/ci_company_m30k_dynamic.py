@@ -388,7 +388,10 @@ def main():
             raise RuntimeError("M30K_NATIVE_ROOT_CHANGED_ON_RETURN")
         if sway_log.read_text(errors="replace").count(
                 PROFILE_LOG["standard"]) < 2:
-            raise RuntimeError("M30K_STD_RETURN_NOT_RESTORED_BY_COMPOSITOR")
+            raise RuntimeError(
+                "M30K_STD_RETURN_NOT_RESTORED_BY_COMPOSITOR "
+                "recent_compositor=" +
+                sway_log.read_text(errors="replace")[-5500:])
         check_actual_cyan(screenshot("standard-return-native"),
                           CANVAS["standard"], "standard-return")
         test_input("standard", 3)

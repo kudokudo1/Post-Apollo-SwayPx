@@ -52,6 +52,8 @@ struct ci_company_layout {
 static struct ci_company_layout ci_company_active_layout;
 static int ci_company_m30k_logged_profile = -1;
 static bool ci_company_m30k_fullscreen_logged;
+static int ci_company_m30k_last_host_w = -1;
+static int ci_company_m30k_last_host_h = -1;
 
 
 static struct sway_view *ci_company_crop_actor;
@@ -124,6 +126,15 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
                 continue;
             const int host_w = surface->surface->current.width;
             const int host_h = surface->surface->current.height;
+            if (ci_company_m30k_enabled() &&
+                    (host_w != ci_company_m30k_last_host_w ||
+                     host_h != ci_company_m30k_last_host_h)) {
+                ci_company_m30k_last_host_w = host_w;
+                ci_company_m30k_last_host_h = host_h;
+                wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_HOST "
+                    "mapped_quickshell_layer=%dx%d "
+                    "authority=NONE", host_w, host_h);
+            }
             int canvas_x = COMPANY_TEST_M30J_CANVAS_X;
             int canvas_y = COMPANY_TEST_M30J_CANVAS_Y;
             int crop_w = COMPANY_TEST_M30J_WIDTH;
@@ -307,6 +318,8 @@ void stage_director_ci_company_crop_on_map(struct sway_view *view) {
     ci_company_clip_frames = 0;
     ci_company_m30k_logged_profile = -1;
     ci_company_m30k_fullscreen_logged = false;
+    ci_company_m30k_last_host_w = -1;
+    ci_company_m30k_last_host_h = -1;
     wlr_log(WLR_INFO,
         "SD_CI_COMPANY_CROP_NATIVE peer_pid=%ld source_expected=840x540 "
         "visible=600x380 selection=CI_ONLY authority=NONE",
