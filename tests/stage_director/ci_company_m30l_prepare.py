@@ -113,13 +113,10 @@ def main():
         raise RuntimeError("M30L_QML_ROOT_END_MISSING")
     qml = qml.rstrip()[:-1] + '''
     // M30l temporary CI-copy-only MapLibre/QtLocation observation.
-    Timer {
-        interval: 5500
-        running: true
-        repeat: false
-        onTriggered: console.log("SD_COMPANY_M30L_MAP_READY real_maplibre=" +
-            (mapView.map && mapView.map.mapReady ? "1" : "0"))
-    }
+    // Read the real QtLocation MapView.map.mapReady binding from C++.
+    // Console logging may be disabled on a headless Nix Qt application.
+    readonly property bool m30lMapReady:
+        mapView.map !== null && mapView.map.mapReady === true
     Connections {
         target: mapView.map
         function onCenterChanged() {
@@ -176,10 +173,45 @@ def main():
         "QML_STARTUP_DIAGNOSTICS")
     cpp = replace_exact(
         cpp, "    if (benchMotion) {",
-        '    std::fprintf(stdout, "SD_CI_COMPANY_QT_QPA_READY case=crop '
-        'pid=%ld wayland_display=1 maplibre_v3_source=1\\n", (long)getpid());\n'
-        '    std::fflush(stdout);\n'
-        '    if (benchMotion) {',
+        '''    if (m30lCiTrace) {
+        // An actual QML property bound to the actual MapView.map.mapReady,
+        // not a timer-created success string or screenshot-only proof.
+        if (anyOnline || !styleUrl.isLocalFile()
+                || QQuickWindow::graphicsApi() !=
+                   QSGRendererInterface::OpenGLRhi) {
+            std::fprintf(stderr, "SD_COMPANY_M30L_PROVENANCE_REFUSED\\n");
+            std::fflush(stderr);
+            return 15;
+        }
+        std::fprintf(stdout,
+            "MAPLIBRE_COMPAT_PROBE mode offline renderer OpenGLRhi "
+            "source_exact_pin=1\\n");
+        std::fflush(stdout);
+        QObject *m30lRoot = engine.rootObjects().first();
+        auto *m30lTimer = new QTimer(&app);
+        m30lTimer->setInterval(200);
+        auto attempts = std::make_shared<int>(0);
+        QObject::connect(m30lTimer, &QTimer::timeout, &app,
+            [m30lRoot, m30lTimer, attempts]() {
+                if (m30lRoot->property("m30lMapReady").toBool()) {
+                    std::fprintf(stdout,
+                        "SD_COMPANY_M30L_MAP_READY real_maplibre=1\\n");
+                    std::fflush(stdout);
+                    m30lTimer->stop();
+                } else if (++(*attempts) >= 75) {
+                    std::fprintf(stdout,
+                        "SD_COMPANY_M30L_MAP_READY real_maplibre=0\\n");
+                    std::fflush(stdout);
+                    m30lTimer->stop();
+                }
+            });
+        m30lTimer->start();
+    }
+    std::fprintf(stdout, "SD_CI_COMPANY_QT_QPA_READY case=crop "
+        "pid=%ld wayland_display=1 maplibre_v3_source=1\\n",
+        (long)getpid());
+    std::fflush(stdout);
+    if (benchMotion) {''',
         "NATIVE_QT_READY_MARKER")
     (out / "main.cpp").write_text(cpp)
     cmake_file = out / "CMakeLists.txt"
@@ -207,6 +239,7 @@ def main():
           " main_qml_size=840x540"
           " native_input_witness=CI_ONLY"
           " qml_startup_trace=CI_ONLY"
+          " real_qml_property_poll=CI_ONLY"
           " default_offline=1"
           " no_owner_records=1 PASS", flush=True)
 
