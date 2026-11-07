@@ -382,24 +382,25 @@ static bool ci_company_crop_ready(void) {
     int x = 0, y = 0, target_x = 0, target_y = 0;
     const bool host_ok =
         ci_m30j_real_company_layer(&target_x, &target_y);
-    const bool scene_ok =
-        wlr_scene_node_coords(&view->container->scene_tree->node,
-            &x, &y);
-    if (!host_ok || !scene_ok) {
+    if (!host_ok) {
         if (ci_company_m30k_enabled() &&
                 ci_company_m30k_after_fullscreen &&
                 ci_company_m30k_recovery_probes++ < 7) {
             wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_RECOVERY_REFUSED "
-                "host_identity=%d scene_coords=%d target=%d,%d "
-                "actor_position=%d,%d",
-                host_ok, scene_ok, target_x, target_y, x, y);
+                "host_identity=0 source_identity=1 authority=NONE");
         }
         return false;
     }
-    /* M30k is allowed to re-place the SAME verified XDG source after the
-     * real Quickshell host has a newly validated geometry. Until that
-     * happens, the compositor keeps the actor hidden. */
+    /* M30k may be recovering a node deliberately HIDDEN while the
+     * fullscreen host was unsupported. wlroots refuses coordinates for
+     * disabled scene nodes, by design. Do not demand the unavailable
+     * *old* coordinates: host+source+PID are already verified above.
+     * The CI-only caller repositions the hidden node to the trusted
+     * mapped host target BEFORE revealing it. No scene/input grants
+     * or identity checks are relaxed, and ordinary M30j is unchanged. */
     if (ci_company_m30k_enabled()) return true;
+    if (!wlr_scene_node_coords(&view->container->scene_tree->node,
+            &x, &y)) return false;
     return abs(x - target_x) <= 4 && abs(y - target_y) <= 4;
 }
 
