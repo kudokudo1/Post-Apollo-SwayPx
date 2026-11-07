@@ -10,15 +10,14 @@ ShellRoot {
 
     CompanyNetworkW {
         id: company
-        menuOpen: false
+        // Initial native map absent by design; open actual Coverage UI
+        // declaratively so there is no onCompleted ordering race.
+        menuOpen: true
+        coverageLoaded: true
         chassisLevel: "standard"
         dockCenterX: 960
         chassisTopY: 160
         vectorBridgeOptIn: false
-        Component.onCompleted: {
-            company.coverageLoaded = true;
-            company.menuOpen = true;
-        }
     }
 
     function formatRect(rect) {

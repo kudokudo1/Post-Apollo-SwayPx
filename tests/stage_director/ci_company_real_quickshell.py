@@ -263,6 +263,7 @@ def main():
                 phase = expected[len(results)]
                 if m.group(1) != phase:
                     raise RuntimeError(f"M30I_QML_PHASE_OUT_OF_ORDER {line}")
+                print("SD_COMPANY_M30I_QML_RAW " + line.strip(), flush=True)
                 result = check_geometry(m, phase)
                 time.sleep(0.15)
                 screenshot(grim, temp, result)
