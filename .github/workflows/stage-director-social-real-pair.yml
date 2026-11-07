@@ -1,0 +1,52 @@
+name: Stage Director Social W real Wayland pair baseline (CI only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/stage_director/ci_social_real_wayland_pair.py"
+      - "tests/stage_director/ci_social_real_pair_udmabuf.sh"
+      - ".github/workflows/stage-director-social-real-pair.yml"
+      - "docs/stage-director-social-real-pair-20261107.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-social-pair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Nix tooling in disposable CI
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build genuine SwayPX, Wayland foot and screenshot witness
+        run: |
+          set -euo pipefail
+          compositor="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -x "$grim/bin/grim"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "SD_SOCIAL_CI_SWAY=$compositor/bin/sway" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_MESA=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_CI_SOCIAL_REAL_PAIR=1" >> "$GITHUB_ENV"
+      - name: Verify real mapped windows and settled painted pixels
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_social_real_pair_udmabuf.sh
+          echo "No compositor group rendering, no live machine changes, no activation."
