@@ -422,17 +422,30 @@ def main():
         before_qt, before_company = log_checkpoint()
         fullscreen_img = screenshot("fullscreen-hidden")
         old_x, old_y, _, _ = CANVAS["standard"]
-        # Confirm original real MapLibre pixels vanish at the old viewport
-        # coordinates. M30k's compositor hide and pointer-denial checks remain.
-        probe_points=((345,205),(360,230),(395,255),
-                      (420,270),(465,285),(485,305))
+        # Compare only actual colored geographic source pixels, not
+        # uniform dark background. The real Company fullscreen map behind
+        # a hidden actor can legitimately share that background color.
+        # M30k's compositor hide/input refusal remains mandatory.
+        geographic = []
+        for py in range(old_y+170, old_y+348, 3):
+            for px in range(old_x+280, old_x+530, 3):
+                r,g,b = rgb(standard_native,px,py)
+                colored = (g>125 and b>115 and g>1.25*max(1,r)) or (
+                    b>125 and b>1.2*max(1,g)) or (
+                    r>160 and 80<g<220 and b<135)
+                if colored:
+                    geographic.append((px,py))
+        if len(geographic)<20:
+            raise RuntimeError("M30M_FULLSCREEN_NO_GEO_PIXEL_PROVENANCE")
         changed=sum(m30j.pixel_distance(
-            rgb(standard_native,old_x+dx,old_y+dy),
-            rgb(fullscreen_img,old_x+dx,old_y+dy))>18
-            for dx,dy in probe_points)
-        if changed<3:
+            rgb(standard_native,px,py),
+            rgb(fullscreen_img,px,py))>18 for px,py in geographic)
+        if changed < len(geographic)*0.9:
             raise RuntimeError(f"M30M_FULLSCREEN_NATIVE_PIXEL_LEAK "
-                               f"changed={changed}/{len(probe_points)}")
+                               f"changed={changed}/{len(geographic)}")
+        print(f"SD_COMPANY_M30M_FULLSCREEN_HIDDEN_PIXELS "
+              f"changed_colored_geography={changed}/{len(geographic)} "
+              "real_maplibre_source_absent=1 PASS",flush=True)
         send("move 750 490")
         send("press")
         send("release")
