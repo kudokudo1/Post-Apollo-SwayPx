@@ -150,27 +150,42 @@ static bool ci_company_crop_ready(void) {
         view->geometry.x == 0 && view->geometry.y == 0;
 }
 
-void stage_director_ci_company_crop_post_layout(void) {
-    if (!ci_company_crop_actor) return;
+/* Layout and Qt surface commits are asynchronous. Temporarily unknown
+ * dimensions must NOT expose an uncropped orange backing buffer. Hide the
+ * isolated actor until the native source returns to its exact 840x540
+ * expected geometry; the output screenshot itself is the final verdict. */
+static unsigned ci_company_pending_frames;
+
+static bool ci_company_crop_revalidate_or_hide(const char *phase) {
+    struct sway_view *view = ci_company_crop_actor;
+    if (!view || !view->container || !view->container->scene_tree)
+        return false;
     if (!ci_company_crop_ready()) {
-        wlr_log(WLR_ERROR, "SD_CI_COMPANY_CROP "
-            "source_changed_during_layout=1 FAIL");
-        stage_director_ci_company_crop_on_unmap(ci_company_crop_actor);
-        return;
+        wlr_scene_node_set_enabled(&view->container->scene_tree->node, false);
+        if (ci_company_pending_frames++ < 5) {
+            wlr_log(WLR_INFO,
+                "SD_CI_COMPANY_CROP_PENDING phase=%s "
+                "geometry=%d,%d %dx%d clip_held=0 scene_hidden=1 "
+                "authority=NONE",
+                phase, view->geometry.x, view->geometry.y,
+                view->geometry.width, view->geometry.height);
+        }
+        return false;
     }
-    ci_company_apply_clip(ci_company_crop_actor);
+    ci_company_apply_clip(view);
+    wlr_scene_node_set_enabled(&view->container->scene_tree->node, true);
+    return true;
+}
+
+void stage_director_ci_company_crop_post_layout(void) {
+    if (ci_company_crop_actor)
+        (void)ci_company_crop_revalidate_or_hide("layout");
 }
 
 void stage_director_ci_company_crop_pre_frame(void) {
-    if (!ci_company_crop_actor) return;
-    if (!ci_company_crop_ready()) {
-        wlr_log(WLR_ERROR, "SD_CI_COMPANY_CROP "
-            "source_changed_before_frame=1 FAIL");
-        stage_director_ci_company_crop_on_unmap(ci_company_crop_actor);
-        return;
-    }
+    if (!ci_company_crop_actor ||
+            !ci_company_crop_revalidate_or_hide("pre_frame")) return;
     /* Must run AFTER output_configure_scene and BEFORE output scene-build. */
-    ci_company_apply_clip(ci_company_crop_actor);
     if (ci_company_clip_frames++ < 3) {
         wlr_log(WLR_INFO, "SD_CI_COMPANY_CROP_FRAME "
             "real_native_qt=1 source=840x540 visible=600x380 "
