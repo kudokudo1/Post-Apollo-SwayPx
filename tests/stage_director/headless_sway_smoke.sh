@@ -182,6 +182,18 @@ if [[ -n "${STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT:-}" ]]; then
   bash tests/stage_director/ci_real_watch_layer_smoke.sh "$runtime"
 fi
 
+# M30d: real QtWayland QPA XDG clients, but no M24 selected host or real
+# MapLibre artifact. Strict disposable-runner gate; never run on operator.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_QT_QPA:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30D_QT_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  bash tests/stage_director/ci_company_qt_wayland_smoke.sh "$runtime"
+fi
+
 kill -TERM "$child"
 for _ in {1..40}; do
   if ! kill -0 "$child" 2>/dev/null; then

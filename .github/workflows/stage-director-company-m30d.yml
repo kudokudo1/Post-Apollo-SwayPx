@@ -1,0 +1,109 @@
+name: Stage Director M30d real QtWayland XDG process safety in isolated SwayPX
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30c-native-event-wiring-20261106
+    paths:
+      - 'tests/stage_director/ci_company_qt_wayland_probe.cpp'
+      - 'tests/stage_director/ci_company_qt_wayland_probe.nix'
+      - 'tests/stage_director/ci_company_qt_wayland_smoke.sh'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30d.yml'
+      - 'docs/stage-director-company-m30d-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-qt-wayland-headless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject unsafe runner and malformed scripts before native execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${CI:-}" = true
+          test "${GITHUB_ACTIONS:-}" = true
+          test -n "${RUNNER_TEMP:-}"
+          bash -n tests/stage_director/ci_company_qt_wayland_smoke.sh
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          from pathlib import Path
+          shell=Path('tests/stage_director/ci_company_qt_wayland_smoke.sh').read_text()
+          runner=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          qt=Path('tests/stage_director/ci_company_qt_wayland_probe.cpp').read_text()
+          assert 'STAGE_DIRECTOR_CI_COMPANY_QT_QPA' in runner
+          assert 'BLOCKED_M30D_QT_OUTSIDE_DISPOSABLE_CI' in runner
+          assert 'BLOCKED_NOT_DISPOSABLE_COMPANY_QT_QPA' in shell
+          assert 'nativeInterface<QNativeInterface::QWaylandApplication>()' in qt
+          assert 'os.pidfd_open(pid,0)' in shell
+          assert 'check_tree "$one" "$two"' in shell
+          assert 'check_tree 0 0' in shell
+          assert 'physically selected' in shell
+          assert 'wl_display_connect(' not in qt
+          assert 'QWidget window' in qt
+          assert 'background-color: #55cfca' in qt
+          assert 'QtLocation' not in qt and 'MapLibre' in qt
+          print('M30d: isolated real Qt QPA XDG smoke only, NOT MapLibre runtime attestation')
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary production-source SwayPX without desktop activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$binary/bin/sway"
+          test -x "$binary/bin/swaymsg"
+          grep -aFq '[stage-director][COMPANY_M30C][LIVE]' "$binary/bin/sway"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$binary/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_M30D_COMPOSITOR=$binary/bin/sway" >> "$GITHUB_ENV"
+      - name: Build a real Qt QPA Wayland XDG toplevel from pinned Nixpkgs
+        shell: bash
+        run: |
+          set -euo pipefail
+          qt="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_qt_wayland_probe.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$qt/bin/sd-company-qt-wayland-probe"
+          echo "STAGE_DIRECTOR_TEST_QT_COMPANY_WINDOW=$qt/bin/sd-company-qt-wayland-probe" >> "$GITHUB_ENV"
+      - name: Resolve matching pinned Mesa software EGL drivers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -f "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Test real Qt Wayland mapped peer PIDs, sibling roots, native pidfds, teardown
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QT_QPA: '1'
+        run: |
+          set -euo pipefail
+          # Existing CI helper grants a narrow device ACL on the throwaway
+          # GitHub runner if needed, and ALWAYS restores its original ACL.
+          # It cannot be invoked outside CI; Sway/Qt are not run as root.
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$STAGE_DIRECTOR_M30D_COMPOSITOR"
+      - name: State M30d verification boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30d // Real native Qt QPA baseline'
+            echo 'This verifies actual QtWayland XDG toplevels in disposable headless SwayPX,'
+            echo 'real Linux pidfds, spoofed Company-like app IDs, two siblings and teardown.'
+            echo 'It does not run the owner-local MapLibre executable or a Quickshell Company layer;'
+            echo 'M24 physical selection remains unavailable in headless CI.'
+            echo 'No accepted Company v2 fd round-trip, M21 owner custody, pixel clip/input/popup'
+            echo 'verification or user-desktop activation can be inferred from this test.'
+          } >> "$GITHUB_STEP_SUMMARY"
