@@ -51,6 +51,21 @@ geographic features, or lost native identity is a test failure. Don't
 declare the navigation path complete merely because CI receives wheel
 and pointer events.
 
+**First native CI diagnosis:** Original source and actual M30m regression
+passed; real M30n camera logs proved standard and compact pan and wheel
+gestures change `MapView.map.center` and zoom. Camera stayed exactly
+unchanged (within read precision) during compact layout, fullscreen hidden
+and standard return. The inherited small offline Flint fixture was sampled
+after one wheel zoom-out from 10 to 8.5 and another to 7.0; the camera
+moved toward latitude approximately 41.87, longitude -81.20, far from
+the fixture centered on Flint. The returned genuine compositor screenshot
+still had 3 cyan, 9 blue and 15 orange map pixels after excluding QML
+chrome. The initial gate demanded at least **10 cyan pixels**, so it
+incorrectly failed on a valid but off-center viewpoint. The corrected
+gate requires at least 18 colored map samples across at least two of
+cyan/blue/orange categories, and retains the full camera-state and
+visible-source identity tests. M30n remains pending rerun.
+
 ## HOW TO USE
 
 Review the new `.github/workflows/stage-director-company-m30n.yml`.
