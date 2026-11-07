@@ -437,9 +437,11 @@ def main():
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_STALE_NOT_DENIED")
         if logs.count("SD_CI_SOCIAL_NATIVE_RESIZE_BEFORE_COMMIT") < 4:
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_RESIZE_NOT_PRECOMMITTED")
-        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_move=1") != 1:
+        # One host-leading correction in the paused witness and one in
+        # the concurrent stream. Guest-leading work must not raise twice.
+        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_move=1") != 2:
             raise RuntimeError("SD_CI_SOCIAL_MOVE_GUEST_LAYER_NOT_ENFORCED")
-        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_resize=1") != 1:
+        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_resize=1") != 2:
             raise RuntimeError("SD_CI_SOCIAL_RESIZE_GUEST_LAYER_NOT_ENFORCED")
         print("SD_CI_SOCIAL_INFLIGHT_SUMMARY "
               "move_samples=4 resize_samples=4 "
