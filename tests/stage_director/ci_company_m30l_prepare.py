@@ -131,6 +131,9 @@ def main():
     (out / "main.qml").write_text(qml)
 
     cpp = (out / "main.cpp").read_text()
+    cpp = replace_exact(cpp, "#include <QGuiApplication>",
+                        "#include <QGuiApplication>\\n#include <QQmlError>",
+                        "QML_ERROR_INCLUDE")
     cpp = replace_exact(cpp, "int main(int argc, char **argv) {",
                         SPY + "\nint main(int argc, char **argv) {",
                         "INPUT_WITNESS_DECLARATION")
@@ -141,6 +144,36 @@ def main():
         '    if (qEnvironmentVariable("STAGE_DIRECTOR_CI_COMPANY_M30L") == '
         'QStringLiteral("1")) app.installEventFilter(&m30lSpy);',
         "SPY_INSTALL")
+    cpp = replace_exact(
+        cpp,
+        '    engine.load(QUrl(QStringLiteral("qrc:/CompanyVectorProbe/main.qml")));',
+        '''    const bool m30lCiTrace =
+        qEnvironmentVariable("STAGE_DIRECTOR_CI_COMPANY_M30L") ==
+            QStringLiteral("1");
+    if (m30lCiTrace) {
+        QObject::connect(&engine, &QQmlEngine::warnings, &engine,
+            [](const QList<QQmlError> &items) {
+                for (const auto &item : items) {
+                    const QByteArray message = item.toString().toUtf8();
+                    std::fprintf(stderr, "SD_COMPANY_M30L_QML_WARNING %s\\n",
+                                 message.constData());
+                }
+                std::fflush(stderr);
+            });
+        for (const QString &path : engine.importPathList()) {
+            const QByteArray value = path.toUtf8();
+            std::fprintf(stderr, "SD_COMPANY_M30L_IMPORT_PATH %s\\n",
+                         value.constData());
+        }
+        std::fprintf(stderr, "SD_COMPANY_M30L_QML_LOAD_ATTEMPT\\n");
+        std::fflush(stderr);
+    }
+    engine.load(QUrl(QStringLiteral("qrc:/CompanyVectorProbe/main.qml")));
+    if (m30lCiTrace && engine.rootObjects().isEmpty()) {
+        std::fprintf(stderr, "SD_COMPANY_M30L_QML_ROOT_EMPTY\\n");
+        std::fflush(stderr);
+    }''',
+        "QML_STARTUP_DIAGNOSTICS")
     cpp = replace_exact(
         cpp, "    if (benchMotion) {",
         '    std::fprintf(stdout, "SD_CI_COMPANY_QT_QPA_READY case=crop '
@@ -173,6 +206,7 @@ def main():
           " original_checkout=UNCHANGED"
           " main_qml_size=840x540"
           " native_input_witness=CI_ONLY"
+          " qml_startup_trace=CI_ONLY"
           " default_offline=1"
           " no_owner_records=1 PASS", flush=True)
 
