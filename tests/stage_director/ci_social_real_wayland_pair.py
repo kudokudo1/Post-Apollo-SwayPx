@@ -300,6 +300,11 @@ def main():
         locate(swaymsg, ipc, env, ids[APP_GUEST], initial_guest)
         wait_for(swaymsg, ipc, env, APP_HOST, host.pid, CHASSIS)
         wait_for(swaymsg, ipc, env, APP_GUEST, guest.pid, initial_guest)
+        # The Social shell is behind the selected application. Matching
+        # rectangles alone are not sufficient: an opaque top chassis can
+        # conceal the guest. Focus only this exact test-owned con_id.
+        sway_command(swaymsg, ipc, env,
+                     f'[con_id="{ids[APP_GUEST]}"] focus')
         capture(grim, root / "initial.ppm", env, [
             ("rail", (CHASSIS[0] + 25, CHASSIS[1] + 160), HOST_COLOR),
             ("guest", (initial_guest[0] + 180, initial_guest[1] + 160),
@@ -336,6 +341,8 @@ def main():
         locate(swaymsg, ipc, env, ids[APP_HOST], new_host)
         wait_for(swaymsg, ipc, env, APP_HOST, host.pid, new_host)
         wait_for(swaymsg, ipc, env, APP_OTHER, other.pid, other_rect)
+        sway_command(swaymsg, ipc, env,
+                     f'[con_id="{ids[APP_GUEST]}"] focus')
         capture(grim, root / "guest-led.ppm", env, [
             ("rail", (new_host[0] + 28, new_host[1] + 140), HOST_COLOR),
             ("guest", (guest_target[0] + 160, guest_target[1] + 140),
