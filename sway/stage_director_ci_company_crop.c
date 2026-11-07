@@ -33,6 +33,26 @@
 #define COMPANY_TEST_M30J_CANVAS_Y 242
 #define COMPANY_TEST_M30J_HOST_WIDTH 1000
 #define COMPANY_TEST_M30J_HOST_HEIGHT 700
+/* M30k exact additional pinned Company CI layout. Fullscreen's real
+ * 1493x788 Canvas exceeds the 840x540 Qt source: ALWAYS HIDE there. */
+#define COMPANY_TEST_M30K_COMPACT_HOST_W 640
+#define COMPANY_TEST_M30K_COMPACT_HOST_H 490
+#define COMPANY_TEST_M30K_COMPACT_CANVAS_X 166
+#define COMPANY_TEST_M30K_COMPACT_CANVAS_Y 281
+#define COMPANY_TEST_M30K_COMPACT_CROP_W 441
+#define COMPANY_TEST_M30K_COMPACT_CROP_H 128
+#define COMPANY_TEST_M30K_FULLSCREEN_HOST_W 1920
+#define COMPANY_TEST_M30K_FULLSCREEN_HOST_H 1080
+
+struct ci_company_layout {
+    int x, y, width, height;
+    int host_width, host_height;
+    int profile;
+};
+static struct ci_company_layout ci_company_active_layout;
+static int ci_company_m30k_logged_profile = -1;
+static bool ci_company_m30k_fullscreen_logged;
+
 
 static struct sway_view *ci_company_crop_actor;
 static unsigned ci_company_clip_frames;
@@ -57,12 +77,22 @@ static bool ci_company_m30j_enabled(void) {
         strcmp(flag, "1") == 0;
 }
 
+static bool ci_company_m30k_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30K");
+    return ci_company_m30j_enabled() && flag &&
+        strcmp(flag, "1") == 0;
+}
+
 static int ci_company_crop_width(void) {
+    if (ci_company_m30k_enabled())
+        return ci_company_active_layout.width;
     return ci_company_m30j_enabled()
         ? COMPANY_TEST_M30J_WIDTH : COMPANY_TEST_CROP_WIDTH;
 }
 
 static int ci_company_crop_height(void) {
+    if (ci_company_m30k_enabled())
+        return ci_company_active_layout.height;
     return ci_company_m30j_enabled()
         ? COMPANY_TEST_M30J_HEIGHT : COMPANY_TEST_CROP_HEIGHT;
 }
@@ -75,6 +105,7 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
     if (!ci_company_m30j_enabled() || !root || !root->outputs ||
             root->outputs->length != 1 || !target_x || !target_y)
         return false;
+    struct ci_company_layout candidate = {0};
     int found = 0;
     for (int index = 0; index < root->outputs->length; ++index) {
         struct sway_output *output = root->outputs->items[index];
@@ -89,12 +120,42 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
                         ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY ||
                     !surface->namespace ||
                     strcmp(surface->namespace,
-                        "post-apollo-company-network") != 0 ||
-                    surface->surface->current.width !=
-                        COMPANY_TEST_M30J_HOST_WIDTH ||
-                    surface->surface->current.height !=
-                        COMPANY_TEST_M30J_HOST_HEIGHT)
+                        "post-apollo-company-network") != 0)
                 continue;
+            const int host_w = surface->surface->current.width;
+            const int host_h = surface->surface->current.height;
+            int canvas_x = COMPANY_TEST_M30J_CANVAS_X;
+            int canvas_y = COMPANY_TEST_M30J_CANVAS_Y;
+            int crop_w = COMPANY_TEST_M30J_WIDTH;
+            int crop_h = COMPANY_TEST_M30J_HEIGHT;
+            int profile = 1;
+            if (host_w == COMPANY_TEST_M30J_HOST_WIDTH &&
+                    host_h == COMPANY_TEST_M30J_HOST_HEIGHT) {
+                /* M30j standard and M30k standard share the exact pin. */
+            } else if (ci_company_m30k_enabled() &&
+                    host_w == COMPANY_TEST_M30K_COMPACT_HOST_W &&
+                    host_h == COMPANY_TEST_M30K_COMPACT_HOST_H) {
+                canvas_x = COMPANY_TEST_M30K_COMPACT_CANVAS_X;
+                canvas_y = COMPANY_TEST_M30K_COMPACT_CANVAS_Y;
+                crop_w = COMPANY_TEST_M30K_COMPACT_CROP_W;
+                crop_h = COMPANY_TEST_M30K_COMPACT_CROP_H;
+                profile = 2;
+            } else if (ci_company_m30k_enabled() &&
+                    host_w == COMPANY_TEST_M30K_FULLSCREEN_HOST_W &&
+                    host_h == COMPANY_TEST_M30K_FULLSCREEN_HOST_H) {
+                /* Real 1493x788 Canvas will not fit the 840x540 source.
+                 * Hiding it is mandatory; never stretch or reveal overflow. */
+                if (!ci_company_m30k_fullscreen_logged) {
+                    wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FULLSCREEN "
+                        "source_smaller_than_canvas=1 scene_hidden=1 "
+                        "authority=NONE");
+                    ci_company_m30k_fullscreen_logged = true;
+                }
+                return false;
+            } else {
+                return false;
+            }
+            ci_company_m30k_fullscreen_logged = false;
 
             struct wl_client *client =
                 wl_resource_get_client(surface->resource);
@@ -132,17 +193,31 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
             if (!wlr_scene_node_coords(&layer->scene->tree->node,
                     &lx, &ly)) return false;
             if (lx < output->lx || ly < output->ly ||
-                    lx + COMPANY_TEST_M30J_HOST_WIDTH >
+                    lx + host_w >
                         output->lx + output->width ||
-                    ly + COMPANY_TEST_M30J_HOST_HEIGHT >
-                        output->ly + output->height)
+                    ly + host_h >
+                        output->ly + output->height ||
+                    canvas_x < 0 || canvas_y < 0 ||
+                    crop_w <= 0 || crop_h <= 0 ||
+                    crop_w > COMPANY_TEST_SOURCE_WIDTH ||
+                    crop_h > COMPANY_TEST_SOURCE_HEIGHT ||
+                    canvas_x + crop_w > host_w ||
+                    canvas_y + crop_h > host_h)
                 return false;
             found++;
-            *target_x = lx + COMPANY_TEST_M30J_CANVAS_X;
-            *target_y = ly + COMPANY_TEST_M30J_CANVAS_Y;
+            candidate = (struct ci_company_layout) {
+                .x = lx + canvas_x, .y = ly + canvas_y,
+                .width = crop_w, .height = crop_h,
+                .host_width = host_w, .host_height = host_h,
+                .profile = profile,
+            };
+            *target_x = candidate.x;
+            *target_y = candidate.y;
         }
     }
-    return found == 1;
+    if (found != 1) return false;
+    ci_company_active_layout = candidate;
+    return true;
 }
 
 static bool ci_exact_native_qt(struct sway_view *view) {
@@ -230,6 +305,8 @@ void stage_director_ci_company_crop_on_map(struct sway_view *view) {
     }
     ci_company_crop_actor = view;
     ci_company_clip_frames = 0;
+    ci_company_m30k_logged_profile = -1;
+    ci_company_m30k_fullscreen_logged = false;
     wlr_log(WLR_INFO,
         "SD_CI_COMPANY_CROP_NATIVE peer_pid=%ld source_expected=840x540 "
         "visible=600x380 selection=CI_ONLY authority=NONE",
@@ -240,6 +317,8 @@ void stage_director_ci_company_crop_on_unmap(struct sway_view *view) {
     if (!view || view != ci_company_crop_actor) return;
     ci_company_crop_actor = NULL;
     ci_company_clip_frames = 0;
+    ci_company_active_layout = (struct ci_company_layout) {0};
+    ci_company_m30k_logged_profile = -1;
     if (view->content_tree && view->container &&
             !view->container->node.destroying) {
         view_center_and_clip_surface(view);
@@ -265,6 +344,10 @@ static bool ci_company_crop_ready(void) {
             !wlr_scene_node_coords(&view->container->scene_tree->node,
                 &x, &y))
         return false;
+    /* M30k is allowed to re-place the SAME verified XDG source after the
+     * real Quickshell host has a newly validated geometry. Until that
+     * happens, the compositor keeps the actor hidden. */
+    if (ci_company_m30k_enabled()) return true;
     return abs(x - target_x) <= 4 && abs(y - target_y) <= 4;
 }
 
@@ -301,11 +384,33 @@ static bool ci_company_crop_revalidate_or_hide(const char *phase) {
         struct wlr_scene_node *scene =
             &view->container->scene_tree->node;
         if (scene->parent != root->layers.popup) {
+            wlr_scene_node_reparent(scene, root->layers.popup);
+        }
+        if (ci_company_m30k_enabled()) {
             int parent_x = 0, parent_y = 0;
             if (!wlr_scene_node_coords(&root->layers.popup->node,
                     &parent_x, &parent_y))
                 return false;
-            wlr_scene_node_reparent(scene, root->layers.popup);
+            wlr_scene_node_set_position(scene,
+                target_x - parent_x, target_y - parent_y);
+            if (ci_company_m30k_logged_profile !=
+                    ci_company_active_layout.profile) {
+                ci_company_m30k_logged_profile =
+                    ci_company_active_layout.profile;
+                wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FOLLOW "
+                    "profile=%d crop=%dx%d target=%d,%d "
+                    "same_native_root=1 scene=CI_ONLY authority=NONE",
+                    ci_company_active_layout.profile,
+                    ci_company_active_layout.width,
+                    ci_company_active_layout.height,
+                    target_x, target_y);
+            }
+        } else if (scene->parent == root->layers.popup) {
+            /* Preserve the original M30j single-placement behavior. */
+            int parent_x = 0, parent_y = 0;
+            if (!wlr_scene_node_coords(&root->layers.popup->node,
+                    &parent_x, &parent_y))
+                return false;
             wlr_scene_node_set_position(scene,
                 target_x - parent_x, target_y - parent_y);
         }
