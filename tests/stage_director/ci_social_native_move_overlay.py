@@ -15,6 +15,7 @@ import sys
 MOVE = "sway/input/seatop_move_floating.c"
 CURSOR = "sway/commands/seat/cursor.c"
 RESIZE = "sway/input/seatop_resize_floating.c"
+OUTPUT = "sway/desktop/output.c"
 
 def only(src: str, before: str, after: str, reason: str) -> str:
     if src.count(before) != 1 or after in src:
@@ -364,6 +365,110 @@ def patch_cursor(s: str) -> str:
 '''
     return only(s,before,after,"cursor_routing")
 
+
+# Render-commit trace is overlaid into a private CI source copy only.
+# It observes output commits; it does not modify output configuration.
+C_OUTPUT_FRAME_TRACE = r'''
+static bool sd_ci_social_frame_trace_allowed(void) {
+	const char *ci = getenv("CI");
+	const char *actions = getenv("GITHUB_ACTIONS");
+	const char *mode = getenv("STAGE_DIRECTOR_CI_SOCIAL_NATIVE_MOVE");
+	const char *trace = getenv("STAGE_DIRECTOR_CI_SOCIAL_FRAME_TRACE");
+	const char *temp = getenv("RUNNER_TEMP");
+	return ci && !strcmp(ci, "true") &&
+		actions && !strcmp(actions, "true") &&
+		mode && !strcmp(mode, "1") &&
+		trace && !strcmp(trace, "1") &&
+		temp && !strcmp(temp, "/home/runner/work/_temp");
+}
+
+struct sd_ci_social_frame_query { size_t id; };
+static bool sd_ci_social_frame_find(struct sway_container *c, void *user_data) {
+	const struct sd_ci_social_frame_query *q = user_data;
+	return c && !c->node.destroying && c->node.id == q->id;
+}
+
+static void sd_ci_social_output_committed(struct sway_output *output) {
+	if (!sd_ci_social_frame_trace_allowed()) return;
+	const char *temp = getenv("RUNNER_TEMP");
+	const char *path = getenv("SD_SOCIAL_CI_LEASE_FILE");
+	if (!path || strlen(path) > 400 ||
+			strncmp(path, temp, strlen(temp)) ||
+			path[strlen(temp)] != '/') return;
+	struct stat st;
+	if (lstat(path, &st) || !S_ISREG(st.st_mode) ||
+			st.st_uid != getuid() || (st.st_mode & 0777) != 0600) return;
+	FILE *f = fopen(path, "r");
+	if (!f) return;
+	unsigned long long host_id=0, guest_id=0;
+	long host_pid=0, guest_pid=0;
+	int fields = fscanf(f, "%llu %llu %ld %ld",
+		&host_id, &guest_id, &host_pid, &guest_pid);
+	fclose(f);
+	if (fields != 4 || !host_id || !guest_id || host_id == guest_id ||
+			host_pid <= 0 || guest_pid <= 0) return;
+	struct sd_ci_social_frame_query hq = {.id = (size_t)host_id};
+	struct sd_ci_social_frame_query gq = {.id = (size_t)guest_id};
+	struct sway_container *h = root_find_container(sd_ci_social_frame_find, &hq);
+	struct sway_container *g = root_find_container(sd_ci_social_frame_find, &gq);
+	if (!h || !g || !h->view || !g->view ||
+			h->view->pid != host_pid || g->view->pid != guest_pid ||
+			!h->view->surface || !g->view->surface ||
+			!h->scene_tree || !g->scene_tree ||
+			!h->current.workspace || h->current.workspace != g->current.workspace ||
+			h->current.workspace != output->current.active_workspace) return;
+	int hsx=0,hsy=0,gsx=0,gsy=0;
+	wlr_scene_node_coords(&h->scene_tree->node,&hsx,&hsy);
+	wlr_scene_node_coords(&g->scene_tree->node,&gsx,&gsy);
+	/* Rectangle equivalence is checked on the actual committed scene,
+	 * not pending geometry or an asynchronous Sway IPC query. */
+	bool rect_ok =
+		fabs(g->current.x - h->current.x - 111.0) <= 0.5 &&
+		fabs(g->current.y - h->current.y - 1.0) <= 0.5 &&
+		fabs(h->current.width - g->current.width - 112.0) <= 0.5 &&
+		fabs(h->current.height - g->current.height - 2.0) <= 0.5;
+	bool scene_ok =
+		gsx - hsx == 111 && gsy - hsy == 1 &&
+		h->scene_tree->node.enabled && g->scene_tree->node.enabled;
+	static unsigned long long frame = 0;
+	frame++;
+	fprintf(stderr,
+		"SD_CI_SOCIAL_OUTPUT_FRAME frame=%llu committed=1 host_id=%zu guest_id=%zu "
+		"rect=%s scene=%s host=%.0f,%.0f,%.0f,%.0f "
+		"guest=%.0f,%.0f,%.0f,%.0f scene_xy=%d,%d:%d,%d\n",
+		frame, h->node.id, g->node.id,
+		rect_ok ? "PASS" : "SPLIT", scene_ok ? "PASS" : "SPLIT",
+		h->current.x,h->current.y,h->current.width,h->current.height,
+		g->current.x,g->current.y,g->current.width,g->current.height,
+		hsx,hsy,gsx,gsy);
+}
+'''
+
+def patch_output(s: str) -> str:
+    s=only(s, '#include "sway/tree/root.h"\n',
+        '#include "sway/tree/root.h"\n'
+        '#include <math.h>\n#include <stdio.h>\n#include <string.h>\n'
+        '#include <sys/stat.h>\n#include <unistd.h>\n',
+        "output_includes")
+    anchor='static int output_repaint_timer_handler(void *data) {\n'
+    s=only(s,anchor,C_OUTPUT_FRAME_TRACE+"\n"+anchor,"output_frame_helper")
+    old='''	if (!wlr_output_commit_state(output->wlr_output, &pending)) {
+		sway_log(SWAY_ERROR, "Page-flip failed on output %s", output->wlr_output->name);
+	}
+	wlr_output_state_finish(&pending);
+'''
+    new='''	bool committed = wlr_output_commit_state(output->wlr_output, &pending);
+	if (!committed) {
+		sway_log(SWAY_ERROR, "Page-flip failed on output %s", output->wlr_output->name);
+	} else {
+		/* AFTER the actual output commit. Never count uncommitted frames. */
+		sd_ci_social_output_committed(output);
+	}
+	wlr_output_state_finish(&pending);
+'''
+    return only(s,old,new,"output_actual_commit")
+
+
 def main() -> None:
     e=os.environ
     tmp=Path(e.get("RUNNER_TEMP","/absent"))
@@ -381,7 +486,7 @@ def main() -> None:
                     ignore=shutil.ignore_patterns("__pycache__","result"),
                     dirs_exist_ok=False)
     # Source modifications are made ONLY under private disposable CI temp.
-    for path,fn in ((MOVE,patch_move),(CURSOR,patch_cursor),(RESIZE,patch_resize)):
+    for path,fn in ((MOVE,patch_move),(CURSOR,patch_cursor),(RESIZE,patch_resize),(OUTPUT,patch_output)):
         f=dest/path
         if f.is_symlink() or not f.is_file() or f.stat().st_size>250000:
             raise RuntimeError("CI_SOCIAL_NATIVE_PATCH_DISALLOWED_PATH "+path)
@@ -393,11 +498,11 @@ def main() -> None:
     check=subprocess.run(["git","-C",str(dest),"status","--short"],
                          capture_output=True,text=True,check=True)
     lines=[x for x in check.stdout.splitlines() if x.strip()]
-    expected={" M "+MOVE," M "+CURSOR," M "+RESIZE}
+    expected={" M "+MOVE," M "+CURSOR," M "+RESIZE," M "+OUTPUT}
     if set(lines)!=expected:
         raise RuntimeError("CI_SOCIAL_NATIVE_PATCH_UNEXPECTED_FILES "+repr(lines))
     print("SD_CI_SOCIAL_NATIVE_SOURCE_COPY isolated=1 shared_repo_untouched=1 "
-          "modified_only=move_seatop+resize_seatop+seat_cursor result=PASS",flush=True)
+          "modified_only=move_seatop+resize_seatop+seat_cursor+output_frame result=PASS",flush=True)
     print(dest,flush=True)
 
 if __name__=="__main__":

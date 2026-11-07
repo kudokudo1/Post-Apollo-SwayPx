@@ -7,6 +7,7 @@ test-only cursor event entrypoint. Only move is in scope; resize isn't yet.
 """
 from __future__ import annotations
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -180,6 +181,8 @@ def main():
     runtime.chmod(0o700)
     lease=runtime/"pair-lease.txt"
     env=dict(os.environ)
+    if env.get("STAGE_DIRECTOR_CI_SOCIAL_FRAME_TRACE") != "1":
+        raise RuntimeError("BLOCKED_SOCIAL_OUTPUT_FRAME_TRACE_NOT_CI")
     env.update({
         "XDG_RUNTIME_DIR":str(runtime),"XDG_SESSION_TYPE":"wayland",
         "WLR_BACKENDS":"headless","WLR_HEADLESS_OUTPUTS":"1",
@@ -443,6 +446,48 @@ def main():
             raise RuntimeError("SD_CI_SOCIAL_MOVE_GUEST_LAYER_NOT_ENFORCED")
         if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_resize=1") != 2:
             raise RuntimeError("SD_CI_SOCIAL_RESIZE_GUEST_LAYER_NOT_ENFORCED")
+
+        # Trace from the actual output repaint/commit path in the disposable
+        # compositor, not an IPC tree snapshot taken after rendering.
+        render_lines = re.findall(r"SD_CI_SOCIAL_OUTPUT_FRAME [^\n]+", logs)
+        if len(render_lines) < 16:
+            raise RuntimeError(
+                "SD_CI_SOCIAL_OUTPUT_FRAMES_UNDER_SAMPLED "
+                + str(len(render_lines)))
+        render_ids=[]
+        render_poses=set()
+        for entry in render_lines:
+            if ("committed=1" not in entry or "rect=PASS" not in entry
+                    or "scene=PASS" not in entry
+                    or "SPLIT" in entry):
+                raise RuntimeError(
+                    "SD_CI_SOCIAL_OUTPUT_FRAME_GEOMETRY_OR_SCENE_SPLIT "
+                    + entry[:900])
+            m = re.search(
+                r"frame=(\d+) committed=1 host_id=(\d+) "
+                r"guest_id=(\d+) .*host=([\d.,-]+) "
+                r"guest=([\d.,-]+)", entry)
+            if not m:
+                raise RuntimeError(
+                    "SD_CI_SOCIAL_OUTPUT_FRAME_PARSE_FAILED "+entry[:900])
+            if (int(m.group(2)) != ids[b.APP_HOST] or
+                    int(m.group(3)) != ids[b.APP_GUEST]):
+                raise RuntimeError(
+                    "SD_CI_SOCIAL_OUTPUT_FRAME_STALE_MEMBER")
+            render_ids.append(int(m.group(1)))
+            render_poses.add(m.group(4))
+        if any(a >= b for a,b in zip(render_ids,render_ids[1:])):
+            raise RuntimeError("SD_CI_SOCIAL_OUTPUT_FRAME_IDS_NONMONOTONIC")
+        if len(render_poses) < 8:
+            raise RuntimeError(
+                "SD_CI_SOCIAL_OUTPUT_FRAME_POSES_UNDER_SAMPLED "
+                + str(len(render_poses)))
+        print("SD_CI_SOCIAL_OUTPUT_COMMIT_SUMMARY "
+              f"real_committed_frames={len(render_lines)} "
+              f"distinct_host_poses={len(render_poses)} "
+              "rect_and_scene=PASS "
+              "every_physical_display_presentation=NOT_PROVEN",
+              flush=True)
         print("SD_CI_SOCIAL_INFLIGHT_SUMMARY "
               "move_samples=4 resize_samples=4 "
               "pixel_seam_checked_each_step=1 "
