@@ -435,7 +435,7 @@ static void sd_ci_social_output_committed(struct sway_output *output) {
 	fprintf(stderr,
 		"SD_CI_SOCIAL_OUTPUT_FRAME frame=%llu committed=1 host_id=%zu guest_id=%zu "
 		"rect=%s scene=%s host=%.0f,%.0f,%.0f,%.0f "
-		"guest=%.0f,%.0f,%.0f,%.0f scene_xy=%d,%d:%d,%d\\n",
+		"guest=%.0f,%.0f,%.0f,%.0f scene_xy=%d,%d:%d,%d\n",
 		frame, h->node.id, g->node.id,
 		rect_ok ? "PASS" : "SPLIT", scene_ok ? "PASS" : "SPLIT",
 		h->current.x,h->current.y,h->current.width,h->current.height,
