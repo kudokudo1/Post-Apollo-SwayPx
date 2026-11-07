@@ -27,7 +27,7 @@ The dedicated [native move/resize disposable CI workflow](../.github/workflows/s
 
 ## WATCH OUT FOR
 
-A host-led native move/resize currently calls `container_raise_floating(host)`. The opaque test chassis may briefly cover the guest until an explicit guest focus/raise after the operation. The new in-flight screenshots intentionally *do not* repair that stacking in the test harness; they measure it. If it fails, fix the disposable CI overlay's explicit group stacking contract and re-run, without silently suppressing the screenshot assertion.
+The first in-flight CI run **failed at host-drag step 1**. Expected guest green RGB `(18, 170, 135)` at the application boundary, but the compositor actually rendered the opaque chassis purple `(48, 20, 102)`. This verifies a real layering defect in the CI fixture: native `container_raise_floating(host)` can cover the guest despite correct paired geometry. The disposable compositor overlay now puts the verified guest above the opaque chassis **when a host-led move or resize starts**, before the existing native transaction commit; guest-led operations must not repeat that correction. The same in-flight screenshot checks remain strict and the CI logs assert precisely one host-led stacking correction per operation. Production SwayPX is untouched.
 
 The current native pair lease uses CI fixture IDs/PIDs and is not production authority. The real Stage Director owner must validate group surface identities/generation, input, focus, popup clipping, cross-output bounds and native frame scheduling before shared compositor edits.
 
