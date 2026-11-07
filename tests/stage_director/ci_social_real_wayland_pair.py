@@ -145,6 +145,80 @@ def locate(swaymsg, ipc, env, cid, rect):
         f"{criteria} move absolute position {x} px {y} px")
 
 
+def verify_single_ipc_commit_contract():
+    """Prove the current Sway handler stages commands before ONE commit.
+
+    This is a local source guard for the isolated CI test, not a
+    production group API. Each real test command packet is then observed
+    in an actual compositor session.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    source = (repo / "sway/ipc-server.c").read_text(encoding="utf-8")
+    if source.count("case IPC_COMMAND:") != 1:
+        raise RuntimeError("CI_SOCIAL_IPC_COMMAND_HANDLER_CHANGED")
+    handler = source.split("case IPC_COMMAND:", 1)[1].split(
+        "case IPC_SEND_TICK:", 1
+    )[0]
+    before = handler.find("execute_command(buf, NULL, NULL)")
+    commit = handler.find("transaction_commit_dirty();")
+    if not (before >= 0 and commit > before and
+            handler.count("transaction_commit_dirty();") == 1):
+        raise RuntimeError("CI_SOCIAL_IPC_SINGLE_COMMIT_CONTRACT_CHANGED")
+    for path in ("sway/commands.c", "sway/commands/move.c",
+                 "sway/commands/resize.c"):
+        content = (repo / path).read_text(encoding="utf-8")
+        if "transaction_commit_dirty(" in content:
+            raise RuntimeError("CI_SOCIAL_NESTED_COMMAND_COMMIT_DETECTED " + path)
+    print("SD_SOCIAL_CI_SINGLE_IPC_COMMIT source_verified=1 "
+          "execute_before_commit=1 no_nested_move_resize_commit=1",
+          flush=True)
+
+
+def locate_pair_in_one_ipc(swaymsg, ipc, env, ids, host_rect):
+    """One Sway command payload stages BOTH already-verified real windows.
+
+    A native pointer drag still uses the old single-container seatop; this
+    helper does not claim to fix that path or bind arbitrary windows.
+    """
+    if (type(ids.get(APP_HOST)) is not int or type(ids.get(APP_GUEST)) is not int
+            or ids[APP_HOST] <= 0 or ids[APP_GUEST] <= 0
+            or ids[APP_HOST] == ids[APP_GUEST]):
+        raise RuntimeError("CI_SOCIAL_BATCH_AMBIGUOUS_MEMBERS")
+    x, y, width, height = host_rect
+    gx, gy, gw, gh = guest_from_chassis(host_rect)
+    if any(type(v) is not int for v in (*host_rect, gx, gy, gw, gh)):
+        raise RuntimeError("CI_SOCIAL_BATCH_INVALID_NUMBERS")
+    if min(width, height, gw, gh) <= 0 or min(x, y, gx, gy) < 0:
+        raise RuntimeError("CI_SOCIAL_BATCH_INVALID_GEOMETRY")
+    if x + width > WIDTH or y + height > HEIGHT:
+        raise RuntimeError("CI_SOCIAL_BATCH_OUTSIDE_OUTPUT")
+    tree = read_tree(swaymsg, ipc, env)
+    found = {}
+    for role, cid in ((APP_HOST, ids[APP_HOST]), (APP_GUEST, ids[APP_GUEST])):
+        matches = [n for n in walk(tree) if n.get("id") == cid]
+        if (len(matches) != 1 or matches[0].get("app_id") != role
+                or matches[0].get("shell") != "xdg_shell"
+                or matches[0].get("visible") is not True
+                or matches[0].get("floating") not in ("user_on", "auto_on")
+                or matches[0].get("border") != "none"):
+            raise RuntimeError("CI_SOCIAL_BATCH_MEMBER_NOT_VERIFIED " + role)
+        found[role] = matches[0]
+    h = f'[con_id="{ids[APP_HOST]}"]'
+    g = f'[con_id="{ids[APP_GUEST]}"]'
+    command = ("; ".join((
+        f"{h} resize set width {width} px height {height} px",
+        f"{h} move absolute position {x} px {y} px",
+        f"{g} resize set width {gw} px height {gh} px",
+        f"{g} move absolute position {gx} px {gy} px",
+        f"{g} focus",
+    )))
+    # Sway's IPC_COMMAND calls execute_command on the whole payload,
+    # then transaction_commit_dirty ONCE. No separate GET_TREE/swaymsg
+    # round trip between individual geometry changes here.
+    sway_command(swaymsg, ipc, env, command)
+    return (gx, gy, gw, gh)
+
+
 def guest_from_chassis(rect):
     x, y, w, h = rect
     return (x + RAIL + INSET, y + INSET,
@@ -234,6 +308,7 @@ def quiet_stop(proc):
 
 def main():
     sway, swaymsg, foot, grim, mesa = guard()
+    verify_single_ipc_commit_contract()
     root = Path(tempfile.mkdtemp(prefix="social-real-pair-",
                                 dir=os.environ["RUNNER_TEMP"]))
     root.chmod(0o700)
@@ -380,6 +455,43 @@ def main():
         print("SD_SOCIAL_CI_GUEST_REPLACEMENT new_container=1 "
               "host_geometry_preserved=1 result=PASS", flush=True)
 
+        # New grouped-movement preflight: one IPC payload, five commands,
+        # one Sway transaction commit. These are real surfaces, but the
+        # *native pointer seatop* still knows nothing about a group.
+        ids[APP_GUEST] = node["id"]
+        for step, outer in enumerate((
+                (350, 130, 980, 680),
+                (420, 200, 920, 650),
+                (150, 190, 1050, 640)), start=1):
+            selected = locate_pair_in_one_ipc(
+                swaymsg, ipc, env, ids, outer)
+            wait_for(swaymsg, ipc, env, APP_HOST, host.pid, outer)
+            wait_for(swaymsg, ipc, env, APP_GUEST, guest2.pid, selected)
+            wait_for(swaymsg, ipc, env, APP_OTHER, other.pid, other_rect)
+            capture(grim, root / f"batch-{step}.ppm", env, [
+                ("rail", (outer[0] + 26, outer[1] + 155), HOST_COLOR),
+                ("guest", (selected[0] + 170, selected[1] + 155),
+                 GUEST_COLOR),
+                ("unrelated", (other_rect[0] + 130,
+                               other_rect[1] + 110), OTHER_COLOR),
+                ("background", (20, 20), (0, 0, 0)),
+            ])
+            print("SD_SOCIAL_CI_BATCH_STEP "
+                  f"step={step} one_ipc=1 verified_pair=1 "
+                  "host_guest_pixels=PASS unrelated=PASS "
+                  "pointer_frame_atomic=UNVERIFIED", flush=True)
+        # Revoked member cannot be targeted as an incidental follow-up.
+        ids[APP_GUEST] = old_id
+        try:
+            locate_pair_in_one_ipc(swaymsg, ipc, env, ids, outer)
+        except RuntimeError as exc:
+            if "CI_SOCIAL_BATCH_MEMBER_NOT_VERIFIED" not in str(exc):
+                raise
+        else:
+            raise RuntimeError("CI_SOCIAL_BATCH_STALE_GUEST_ACCEPTED")
+        print("SD_SOCIAL_CI_BATCH_STALE_REJECTED "
+              "guest_lease_replay=DENIED", flush=True)
+
     except Exception:
         log.flush()
         try:
@@ -396,8 +508,10 @@ def main():
         log.close()
         shutil.rmtree(root, ignore_errors=True)
     print("SD_SOCIAL_CI_REAL_PAIR final=PASS "
-          "same_frame_rendering=NOT_IMPLEMENTED live_desktop=UNCHANGED",
-          flush=True)
+          "single_ipc_commit_geometry=PASS "
+          "native_pointer_group=NOT_IMPLEMENTED "
+          "same_frame_rendering=NOT_VERIFIED "
+          "live_desktop=UNCHANGED", flush=True)
 
 
 if __name__ == "__main__":
