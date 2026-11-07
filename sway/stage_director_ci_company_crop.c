@@ -54,6 +54,8 @@ static int ci_company_m30k_logged_profile = -1;
 static bool ci_company_m30k_fullscreen_logged;
 static int ci_company_m30k_last_host_w = -1;
 static int ci_company_m30k_last_host_h = -1;
+static bool ci_company_m30k_after_fullscreen;
+static unsigned ci_company_m30k_recovery_probes;
 
 
 static struct sway_view *ci_company_crop_actor;
@@ -157,6 +159,8 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
                 /* Real 1493x788 Canvas will not fit the 840x540 source.
                  * Hiding it is mandatory; never stretch or reveal overflow. */
                 if (!ci_company_m30k_fullscreen_logged) {
+                    ci_company_m30k_after_fullscreen = true;
+                    ci_company_m30k_recovery_probes = 0;
                     wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FULLSCREEN "
                         "source_smaller_than_canvas=1 scene_hidden=1 "
                         "authority=NONE");
@@ -228,6 +232,14 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
     }
     if (found != 1) return false;
     ci_company_active_layout = candidate;
+    if (ci_company_m30k_enabled() &&
+            ci_company_m30k_after_fullscreen &&
+            ci_company_m30k_recovery_probes++ < 7) {
+        wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_HOST_RECOVERY "
+            "validated_profile=%d target=%d,%d "
+            "source_expected=840x540 authority=NONE",
+            candidate.profile, candidate.x, candidate.y);
+    }
     return true;
 }
 
@@ -320,6 +332,8 @@ void stage_director_ci_company_crop_on_map(struct sway_view *view) {
     ci_company_m30k_fullscreen_logged = false;
     ci_company_m30k_last_host_w = -1;
     ci_company_m30k_last_host_h = -1;
+    ci_company_m30k_after_fullscreen = false;
+    ci_company_m30k_recovery_probes = 0;
     wlr_log(WLR_INFO,
         "SD_CI_COMPANY_CROP_NATIVE peer_pid=%ld source_expected=840x540 "
         "visible=600x380 selection=CI_ONLY authority=NONE",
@@ -344,19 +358,44 @@ void stage_director_ci_company_crop_on_unmap(struct sway_view *view) {
 
 static bool ci_company_crop_ready(void) {
     struct sway_view *view = ci_company_crop_actor;
-    if (!ci_exact_native_qt(view) ||
+    const bool native_ok = ci_exact_native_qt(view);
+    if (!native_ok ||
             view->geometry.width != COMPANY_TEST_SOURCE_WIDTH ||
             view->geometry.height != COMPANY_TEST_SOURCE_HEIGHT ||
-            view->geometry.x != 0 || view->geometry.y != 0)
+            view->geometry.x != 0 || view->geometry.y != 0) {
+        if (ci_company_m30k_enabled() &&
+                ci_company_m30k_after_fullscreen &&
+                ci_company_m30k_recovery_probes++ < 7) {
+            wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_RECOVERY_REFUSED "
+                "source_native_identity=%d geometry=%d,%d %dx%d",
+                native_ok,
+                view ? view->geometry.x : -1,
+                view ? view->geometry.y : -1,
+                view ? view->geometry.width : -1,
+                view ? view->geometry.height : -1);
+        }
         return false;
+    }
     if (!ci_company_m30j_enabled()) return true;
     if (!view->container || !view->container->scene_tree)
         return false;
     int x = 0, y = 0, target_x = 0, target_y = 0;
-    if (!ci_m30j_real_company_layer(&target_x, &target_y) ||
-            !wlr_scene_node_coords(&view->container->scene_tree->node,
-                &x, &y))
+    const bool host_ok =
+        ci_m30j_real_company_layer(&target_x, &target_y);
+    const bool scene_ok =
+        wlr_scene_node_coords(&view->container->scene_tree->node,
+            &x, &y);
+    if (!host_ok || !scene_ok) {
+        if (ci_company_m30k_enabled() &&
+                ci_company_m30k_after_fullscreen &&
+                ci_company_m30k_recovery_probes++ < 7) {
+            wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_RECOVERY_REFUSED "
+                "host_identity=%d scene_coords=%d target=%d,%d "
+                "actor_position=%d,%d",
+                host_ok, scene_ok, target_x, target_y, x, y);
+        }
         return false;
+    }
     /* M30k is allowed to re-place the SAME verified XDG source after the
      * real Quickshell host has a newly validated geometry. Until that
      * happens, the compositor keeps the actor hidden. */
@@ -410,6 +449,8 @@ static bool ci_company_crop_revalidate_or_hide(const char *phase) {
                     ci_company_active_layout.profile) {
                 ci_company_m30k_logged_profile =
                     ci_company_active_layout.profile;
+                if (ci_company_active_layout.profile == 1)
+                    ci_company_m30k_after_fullscreen = false;
                 wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FOLLOW "
                     "profile=%d crop=%dx%d target=%d,%d "
                     "same_native_root=1 scene=CI_ONLY authority=NONE",
