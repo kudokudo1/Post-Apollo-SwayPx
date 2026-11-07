@@ -9,6 +9,9 @@
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+#include "sway/stage_director_ci_company_crop.h"
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
@@ -1286,6 +1289,9 @@ static void transaction_progress(void) {
 	}
 	transaction_apply(server.queued_transaction);
 	arrange_root(root);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+	stage_director_ci_company_crop_post_layout();
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe_post_layout();
 #endif
