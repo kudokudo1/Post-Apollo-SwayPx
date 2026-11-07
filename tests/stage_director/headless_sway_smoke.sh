@@ -206,6 +206,18 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_OVERLAY:-}" == 1 ]]; then
   python3 -B tests/stage_director/ci_company_overlay_prototype.py
 fi
 
+# M30g: CI-only real Qt source > visible viewport compositor crop proof.
+# Uses exact same private Wayland socket; never the operator desktop.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30G_CROP_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_source_crop.py
+fi
+
 kill -TERM "$child"
 for _ in {1..40}; do
   if ! kill -0 "$child" 2>/dev/null; then

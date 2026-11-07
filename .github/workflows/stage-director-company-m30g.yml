@@ -1,0 +1,152 @@
+name: Stage Director M30g true native Qt source crop and compositor pixel proof
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30f-visible-overlay-prototype-20261107
+    paths:
+      - 'sway/stage_director_ci_company_crop.c'
+      - 'include/sway/stage_director_ci_company_crop.h'
+      - 'sway/meson.build'
+      - 'sway/tree/view.c'
+      - 'sway/desktop/transaction.c'
+      - 'sway/desktop/output.c'
+      - 'meson_options.txt'
+      - 'meson.build'
+      - 'tests/stage_director/ci_company_qt_wayland_probe.cpp'
+      - 'tests/stage_director/ci_company_source_crop.py'
+      - 'tests/stage_director/ci_company_crop_compositor.nix'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30g.yml'
+      - 'docs/stage-director-company-m30g-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Gate on isolated test-only C, Qt paint and screenshot source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          s=Path("sway/stage_director_ci_company_crop.c").read_text()
+          p=Path("tests/stage_director/ci_company_source_crop.py").read_text()
+          qt=Path("tests/stage_director/ci_company_qt_wayland_probe.cpp").read_text()
+          x=Path("meson_options.txt").read_text()
+          n=Path("tests/stage_director/ci_company_crop_compositor.nix").read_text()
+          ast.parse(p)
+          assert "sd-ci-company-crop-probe', type: 'boolean', value: false" in x
+          assert "-Dsd-ci-company-crop-probe=true" in n
+          assert 'ci_exact_native_qt' in s and 'wl_client_get_credentials' in s
+          assert 'stage_director_read_linux_process' in s
+          assert 'wlr_scene_subsurface_tree_set_clip' in s
+          assert 'wlr_scene_buffer_set_dest_size' in s
+          assert 'ci_company_crop_actor = NULL' in s
+          assert 'SD_CI_COMPANY_CROP_FRAME' in s
+          assert 'source=840x540' in p and 'orange_overflow=' in p
+          assert 'QWidget overflowRight(&window)' in qt
+          assert 'overflowBottom.setGeometry(0, 380, 840, 160)' in qt
+          assert 'setGeometry(600, 0, 240, 540)' in qt
+          assert 'source_geometry_preserved=840x540' in p
+          assert 'pointer_delivery=NOT_TESTED' in p
+          assert 'maplibre=NOT_RUN' in p
+          assert 'BLOCKED_M30G_CROP_OUTSIDE_DISPOSABLE_CI' in Path(
+              'tests/stage_director/headless_sway_smoke.sh').read_text()
+          for fp in ('sway/stage_director_company_vector_protocol.c',
+                     'sway/stage_director_company_digest.c'):
+              assert 'SD_CI_COMPANY_CROP_FRAME' not in Path(fp).read_text()
+          print("M30g: isolated source cropping TEST ONLY; "
+                "normal native Company authority unchanged PASS")
+          PY
+
+  native-crop-actual-pixels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build normal SwayPX and prohibit CI crop selector from shipping
+        shell: bash
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$prod/bin/sway"; then
+            echo 'FAIL Company crop selector included in production build' >&2
+            exit 1
+          fi
+          echo 'SD_M30G_PRODUCTION_COMPOSITOR_CROP_ABSENT PASS'
+      - name: Build dedicated disposable Company crop compositor
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_crop_compositor.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$ci/bin/sway"
+          test -x "$ci/bin/swaymsg"
+          grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$ci/bin/sway"
+          echo "SD_M30G_COMPOSITOR=$ci/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build Qt Wayland actual oversize cyan-plus-orange native paint client
+        shell: bash
+        run: |
+          set -euo pipefail
+          qt="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_qt_wayland_probe.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$qt/bin/sd-company-qt-wayland-probe"
+          echo "STAGE_DIRECTOR_TEST_QT_COMPANY_WINDOW=$qt/bin/sd-company-qt-wayland-probe" >> "$GITHUB_ENV"
+      - name: Prepare pinned Mesa software render drivers and screenshot client
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Verify actual pixels of oversized Qt 840x540 source cropped to 600x380
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_CROP: '1'
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30G_COMPOSITOR"
+      - name: Retain all four actual compositor pixel screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30g-qt-actual-source-crop-pixels
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30g-*.ppm
+      - name: Do not confuse source clip test with real embedded Company MapLibre
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Company M30g actual native Qt source clipping'
+            echo 'The native Qt source stays 840x540, while the CI compositor crops'
+            echo 'its source/destination to 600x380 without revealing orange overflow.'
+            echo 'This is a synthetic Qt XDG window with a synthetic Company frame.'
+            echo 'No user Quickshell, real MapLibre Qt v3, production renderer permissions,'
+            echo 'direct pointer/keyboard, popup or host selection has been tested.'
+          } >> "$GITHUB_STEP_SUMMARY"

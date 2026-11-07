@@ -286,6 +286,9 @@ sway_sources = files(
 if get_option('sd-ci-news-scene-probe')
 	sway_sources += 'stage_director_ci_scene_probe.c'
 endif
+if get_option('sd-ci-company-crop-probe')
+	sway_sources += 'stage_director_ci_company_crop.c'
+endif
 
 sway_deps = [
 	cairo,

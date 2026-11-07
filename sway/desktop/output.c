@@ -38,6 +38,9 @@
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+#include "sway/stage_director_ci_company_crop.h"
+#endif
 #include "sway/tree/view.h"
 #include "sway/tree/workspace.h"
 
@@ -381,6 +384,9 @@ static int output_repaint_timer_handler(void *data) {
 	}
 
 	output_configure_scene(output, &root->root_scene->tree.node, false, NULL);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+	stage_director_ci_company_crop_pre_frame();
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* CI-only: source-verify and clip a browser before the renderer can
 	 * build or commit its next output state. Production omits this hook. */
