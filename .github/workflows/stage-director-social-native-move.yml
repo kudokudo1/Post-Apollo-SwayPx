@@ -21,6 +21,7 @@ jobs:
     env:
       STAGE_DIRECTOR_CI_SOCIAL_REAL_PAIR: "1"
       STAGE_DIRECTOR_CI_SOCIAL_NATIVE_MOVE: "1"
+      STAGE_DIRECTOR_CI_SOCIAL_FRAME_TRACE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,12 +35,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B tests/stage_director/ci_social_native_move_overlay.py
-          # The canonical checkout MUST be clean. Only three C files may
+          # The canonical checkout MUST be clean. Only four C files may
           # have changed inside the private temporary *copy*.
           test -z "$(git status --porcelain)"
           temp_src="$RUNNER_TEMP/sd-ci-social-native-move-src"
           test -d "$temp_src/.git"
-          test "$(git -C "$temp_src" diff --name-only | wc -l)" -eq 3
+          test "$(git -C "$temp_src" diff --name-only | wc -l)" -eq 4
       - name: Compile disposable native SwayPX and pinned Wayland clients
         run: |
           set -euo pipefail
