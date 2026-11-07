@@ -72,6 +72,15 @@ stage_director_company_vector_protocol_executable_evidence(
 	const struct stage_director_company_native_actor *actor,
 	const struct stage_director_company_lineage_result *lineage);
 
+/* M30a compiled, source-pinned manifest match: diagnostic only.
+ * No expected digest is supplied by a Wayland/QML client. */
+struct stage_director_company_digest_result;
+struct stage_director_company_digest_result
+stage_director_company_vector_protocol_digest_evidence(
+	struct wl_client *selected_host_client,
+	const struct stage_director_company_native_actor *actor,
+	const struct stage_director_company_lineage_result *lineage);
+
 void stage_director_company_vector_protocol_revoke(void);
 void stage_director_company_vector_protocol_finish(void);
 

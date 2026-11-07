@@ -1,0 +1,94 @@
+name: Stage Director M30a Company source-pinned ELF digest evidence
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_digest.h'
+      - 'sway/stage_director_company_digest.c'
+      - 'tests/stage_director/test_company_digest.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - '.github/workflows/stage-director-company-m30a.yml'
+      - 'docs/stage-director-company-m30a-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sha256-and-real-child:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: SHA-256 known vectors and real kernel child digest negative matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_company_executable.c \
+            sway/stage_director_company_digest.c \
+            tests/stage_director/test_company_digest.c \
+            -o "$RUNNER_TEMP/company-m30a-digest"
+          "$RUNNER_TEMP/company-m30a-digest"
+      - name: Preserve M29 real Linux executable-inode regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_company_executable.c \
+            tests/stage_director/test_company_executable.c \
+            -o "$RUNNER_TEMP/company-m29-executable"
+          "$RUNNER_TEMP/company-m29-executable"
+      - name: Verify production remains unpinned and no scene authority exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source = Path('sway/stage_director_company_digest.c').read_text()
+          hdr = Path('include/sway/stage_director_company_digest.h').read_text()
+          bridge = Path('sway/stage_director_company_vector_protocol.c').read_text()
+          view = Path('sway/stage_director.c').read_text()
+          meson = Path('sway/meson.build').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in source
+          assert 'stage_director_company_digest_check_system_home(&birth_held)' in bridge
+          assert 'stage_director_company_vector_protocol_birth_actor_candidate(' in bridge
+          assert 'stage_director_company_digest.c' in meson
+          assert '[stage-director][COMPANY_M30A][DIGEST]' in view
+          assert 'SD_COMPANY_DIGEST_PIN_MATCH_CANDIDATE' in hdr
+          for token in ('wlr_scene_node_set_', 'wlr_seat_', 'wl_global_create(',
+                        'posix_spawn(', 'execve(', 'system(', 'getenv(',
+                        'can_render = true', 'can_clip = true',
+                        'can_pair_actor = true', 'executable_approved = true'):
+              assert token not in source, token
+          print('M30a: source-side pin UNSET; read-only content evidence; no actor/scene/seat permission')
+          PY
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary SwayPX without desktop activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M30a built. No Fedora installation or compositor restart."
