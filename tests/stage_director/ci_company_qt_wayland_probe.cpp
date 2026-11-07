@@ -28,7 +28,8 @@ public:
     explicit InputSpy(const char *name) : name_(name) {}
 
     bool eventFilter(QObject *object, QEvent *event) override {
-        if (!qobject_cast<QWidget *>(object)) {
+        QWidget *widget = qobject_cast<QWidget *>(object);
+        if (!widget) {
             return QObject::eventFilter(object, event);
         }
         const char *type = nullptr;
@@ -55,10 +56,15 @@ public:
             ly = qRound(mouse->position().y());
             held = static_cast<int>(mouse->buttons());
         }
+        /* QtWayland globalPosition() can be local on compositors because
+         * Wayland clients do not know global window placement. Emit the
+         * root-widget position; Sway IPC provides the compositor origin. */
+        const QPoint root = widget->mapTo(widget->window(), QPoint(lx, ly));
         std::fprintf(stdout,
             "SD_CI_COMPANY_QT_INPUT target=%s event=%s "
-            "global=%d,%d local=%d,%d buttons=%d pid=%ld\n",
-            name_, type, gx, gy, lx, ly, held, (long)getpid());
+            "global=%d,%d local=%d,%d rootlocal=%d,%d buttons=%d pid=%ld\n",
+            name_, type, gx, gy, lx, ly, root.x(), root.y(),
+            held, (long)getpid());
         std::fflush(stdout);
         return QObject::eventFilter(object, event);
     }

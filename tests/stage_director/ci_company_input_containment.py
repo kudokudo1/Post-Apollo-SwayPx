@@ -27,6 +27,7 @@ VIEWPORT = (520, 300, 600, 380)
 EVENT = re.compile(r"SD_CI_COMPANY_QT_INPUT target=(crop|frame) "
                    r"event=(press|release|motion|wheel) "
                    r"global=(-?\d+),(-?\d+) local=(-?\d+),(-?\d+) "
+                   r"rootlocal=(-?\d+),(-?\d+) "
                    r"buttons=(\d+) pid=(\d+)")
 
 def near(x, y, pt, fuzz=5):
@@ -210,10 +211,22 @@ def main():
                 match = EVENT.search(line)
                 if match is None:
                     continue
-                target, event, x, y, lx, ly, buttons, actual_pid = match.groups()
+                (target, event, qt_global_x, qt_global_y, lx, ly,
+                 rootx, rooty, buttons, actual_pid) = match.groups()
                 if target != role or int(actual_pid) != pid:
                     raise RuntimeError("M30H_EVENT_WRONG_QT_PID_OR_TARGET " + line)
-                events.append((target, event, int(x), int(y), int(buttons)))
+                # QtWayland cannot know global window position. Compute
+                # absolute desktop coordinates from Qt's actual ROOT-WIDGET
+                # local position and Sway's independently observed XDG rect.
+                # Never treat Qt "globalPosition" as authoritative.
+                root_xy = (int(rootx), int(rooty))
+                bounds = CROP_RECT if role == "crop" else FRAME_RECT
+                if not (0 <= root_xy[0] < bounds[2] and
+                        0 <= root_xy[1] < bounds[3]):
+                    raise RuntimeError("M30H_QT_ROOT_LOCAL_OUT_OF_BOUNDS " + line)
+                desktop_x = bounds[0] + root_xy[0]
+                desktop_y = bounds[1] + root_xy[1]
+                events.append((target, event, desktop_x, desktop_y, int(buttons)))
         qt_map = [r for r in events if r[0] == "crop"]
         qt_frame = [r for r in events if r[0] == "frame"]
         if not qt_map or not qt_frame:
