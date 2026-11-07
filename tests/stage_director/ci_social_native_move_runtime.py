@@ -15,6 +15,7 @@ import tempfile
 import time
 
 import ci_social_real_wayland_pair as b
+from ci_social_streaming_seam_witness import StreamingSeamWitness
 
 def check_inflight_seam(grim, path, env, host_rect, guest_rect, label):
     """Sample actual rendered perimeter pixels while native seatop is active.
@@ -80,7 +81,7 @@ def cmd(swaymsg,ipc,env,action):
     return b.sway_command(swaymsg,ipc,env,action)
 
 def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
-                   follower_app,follower_proc,steps,witness=None):
+                   follower_app,follower_proc,steps,witness=None,stream=None,pace=0.0):
     c=f'[con_id="{leader_id}"]'
     cmd(swaymsg,ipc,env,f"{c} focus")
     leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
@@ -92,20 +93,34 @@ def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
     cmd(swaymsg,ipc,env,f"{c} focus")
     cmd(swaymsg,ipc,env,"seat - cursor ci-social-start-move 1")
     running_dx=running_dy=0
+    streaming=False
     try:
+        if stream is not None:
+            stream.start()
+            streaming=True
+            time.sleep(0.09)
         for step,(dx,dy) in enumerate(steps,start=1):
             cmd(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
             running_dx+=dx
             running_dy+=dy
             if witness is not None:
                 witness(running_dx,running_dy,step)
+            if pace:
+                time.sleep(pace)
+        if streaming:
+            time.sleep(0.09)
     finally:
-        cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
+        try:
+            if streaming:
+                stream.stop()
+        finally:
+            cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
     return running_dx,running_dy
 
 
 def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
-                     follower_app, follower_proc, steps, witness=None):
+                     follower_app, follower_proc, steps, witness=None,
+                     stream=None, pace=0.0):
     c=f'[con_id="{leader_id}"]'
     cmd(swaymsg,ipc,env,f"{c} focus")
     leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
@@ -117,7 +132,12 @@ def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
     cmd(swaymsg,ipc,env,f"{c} focus")
     cmd(swaymsg,ipc,env,"seat - cursor ci-social-start-resize 1")
     running_dx=running_dy=0
+    streaming=False
     try:
+        if stream is not None:
+            stream.start()
+            streaming=True
+            time.sleep(0.09)
         for step,(dx,dy) in enumerate(steps,start=1):
             cmd(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
             running_dx+=dx
@@ -127,11 +147,9 @@ def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
                     rect["height"]+running_dy)
             other=(b.guest_from_chassis(target)
                    if leader_app==b.APP_HOST else b.chassis_from_guest(target))
-            # Each native resize configure can wait for a real Wayland client
-            # buffer/ACK. Assert the exact intermediate native rectangles
-            # before sending the next synthetic motion command. This test
-            # demonstrates paired native correctness at paced commits, not
-            # continuous pointer-frame timing.
+            # The real Wayland clients must ACK each configured rectangle.
+            # We do NOT call this uninterrupted continuous resize: only
+            # screenshot sampling overlaps the input steps concurrently.
             b.wait_for(swaymsg,ipc,env,leader_app,leader_proc.pid,target)
             b.wait_for(swaymsg,ipc,env,follower_app,follower_proc.pid,other)
             if witness is not None:
@@ -139,11 +157,19 @@ def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
                     witness(target,other,step)
                 else:
                     witness(other,target,step)
+            if pace:
+                time.sleep(pace)
             print(f"SD_CI_SOCIAL_NATIVE_RESIZE_STEP leader={leader_app} "
                   f"step={step} settled_host_guest=1 "
                   f"leader_size={target[2]}x{target[3]}",flush=True)
+        if streaming:
+            time.sleep(0.09)
     finally:
-        cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
+        try:
+            if streaming:
+                stream.stop()
+        finally:
+            cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
     return running_dx,running_dy
 
 
@@ -331,6 +357,62 @@ def main():
               "peer_resize_before_commit=1 exact_geometry=PASS pixels=PASS",
               flush=True)
 
+        # Bounded streaming witness: screenshots are captured by another
+        # process while the real native move/resize seatop receives several
+        # pointer steps. Pair geometry is read before/after each screenshot;
+        # changed captures are marked transitions, not visual passes.
+        def stream(name):
+            return StreamingSeamWitness(
+                name=name,swaymsg=swaymsg,ipc=ipc,grim=grim,env=env,
+                root=runtime,ids=ids,
+                pids={b.APP_HOST:host.pid,b.APP_GUEST:guest.pid,
+                      b.APP_OTHER:other.pid},
+                unrelated_rect=unrelated_box,
+                min_frames=4,min_positions=3)
+
+        dx,dy=ci_leased_move(
+            swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,host,
+            b.APP_GUEST,guest,[(12,4)]*12,
+            stream=stream("host-move"),pace=0.065)
+        host_box=(host_box[0]+dx,host_box[1]+dy,*host_box[2:])
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+
+        dx,dy=ci_leased_move(
+            swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,guest,
+            b.APP_HOST,host,[(-6,3)]*12,
+            stream=stream("guest-move"),pace=0.065)
+        host_box=(host_box[0]+dx,host_box[1]+dy,*host_box[2:])
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+
+        dw,dh=ci_leased_resize(
+            swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,host,
+            b.APP_GUEST,guest,[(6,3)]*10,
+            stream=stream("host-resize"),pace=0.065)
+        host_box=(host_box[0],host_box[1],
+                  host_box[2]+dw,host_box[3]+dh)
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+
+        dw,dh=ci_leased_resize(
+            swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,guest,
+            b.APP_HOST,host,[(-4,-2)]*10,
+            stream=stream("guest-resize"),pace=0.065)
+        host_box=(host_box[0],host_box[1],
+                  host_box[2]+dw,host_box[3]+dh)
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+        exact(swaymsg,ipc,env,b.APP_OTHER,other.pid,unrelated_box)
+        print("SD_CI_SOCIAL_STREAMING_SUMMARY "
+              "directions=4 expected_poses_per_mode=10 "
+              "concurrent_presentation_sampling=1 "
+              "all_presented_frames=NOT_OBSERVED",flush=True)
+
         # Negative: a stale guest PID must not attach the host to another
         # window, even though the host itself may still be dragged.
         lease.write_text(f"{ids[b.APP_HOST]} {ids[b.APP_GUEST]} "
@@ -355,9 +437,11 @@ def main():
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_STALE_NOT_DENIED")
         if logs.count("SD_CI_SOCIAL_NATIVE_RESIZE_BEFORE_COMMIT") < 4:
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_RESIZE_NOT_PRECOMMITTED")
-        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_move=1") != 1:
+        # One host-leading correction in the paused witness and one in
+        # the concurrent stream. Guest-leading work must not raise twice.
+        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_move=1") != 2:
             raise RuntimeError("SD_CI_SOCIAL_MOVE_GUEST_LAYER_NOT_ENFORCED")
-        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_resize=1") != 1:
+        if logs.count("SD_CI_SOCIAL_GUEST_STACKING during_resize=1") != 2:
             raise RuntimeError("SD_CI_SOCIAL_RESIZE_GUEST_LAYER_NOT_ENFORCED")
         print("SD_CI_SOCIAL_INFLIGHT_SUMMARY "
               "move_samples=4 resize_samples=4 "
