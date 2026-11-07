@@ -36,7 +36,15 @@ ShellRoot {
             " map_row=" + proof.formatRect(company.ciM30iMapRowRect) +
             " canvas_raw=" + proof.formatRect(company.ciM30iCanvasRawRect) +
             " canvas_in_coverage=" +
-              proof.formatRect(company.ciM30iCanvasCoverageRect));
+              proof.formatRect(company.ciM30iCanvasCoverageRect) +
+            " surface_raw=" +
+              proof.formatRect(company.ciM30iMapSurfaceRawRect) +
+            " surface_in_coverage=" +
+              proof.formatRect(company.ciM30iMapSurfaceInCoverage) +
+            " canvas_in_surface=" +
+              proof.formatRect(company.ciM30iCanvasInSurface) +
+            " map_row_in_coverage=" +
+              proof.formatRect(company.ciM30iMapRowInCoverage));
         const host = company.activeVectorFrameInHostRect;
         const candidate = company.activeVectorViewportRect;
         const canvas = company.ciM30iActualCanvasHostRect;

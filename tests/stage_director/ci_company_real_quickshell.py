@@ -51,6 +51,20 @@ INJECT_COVERAGE = '''    // M30i disposable CI-copy observability ONLY; not inst
         Qt.rect(mapRow.x, mapRow.y, mapRow.width, mapRow.height)
     readonly property rect ciM30iCanvasRawRect:
         Qt.rect(mapCanvas.x, mapCanvas.y, mapCanvas.width, mapCanvas.height)
+    readonly property rect ciM30iMapSurfaceRawRect:
+        Qt.rect(mapSurface.x, mapSurface.y, mapSurface.width, mapSurface.height)
+    readonly property rect ciM30iMapSurfaceInRootRect: {
+        const at = mapSurface.mapToItem(root, 0, 0);
+        return Qt.rect(at.x, at.y, mapSurface.width, mapSurface.height);
+    }
+    readonly property rect ciM30iCanvasInSurfaceRect: {
+        const at = mapCanvas.mapToItem(mapSurface, 0, 0);
+        return Qt.rect(at.x, at.y, mapCanvas.width, mapCanvas.height);
+    }
+    readonly property rect ciM30iMapRowInRootRect: {
+        const at = mapRow.mapToItem(root, 0, 0);
+        return Qt.rect(at.x, at.y, mapRow.width, mapRow.height);
+    }
     readonly property rect ciM30iActualCanvasRect: {
         if (!mapCanvas.visible || mapCanvas.width <= 0 ||
                 mapCanvas.height <= 0)
@@ -80,6 +94,19 @@ INJECT_NETWORK = '''    // CI-copy only: read native map canvas geometry without
     readonly property rect ciM30iCanvasRawRect:
         coverageLoader.item ? coverageLoader.item.ciM30iCanvasRawRect :
             Qt.rect(0,0,0,0)
+    readonly property rect ciM30iMapSurfaceRawRect:
+        coverageLoader.item ? coverageLoader.item.ciM30iMapSurfaceRawRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iMapSurfaceInCoverage:
+        coverageLoader.item ? coverageLoader.item.ciM30iMapSurfaceInRootRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iCanvasInSurface:
+        coverageLoader.item ? coverageLoader.item.ciM30iCanvasInSurfaceRect :
+            Qt.rect(0,0,0,0)
+    readonly property rect ciM30iMapRowInCoverage:
+        coverageLoader.item ? coverageLoader.item.ciM30iMapRowInRootRect :
+            Qt.rect(0,0,0,0)
+
 
     readonly property rect ciM30iFrameRawRect:
         Qt.rect(companyFrame.x, companyFrame.y,
