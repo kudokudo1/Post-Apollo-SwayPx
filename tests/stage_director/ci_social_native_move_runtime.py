@@ -17,6 +17,7 @@ import time
 
 import ci_social_real_wayland_pair as b
 from ci_social_streaming_seam_witness import StreamingSeamWitness
+from ci_social_native_unmap_lifecycle import verify_unmap_lifecycle
 
 def check_inflight_seam(grim, path, env, host_rect, guest_rect, label):
     """Sample actual rendered perimeter pixels while native seatop is active.
@@ -492,6 +493,15 @@ def main():
               "move_samples=4 resize_samples=4 "
               "pixel_seam_checked_each_step=1 "
               "all_compositor_frames=NOT_VERIFIED",flush=True)
+        print("SD_CI_SOCIAL_NATIVE_BASELINE final=PASS "
+              "native_seatop=1 output_commit_trace=PASS "
+              "streaming_pixels=PASS",flush=True)
+        verify_unmap_lifecycle(
+            swaymsg=swaymsg,ipc=ipc,env=env,foot=foot,grim=grim,
+            runtime=runtime,lease=lease,host=host,guest=guest,
+            other=other,actors=actors,ids=ids,host_box=host_box,
+            guest_box=guest_box,unrelated_box=unrelated_box,log=log,
+            move_fn=ci_leased_move,resize_fn=ci_leased_resize)
         print("SD_CI_SOCIAL_NATIVE_MOVE final=PASS "
               "native_seatop=1 same_precommit=1 "
               "real_physical_pointer=NOT_TESTED "
