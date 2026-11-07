@@ -206,6 +206,25 @@ def main():
                 }
             });
         m30lTimer->start();
+        auto presented = std::make_shared<int>(0);
+        QObject::connect(window, &QQuickWindow::frameSwapped, window,
+            [presented]() {
+                if (++(*presented) <= 4) {
+                    std::fprintf(stdout,
+                        "SD_COMPANY_M30L_FRAME_SWAPPED count=%d\\n",
+                        *presented);
+                    std::fflush(stdout);
+                }
+            });
+        QObject::connect(window, &QQuickWindow::sceneGraphError, window,
+            [](QQuickWindow::SceneGraphError error,
+               const QString &message) {
+                const QByteArray detail = message.toUtf8();
+                std::fprintf(stderr,
+                    "SD_COMPANY_M30L_SCENEGRAPH_ERROR code=%d detail=%s\\n",
+                    int(error), detail.constData());
+                std::fflush(stderr);
+            });
     }
     std::fprintf(stdout, "SD_CI_COMPANY_QT_QPA_READY case=crop "
         "pid=%ld wayland_display=1 maplibre_v3_source=1\\n",
@@ -240,6 +259,7 @@ def main():
           " native_input_witness=CI_ONLY"
           " qml_startup_trace=CI_ONLY"
           " real_qml_property_poll=CI_ONLY"
+          " real_swap_observation=CI_ONLY"
           " default_offline=1"
           " no_owner_records=1 PASS", flush=True)
 
