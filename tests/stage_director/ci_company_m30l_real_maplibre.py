@@ -212,7 +212,10 @@ def main():
               flush=True)
         pointer = subprocess.Popen([str(pointer_bin)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, bufsize=1, env=e)
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+            # Reuse M30h's existing exact CI pointer safety gate for this
+            # M30l-only child. Do not enable synthetic crop/input in SwayPX.
+            env={**e, "STAGE_DIRECTOR_CI_COMPANY_INPUT": "1"})
         assert pointer.stdout is not None
         read_until(pointer.stdout,
                    "SD_CI_COMPANY_POINTER_READY real_zwlr_virtual_pointer=1")
