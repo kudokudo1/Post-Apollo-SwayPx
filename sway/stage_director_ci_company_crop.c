@@ -305,7 +305,9 @@ static bool ci_exact_native_qt(struct sway_view *view) {
          strcmp(base + 1, ".company-vector-probe-wrapped") == 0) &&
         strstr(exe,
           "-stage-director-company-m30l-native-maplibre-probe-3.0.0-ci1/") != NULL;
-    if (real_maplibre) {
+    static pid_t last_reported_m30m_pid = -1;
+    if (real_maplibre && last_reported_m30m_pid != pid) {
+        last_reported_m30m_pid = pid;
         wlr_log(WLR_INFO,
             "SD_CI_COMPANY_M30M_REAL_MAPLIBRE_SELECTED "
             "actual_proc_exe=1 exact_nix_derivation_name=1 "
