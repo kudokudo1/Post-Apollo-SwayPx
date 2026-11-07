@@ -278,6 +278,11 @@ bool server_init(struct sway_server *server) {
 	stage_director_weather_watch_protocol_init(server->wl_display);
 	/* Does not publish a Company global or select a client. */
 	stage_director_company_vector_protocol_init(server->wl_display);
+	/* M30c: internal compositor callbacks, never a Wayland client request.
+	 * No desktop embedding, actor lease or input authority. */
+	stage_director_company_vector_protocol_set_lifecycle_observers(
+		stage_director_company_m30c_birth_ready,
+		stage_director_company_m30c_selection_revoked);
 	wl_display_set_default_max_buffer_size(server->wl_display, 1024 * 1024);
 
 	if (!wlr_fixes_create(server->wl_display, 1)) {

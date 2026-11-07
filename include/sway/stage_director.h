@@ -81,6 +81,12 @@ stage_director_news_watch_report_viewport(
 void stage_director_news_watch_viewport_resource_destroyed(
 	struct wl_resource *resource);
 
+/* M30c: internal native callback when Company v2 kernel birth receipt is
+ * accepted. Read-only scan of a bounded, compositor-owned mapped XDG list.
+ * On selection revoke, clear all opaque view pointers and destroy listeners. */
+void stage_director_company_m30c_birth_ready(void);
+void stage_director_company_m30c_selection_revoked(void);
+
 /* Production compositor-side WATCH candidate bookkeeping.
  * Called only after actual paired-client + request-epoch checks in native
  * protocol handler. First accepted WATCH reserves one native candidate.

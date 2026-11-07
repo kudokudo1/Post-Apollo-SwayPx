@@ -38,6 +38,10 @@ static void *native_host_context;
 static stage_director_company_vector_native_host_probe birth_native_host_probe;
 static void *birth_native_host_context;
 static struct stage_director_company_birth_pidfd birth_held;
+/* Only compositor startup registers these private lifecycle callbacks.
+ * Standalone Wayland protocol tests leave them NULL. */
+static void (*m30c_birth_observer)(void);
+static void (*m30c_revoke_observer)(void);
 
 struct company_binding {
 	uint64_t epoch;
@@ -229,6 +233,13 @@ static void handle_report_child_pidfd(struct wl_client *client,
 		birth = stage_director_company_birth_pidfd_record(
 			&birth_held, incoming_fd, claimed_pid, &intent, &host,
 			stage_director_read_linux_process, NULL);
+	}
+	/* The accepted kernel birth can arrive AFTER the native XDG map. The
+	 * compositor-owned inventory is reobserved synchronously, while
+	 * birth_held still owns the real kernel pidfd. No scene/input rights. */
+	if (birth.status == SD_COMPANY_BIRTH_HELD_CANDIDATE_ONLY &&
+			m30c_birth_observer) {
+		m30c_birth_observer();
 	}
 	/* libwayland-server delivers an owned fd with the request. Always
 	 * close it, even on denial. M28a holds only a separate CLOEXEC dup. */
@@ -443,7 +454,70 @@ stage_director_company_vector_protocol_digest_evidence(
 	return stage_director_company_digest_check_system_home(&birth_held);
 }
 
+
+/* M30c reads current M24 selection and M27 launch-intent only. A candidate
+ * from an old binding/host cannot be inherited by a later selected client. */
+bool stage_director_company_vector_protocol_current_host_intent(
+		struct stage_director_company_native_host *host,
+		struct stage_director_company_intent_snapshot *intent) {
+	if (!host || !intent || !selected_client || !company_global ||
+			!selection_current(selected_client) ||
+			!birth_native_host_probe) return false;
+	*host = (struct stage_director_company_native_host){0};
+	*intent = (struct stage_director_company_intent_snapshot){0};
+	if (!stage_director_company_vector_protocol_intent_snapshot(
+				selected_client, intent) ||
+			!birth_native_host_probe(birth_native_host_context, host) ||
+			!host->candidate ||
+			host->state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+			host->native_layer_role_ref != (uintptr_t)native_role ||
+			host->native_surface_ref != (uintptr_t)native_host_surface ||
+			host->native_client_ref != (uintptr_t)selected_client ||
+			intent->native_host_client_ref != host->native_client_ref) {
+		return false;
+	}
+	return true;
+}
+
+/* A borrowed pointer is valid only during this synchronous server event;
+ * M30c checks its kernel pidfd/process again before using it. There is no
+ * public protocol request for these compositor-only references. */
+bool stage_director_company_vector_protocol_current_birth(
+		const struct stage_director_company_birth_pidfd **held,
+		struct wl_resource **role,
+		struct wl_resource **surface) {
+	struct stage_director_company_native_host host = {0};
+	struct stage_director_company_intent_snapshot intent = {0};
+	if (!held || !role || !surface ||
+			!stage_director_company_vector_protocol_current_host_intent(
+				&host, &intent) ||
+			!birth_held.held ||
+			intent.selection_epoch != birth_held.selection_epoch ||
+			intent.sequence != birth_held.intent_sequence ||
+			intent.host_revision != birth_held.host_revision ||
+			intent.mode != birth_held.mode ||
+			host.native_client_ref != birth_held.host_native_client_ref ||
+			host.pid != birth_held.host_pid ||
+			host.uid != birth_held.uid ||
+			host.start_ticks != birth_held.host_start_ticks) {
+		return false;
+	}
+	*held = &birth_held;
+	*role = native_role;
+	*surface = native_host_surface;
+	return true;
+}
+void stage_director_company_vector_protocol_set_lifecycle_observers(
+		void (*birth_observer)(void), void (*revoke_observer)(void)) {
+	/* Internal server setup, never a Wayland/IPC operation. */
+	m30c_birth_observer = birth_observer;
+	m30c_revoke_observer = revoke_observer;
+}
+
 void stage_director_company_vector_protocol_revoke(void) {
+	/* Native teardown revokes M30's listener-backed ledger and mapped view
+	 * pointers BEFORE invalidating the selected native role/host. */
+	if (m30c_revoke_observer) m30c_revoke_observer();
 	if (company_global) {
 		wl_global_destroy(company_global);
 		company_global = NULL;
@@ -473,5 +547,7 @@ void stage_director_company_vector_protocol_revoke(void) {
 
 void stage_director_company_vector_protocol_finish(void) {
 	stage_director_company_vector_protocol_revoke();
+	m30c_birth_observer = NULL;
+	m30c_revoke_observer = NULL;
 	company_display = NULL;
 }

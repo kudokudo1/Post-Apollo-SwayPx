@@ -76,7 +76,13 @@ jobs:
                         "stage_director_company_reconcile_unmap("):
               assert piece in c, piece
           assert "'stage_director_company_reconcile.c'," in meson
-          assert "stage_director_company_reconcile_try(" not in stage
+          # M30b originally prohibited any production call site. M30c is
+          # the subsequent, independently checked native-only wiring layer.
+          if "stage_director_company_reconcile_try(" in stage:
+              assert "stage_director_company_vector_protocol_current_birth(" in stage
+              assert "stage_director_company_mapped_slot_same_actor(" in stage
+              assert "stage_director_company_m30c_selection_revoked(" in stage
+              assert "company_m30c_forget_mapped_view(view);" in stage
           assert "SD_COMPANY_RECONCILE_M21_CANDIDATE_ONLY" in h
           for forbidden in ("wl_global_create(", "wlr_scene_node_set_",
                             "wlr_seat_", "posix_spawn(", "fork(", "execve(",

@@ -1,0 +1,122 @@
+name: Stage Director M30c Company real compositor map/receipt wiring
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30b-reconcile-20261106
+    paths:
+      - 'include/sway/stage_director_company_mapped_inventory.h'
+      - 'sway/stage_director_company_mapped_inventory.c'
+      - 'tests/stage_director/test_company_mapped_inventory.c'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director.c'
+      - 'include/sway/stage_director.h'
+      - 'sway/server.c'
+      - 'sway/meson.build'
+      - '.github/workflows/stage-director-company-m30c.yml'
+      - 'docs/stage-director-company-m30c-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-mapped-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install real Wayland server headers in disposable CI
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y libwayland-dev pkg-config
+      - name: Native inventory duplicate/spoof/resource-destruction test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_company_mapped_inventory.c \
+            tests/stage_director/test_company_mapped_inventory.c \
+            -o "$RUNNER_TEMP/company-m30c-inventory" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/company-m30c-inventory"
+      - name: Preserve M30b real pidfd/native ordering and M21 revocation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/stage_director_process_linux.c \
+            sway/stage_director_company_birth_pidfd.c \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_map.c \
+            sway/stage_director_company_native_peers.c \
+            sway/stage_director_company_candidate_session.c \
+            sway/stage_director_company_reconcile.c \
+            tests/stage_director/test_company_reconcile.c \
+            -o "$RUNNER_TEMP/company-m30b-reconcile" \
+            $(pkg-config --libs wayland-server)
+          "$RUNNER_TEMP/company-m30b-reconcile"
+      - name: Inspect actual server hooks and no authority escalation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          server = Path('sway/server.c').read_text()
+          protocol = Path('sway/stage_director_company_vector_protocol.c').read_text()
+          stage = Path('sway/stage_director.c').read_text()
+          registry = Path('sway/stage_director_company_mapped_inventory.c').read_text()
+          meson = Path('sway/meson.build').read_text()
+          assert 'stage_director_company_vector_protocol_set_lifecycle_observers(' in server
+          assert 'stage_director_company_m30c_birth_ready,' in server
+          assert 'stage_director_company_m30c_selection_revoked);' in server
+          assert 'birth.status == SD_COMPANY_BIRTH_HELD_CANDIDATE_ONLY &&' in protocol
+          assert 'm30c_birth_observer();' in protocol
+          assert 'm30c_revoke_observer();' in protocol
+          assert 'stage_director_company_vector_protocol_current_birth(' in stage
+          assert 'stage_director_company_mapped_inventory_remember(' in stage
+          assert 'stage_director_company_mapped_inventory_forget_view(' in stage
+          assert 'company_m30c_forget_mapped_view(view);' in stage
+          assert 'stage_director_company_reconcile_birth(' in stage
+          assert 'stage_director_company_reconcile_map(' in stage
+          assert 'stage_director_company_reconcile_try(' in stage
+          assert 'stage_director_company_birth_pidfd_match_actor(' not in registry
+          assert "'stage_director_company_mapped_inventory.c'," in meson
+          # Client app-id may remain an old read-only logging filter, but the
+          # actual selection/pairing function must not read it.
+          snippet = stage.split('static void company_m30c_attempt_reconcile(void) {',1)[1].split(
+              'void stage_director_view_mapped(struct sway_view *view)',1)[0]
+          assert 'view_get_app_id(' not in snippet
+          for no in ('wlr_scene_node_set_', 'wlr_seat_', 'wl_global_create(',
+                     'posix_spawn(', 'fork(', 'execve(', 'system(',
+                     'can_render = true', 'can_clip = true',
+                     'can_accept_input = true', 'owner_verified = true'):
+              assert no not in registry, no
+          print('M30c: physical native Company selection and kernel birth only; M21 candidate, authority=NONE')
+          PY
+
+  full-swaypx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile actual native SwayPX with production event hooks, no startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "M30c compiled but not installed: no live desktop or production activation."
