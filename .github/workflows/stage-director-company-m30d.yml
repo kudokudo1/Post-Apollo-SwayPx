@@ -48,7 +48,8 @@ jobs:
           assert 'check_tree 0 0' in shell
           assert 'physically selected' in shell
           assert 'wl_display_connect(' not in qt
-          assert 'QWindow window' in qt
+          assert 'QWidget window' in qt
+          assert 'background-color: #55cfca' in qt
           assert 'QtLocation' not in qt and 'MapLibre' in qt
           print('M30d: isolated real Qt QPA XDG smoke only, NOT MapLibre runtime attestation')
           PY

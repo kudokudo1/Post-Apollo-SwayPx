@@ -1,6 +1,7 @@
+#include <QApplication>
 #include <QGuiApplication>
+#include <QWidget>
 #include <QTimer>
-#include <QWindow>
 #include <QString>
 #include <cstdio>
 #include <unistd.h>
@@ -8,12 +9,13 @@
 /*
  * Disposable native Qt/QPA XDG toplevel. Real wl_client and QtWayland,
  * not offscreen Qt, an imitated screenshot, MapLibre, or Quickshell.
+ * QWidget deliberately submits an actual painted backing-store buffer.
  * Its spoofable application ID deliberately resembles CompanyVectorProbe.
  * No private Company protocol, selection request, native fd transport,
  * network access, map rendering or scene/input authority is enabled.
  */
 int main(int argc, char **argv) {
-	QGuiApplication app(argc, argv);
+	QApplication app(argc, argv);
 	const QString which = app.arguments().size() > 1
 		? app.arguments().at(1) : QStringLiteral("one");
 	if (which != QStringLiteral("one") &&
@@ -26,7 +28,8 @@ int main(int argc, char **argv) {
 		std::fprintf(stderr, "SD_CI_COMPANY_QT_ERROR not_real_wayland_qpa\n");
 		return 65;
 	}
-	QWindow window;
+	QWidget window;
+	window.setStyleSheet(QStringLiteral("background-color: #55cfca;"));
 	const QString title = QStringLiteral("SD-CI-CompanyVectorProbe-") +
 		which;
 	window.setTitle(title);

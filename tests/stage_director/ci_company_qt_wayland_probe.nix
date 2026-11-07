@@ -15,7 +15,7 @@ in pkgs.stdenv.mkDerivation {
     $CXX -std=c++17 -O2 -Wall -Wextra -Werror -pedantic \
       ${./ci_company_qt_wayland_probe.cpp} \
       -o sd-company-qt-wayland-probe \
-      $(pkg-config --cflags --libs Qt6Gui)
+      $(pkg-config --cflags --libs Qt6Widgets)
     runHook postBuild
   '';
   installPhase = ''
