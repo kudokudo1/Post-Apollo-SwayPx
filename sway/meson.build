@@ -17,6 +17,7 @@ sway_sources = files(
 	'stage_director_company_native_peers.c',
 	'stage_director_company_native_adapter.c',
 	'stage_director_company_candidate_session.c',
+	'stage_director_company_reconcile.c',
 	'stage_director_company_lineage.c',
 	'stage_director_company_origin.c',
 	'stage_director_company_birth_pidfd.c',
