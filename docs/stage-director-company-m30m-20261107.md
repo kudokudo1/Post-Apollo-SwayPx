@@ -43,6 +43,15 @@ compact, fullscreen-hidden, standard-return and close.
   **actual 840×540 native geometry** and waits only boundedly for a
   compositor-confirmed match, never bypassing the size guard. This
   followed a red CI test where the original startup geometry was too large.
+- The next M30m CI captured genuine geographic pixels in standard and
+  tested compact source continuity and pointer input successfully. A
+  fullscreen negative-pixel check initially chose six *fixed* pixels,
+  most of which represented the shared dark background (2/6 differed).
+  The corrected check selects real cyan/blue/orange geographic pixels
+  from the standard screenshot and requires at least 90% to disappear
+  at those same global coordinates in fullscreen. The compositor's
+  fullscreen scene-hiding and zero-input gates are still separate,
+  unchanged requirements. Re-run exact-head CI before claiming success.
 - Private source diagnostics and compositor screenshots are preserved as
   short-lived CI artifacts only. The original locally reported Company hubs,
   user files, online street requests, and production actor rights are OFF.
