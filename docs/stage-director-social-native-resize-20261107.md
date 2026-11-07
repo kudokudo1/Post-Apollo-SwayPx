@@ -18,7 +18,7 @@ No production compositor C is committed or modified on the operator machine.
 
 The test-only resize seatop validates an already-paired, mapped host and guest by exact live Sway IDs and PIDs; rejects stale, unverified, mismatched-workspace identities; and calculates the follower rectangle from the leader's **native pending geometry**, with Social rail width=110 and inset=1. It mutates both pending node rectangles, including their content boxes, invokes the peer's normal `arrange_container()`, and reaches the existing `transaction_commit_dirty()` only afterward. This should produce one compositor-owned transaction for both members.
 
-The CI client then tests bottom-right native resize in both directions using genuine mapped Wayland XDG windows, exact geometry assertions, actual compositor screenshot pixels, unrelated-window immobility, existing bidirectional move tests, and stale guest lease rejection.
+The CI client then tests bottom-right native resize in both directions using genuine mapped Wayland XDG windows, exact geometry assertions, actual compositor screenshot pixels, unrelated-window immobility, existing bidirectional move tests, and stale guest lease rejection. The first native run confirmed chassis-led two-step resize and both pixel samples, but guest-led rapid two-step shrinking left the follower at the first step's dimensions. The test now verifies both real clients' exact configured rectangles **between** synthetic resize steps, preserving strict dimensions rather than loosening tolerances. That explicitly tests a paced client-ACK sequence, not continuous no-gap motion.
 
 ## VERIFY
 
