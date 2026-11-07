@@ -109,6 +109,12 @@ jobs:
               "tests/stage_director/headless_sway_smoke.sh").read_text()
           assert "SD_CI_COMPANY_M30M_REAL" not in Path(
               "sway/stage_director.c").read_text()
+          ci_scene = Path("sway/stage_director_ci_company_crop.c").read_text()
+          assert "ci_company_m30m_enabled" in ci_scene
+          assert "-stage-director-company-m30l-native-maplibre-probe-3.0.0-ci1/" in ci_scene
+          assert "SD_CI_COMPANY_M30M_REAL_MAPLIBRE_SELECTED" in ci_scene
+          assert "sd-ci-company-crop-probe=true" in Path(
+              "tests/stage_director/ci_company_crop_compositor.nix").read_text()
           print("M30m original Company + real MapLibre CI-only compositor "
                 "source and fail-closed geometry/input gates PASS")
           PY
