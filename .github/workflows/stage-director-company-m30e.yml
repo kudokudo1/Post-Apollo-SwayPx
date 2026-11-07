@@ -1,0 +1,88 @@
+name: Stage Director M30e original Company MapLibre source and M15/M29 contract
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30d-qt-qpa-headless-20261106
+    paths:
+      - 'tests/stage_director/ci_company_maplibre_source_contract.py'
+      - 'tests/stage_director/test_ci_company_maplibre_source_contract.py'
+      - '.github/workflows/stage-director-company-m30e.yml'
+      - 'docs/stage-director-company-m30e-20261106.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-real-company-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout SwayPX M30e source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exactly one reviewed version of the original Company MapLibre application
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: e3595b0035bb3d89aa87c6ba2bd1aac04a975181
+          path: company-source
+          persist-credentials: false
+      - name: Verify cross-repository Git revision and real MapLibre source safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_maplibre_source_contract.py \
+            --company company-source --sway .
+      - name: Run 13 tamper/refusal tests against copies of the real pinned Company source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -v \
+            tests/stage_director/test_ci_company_maplibre_source_contract.py
+      - name: Preserve original Company M5/M14/M15 executable and offline-mode tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B company-source/tests/company/test_company_vector_probe_m5.py
+          python3 -B company-source/tests/company/test_company_vector_fedora_m14.py
+          python3 -B company-source/tests/company/test_company_vector_host_m15.py
+      - name: Preserve original Company M28c attached real Quickshell Process PID bridge contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test company-source/tests/company/test_company_vector_attached_pidfd_m28c.test.js
+      - name: Confirm no fake final executable trust or scene permission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          src = Path('sway/stage_director_company_digest.c').read_text()
+          qml = Path('company-source/widgets/CompanyNetworkW.qml').read_text()
+          native = Path('sway/stage_director.c').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in src
+          assert 'property bool vectorBridgeOptIn: false' in qml
+          assert 'owner_verified=no scene=OFF input=OFF' in native
+          print('M30e: ORIGINAL MAPLIBRE SOURCE verified; '
+                'native ELF not built or executed; source is NOT approval; '
+                'digest=UNPINNED; actor=NONE scene=OFF input=OFF')
+          PY
+      - name: Publish precise source-only evidence boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30e // Original Company MapLibre repository source'
+            echo 'This job checks out an exact pinned source commit of the actual'
+            echo 'Post-Apollo MapLibre Qt6 application, CMake and QML, M15 host'
+            echo 'bridge, M13 launcher, optional M26/M28c QPA link and M29 expected ELF.'
+            echo 'No MapLibre v3 native library or owner-local Fedora Qt6.11'
+            echo 'binary has been reproduced, launched, hashed, approved or embedded.'
+            echo 'M30d separately verifies a real QtWayland XDG process with SwayPX.'
+            echo 'Native v2 selected-host fd round-trip, scene crop, pointer,'
+            echo 'keyboard, focus and popup containment remain unverified.'
+          } >> "$GITHUB_STEP_SUMMARY"
