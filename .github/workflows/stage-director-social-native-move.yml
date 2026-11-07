@@ -5,6 +5,7 @@ on:
     paths:
       - "tests/stage_director/ci_social_native_move_overlay.py"
       - "tests/stage_director/ci_social_native_move_runtime.py"
+      - "tests/stage_director/ci_social_native_unmap_lifecycle.py"
       - "tests/stage_director/ci_social_streaming_seam_witness.py"
       - "tests/stage_director/ci_social_native_move_udmabuf.sh"
       - ".github/workflows/stage-director-social-native-move.yml"
