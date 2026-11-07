@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "tests/stage_director/ci_social_real_wayland_pair.py"
+      - "tests/stage_director/ci_social_real_pair_udmabuf.sh"
       - ".github/workflows/stage-director-social-real-pair.yml"
       - "docs/stage-director-social-real-pair-20261107.md"
   workflow_dispatch:
@@ -47,5 +48,5 @@ jobs:
       - name: Verify real mapped windows and settled painted pixels
         run: |
           set -euo pipefail
-          python3 -B tests/stage_director/ci_social_real_wayland_pair.py
+          bash tests/stage_director/ci_social_real_pair_udmabuf.sh
           echo "No compositor group rendering, no live machine changes, no activation."
