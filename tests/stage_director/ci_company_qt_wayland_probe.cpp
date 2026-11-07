@@ -19,7 +19,9 @@ int main(int argc, char **argv) {
 	const QString which = app.arguments().size() > 1
 		? app.arguments().at(1) : QStringLiteral("one");
 	if (which != QStringLiteral("one") &&
-			which != QStringLiteral("two")) return 64;
+			which != QStringLiteral("two") &&
+			which != QStringLiteral("frame") &&
+			which != QStringLiteral("map")) return 64;
 	QGuiApplication::setDesktopFileName(
 		QStringLiteral("CompanyVectorProbe"));
 	auto *wayland =
@@ -29,13 +31,17 @@ int main(int argc, char **argv) {
 		return 65;
 	}
 	QWidget window;
-	window.setStyleSheet(QStringLiteral("background-color: #55cfca;"));
-	const QString title = QStringLiteral("SD-CI-CompanyVectorProbe-") +
-		which;
+	window.setStyleSheet(which == QStringLiteral("frame")
+		? QStringLiteral("background-color: #1b0623;")
+		: QStringLiteral("background-color: #55cfca;"));
+	const QString title = which == QStringLiteral("frame")
+		? QStringLiteral("SD-CI-CompanyWidgetFrame")
+		: QStringLiteral("SD-CI-CompanyVectorProbe-") + which;
 	window.setWindowTitle(title);
-	window.resize(840, 540);
+	window.resize(which == QStringLiteral("frame") ? 1100 : 840,
+		which == QStringLiteral("frame") ? 740 : 540);
 	window.show();
-	QTimer::singleShot(30000, &app, &QCoreApplication::quit);
+	QTimer::singleShot((which == QStringLiteral("frame") ||\n\t\twhich == QStringLiteral("map")) ? 90000 : 30000,\n\t\t&app, &QCoreApplication::quit);
 	std::fprintf(stdout,
 		"SD_CI_COMPANY_QT_QPA_READY case=%s pid=%ld wayland_display=1\n",
 		which.toUtf8().constData(), (long)getpid());

@@ -194,6 +194,18 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_QT_QPA:-}" == 1 ]]; then
   bash tests/stage_director/ci_company_qt_wayland_smoke.sh "$runtime"
 fi
 
+# M30f: Qt window *overlay* inside a disposable, simulated Company frame.
+# No real Company QML, MapLibre ELF or compositor scene/seat authority.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_OVERLAY:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30F_OVERLAY_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_overlay_prototype.py
+fi
+
 kill -TERM "$child"
 for _ in {1..40}; do
   if ! kill -0 "$child" 2>/dev/null; then
