@@ -1,0 +1,132 @@
+name: Stage Director M30f visible Qt overlay in disposable Company-sized frame
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30e-maplibre-source-contract-20261106
+    paths:
+      - 'tests/stage_director/ci_company_overlay_prototype.py'
+      - 'tests/stage_director/ci_company_qt_wayland_probe.cpp'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30f.yml'
+      - 'docs/stage-director-company-m30f-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  overlay-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no production view, scene or operator machine change
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('tests/stage_director/ci_company_overlay_prototype.py').read_text()
+          qt=Path('tests/stage_director/ci_company_qt_wayland_probe.cpp').read_text()
+          harness=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          ast.parse(p)
+          assert 'BLOCKED_OUTSIDE_DISPOSABLE_QT_WAYLAND_CI' in p
+          assert 'BLOCKED_M30F_OVERLAY_OUTSIDE_DISPOSABLE_CI' in harness
+          assert 'STAGE_DIRECTOR_CI_COMPANY_OVERLAY' in harness
+          assert 'SD_COMPANY_M30F_PIXELS' in p
+          assert 'os.pidfd_open(p.pid, 0)' in p
+          assert 'MAP_RECT_1' in p and 'MAP_RECT_2' in p
+          assert 'maplibre=NOT_EXECUTED' in p
+          assert 'compositor_clipping=NOT_PROVEN' in p
+          assert 'QWidget window' in qt
+          assert 'QStringLiteral("frame")' in qt
+          assert 'QStringLiteral("map")' in qt
+          for name in ('sway/stage_director.c',
+                       'sway/stage_director_company_vector_protocol.c',
+                       'sway/stage_director_company_digest.c'):
+              assert 'SD_COMPANY_M30F_PIXELS' not in Path(name).read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in Path(
+              'sway/stage_director_company_digest.c').read_text()
+          print('M30f SOURCE: CI-only overlay experiment; '
+                'source-only, no MapLibre/production render admission PASS')
+          PY
+
+  real-qt-overlay-screenshots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build unchanged production SwayPX (no extra scene permissions)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_COMPANY_M30F_PIXELS' "$sway/bin/sway"; then
+            echo "FAIL M30f probe unexpectedly compiled into compositor" >&2
+            exit 1
+          fi
+          echo "SD_M30F_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build real isolated Qt6 Wayland frame and map witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          qt="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_qt_wayland_probe.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$qt/bin/sd-company-qt-wayland-probe"
+          echo "STAGE_DIRECTOR_TEST_QT_COMPANY_WINDOW=$qt/bin/sd-company-qt-wayland-probe" >> "$GITHUB_ENV"
+      - name: Obtain pinned screenshot client and software renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Real Qt Wayland frame + overlaid map, focus, resize and four pixel phases
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_OVERLAY: '1'
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30F_COMPOSITOR"
+      - name: Preserve screenshot evidence from the actual compositor
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30f-actual-qt-overlay-pixels
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30f-*.ppm
+      - name: Declare scope limitations, even on successful screenshot tests
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30f actual compositor screenshot experiment'
+            echo 'A real Qt6 Wayland QWidget can be framed/moved/resized using Sway IPC'
+            echo 'inside a separate fake Company-shaped window in a throwaway compositor.'
+            echo 'Only screenshot pixels and Sway-selected focus are verified;'
+            echo 'the Qt witness is NOT MapLibre and the frame is NOT Quickshell.'
+            echo 'True compositor source clipping, direct pointer/keyboard delivery,'
+            echo 'popup isolation, authenticated Company selection and production'
+            echo 'scene authority remain NOT VERIFIED / NOT ENABLED.'
+          } >> "$GITHUB_STEP_SUMMARY"
