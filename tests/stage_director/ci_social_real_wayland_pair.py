@@ -95,6 +95,8 @@ def select(tree, app_id, pid=None):
 
 
 def wait_for(swaymsg, ipc, env, app_id, pid, expected=None, present=True):
+    last_node = None
+    last_got = None
     for _ in range(100):
         tree = read_tree(swaymsg, ipc, env)
         node = select(tree, app_id, pid)
@@ -103,11 +105,15 @@ def wait_for(swaymsg, ipc, env, app_id, pid, expected=None, present=True):
         if present and node is not None:
             rect = node.get("rect") or {}
             got = tuple(rect.get(k) for k in ("x", "y", "width", "height"))
+            last_node = node
+            last_got = got
             if expected is None or got == expected:
                 return node
         time.sleep(0.07)
     raise RuntimeError(f"CI_SOCIAL_ACTOR_NOT_SETTLED app={app_id} "
-                       f"expected={expected} present={present}")
+                       f"expected={expected} actual={last_got} "
+                       f"node={json.dumps(last_node, sort_keys=True)[:1200]} "
+                       f"present={present}")
 
 
 def sway_command(swaymsg, ipc, env, command):
