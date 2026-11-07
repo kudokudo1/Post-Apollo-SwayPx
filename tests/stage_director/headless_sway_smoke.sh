@@ -252,7 +252,8 @@ fi
 # M30j: real Company PanelWindow and kernel-matched Qt test actor in
 # ONE headless compositor, with real Wayland pointer interaction.
 # All three flags and the exact disposable runner are mandatory.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
@@ -263,6 +264,22 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_m30j_combined.py
+fi
+
+# M30k: exact source-pinned native host geometry changes, one Qt actor.
+# Fullscreen MUST hide its too-small backing source and revoke input.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30K_DYNAMIC_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30k_dynamic.py
 fi
 
 kill -TERM "$child"
