@@ -1,0 +1,66 @@
+name: Stage Director Social W native seatop move overlay (disposable CI)
+
+on:
+  pull_request:
+    paths:
+      - "tests/stage_director/ci_social_native_move_overlay.py"
+      - "tests/stage_director/ci_social_native_move_runtime.py"
+      - "tests/stage_director/ci_social_native_move_udmabuf.sh"
+      - ".github/workflows/stage-director-social-native-move.yml"
+      - "docs/stage-director-social-native-move-20261107.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-social-native-move:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      STAGE_DIRECTOR_CI_SOCIAL_REAL_PAIR: "1"
+      STAGE_DIRECTOR_CI_SOCIAL_NATIVE_MOVE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Create and inspect disposable compositor source overlay
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_social_native_move_overlay.py
+          # The canonical checkout MUST be clean. Only two C files may
+          # have changed inside the private temporary *copy*.
+          test -z "$(git status --porcelain)"
+          temp_src="$RUNNER_TEMP/sd-ci-social-native-move-src"
+          test -d "$temp_src/.git"
+          test "$(git -C "$temp_src" diff --name-only | wc -l)" -eq 2
+      - name: Compile disposable native SwayPX and pinned Wayland clients
+        run: |
+          set -euo pipefail
+          temp_src="$RUNNER_TEMP/sd-ci-social-native-move-src"
+          compositor="$(cd "$temp_src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -x "$grim/bin/grim"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "SD_SOCIAL_CI_SWAY=$compositor/bin/sway" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_MESA=$mesa" >> "$GITHUB_ENV"
+      - name: Verify native seatop paired move, real pixels and stale lease rejection
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_social_native_move_udmabuf.sh
+          test -z "$(git status --porcelain)"
+          echo "CI-only native move experiment. Production and operator desktop unchanged."
