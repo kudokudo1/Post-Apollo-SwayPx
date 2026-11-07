@@ -236,7 +236,8 @@ fi
 # M30i: real source-pinned Company Quickshell PanelWindow. Capture actual
 # frame/canvas geometry + pixels across chassis sizes. Never launch MapLibre,
 # enable the QPA bridge, or touch the user's desktop.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
