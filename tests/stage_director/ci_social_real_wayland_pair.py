@@ -130,9 +130,17 @@ def locate(swaymsg, ipc, env, cid, rect):
     if any(type(v) is not int for v in rect) or not (
             width > 0 and height > 0):
         raise RuntimeError("CI_SOCIAL_INVALID_TARGET")
+    # These test windows are floated/borderless once by the private Sway
+    # config at map time. Repeating 'floating enable' before every resize
+    # is NOT how Social W's live fast-follow helper operates; it can
+    # re-trigger a window setup transition during a shrinking handshake.
+    tree = read_tree(swaymsg, ipc, env)
+    matches = [n for n in walk(tree) if n.get("id") == cid]
+    if (len(matches) != 1 or matches[0].get("floating") not in
+            ("user_on", "auto_on") or matches[0].get("border") != "none"):
+        raise RuntimeError("CI_SOCIAL_NOT_VERIFIED_FLOATING_BORDERLESS")
     criteria = f'[con_id="{cid}"]'
     sway_command(swaymsg, ipc, env,
-        f"{criteria} floating enable; {criteria} border none; "
         f"{criteria} resize set width {width} px height {height} px; "
         f"{criteria} move absolute position {x} px {y} px")
 
