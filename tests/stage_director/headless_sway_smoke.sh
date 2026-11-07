@@ -208,7 +208,8 @@ fi
 
 # M30g: CI-only real Qt source > visible viewport compositor crop proof.
 # Uses exact same private Wayland socket; never the operator desktop.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
     echo "BLOCKED_M30G_CROP_OUTSIDE_DISPOSABLE_CI" >&2
@@ -216,6 +217,19 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_source_crop.py
+fi
+
+# M30h: test actual Wayland virtual-pointer events and Qt delivery under
+# the same CI-only M30g native source crop. No live host/input authority.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30H_INPUT_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_input_containment.py
 fi
 
 kill -TERM "$child"

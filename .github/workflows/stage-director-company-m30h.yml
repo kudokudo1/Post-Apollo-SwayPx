@@ -1,0 +1,158 @@
+name: Stage Director M30h real Wayland pointer input inside cropped Qt Company viewport
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30g-native-qt-source-crop-20261107
+    paths:
+      - 'tests/stage_director/ci_company_qt_wayland_probe.cpp'
+      - 'tests/stage_director/ci_company_virtual_pointer.c'
+      - 'tests/stage_director/ci_company_virtual_pointer.nix'
+      - 'tests/stage_director/ci_company_input_containment.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30h.yml'
+      - 'docs/stage-director-company-m30h-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-input-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require real Wayland delivery, precise CI gates and no production changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('tests/stage_director/ci_company_input_containment.py').read_text()
+          pointer=Path('tests/stage_director/ci_company_virtual_pointer.c').read_text()
+          widget=Path('tests/stage_director/ci_company_qt_wayland_probe.cpp').read_text()
+          harness=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          nix=Path('tests/stage_director/ci_company_virtual_pointer.nix').read_text()
+          ast.parse(p)
+          for needle in ('M30H_POINTER_LEAKS_OUTSIDE_CROP',
+                         'M30H_INSIDE_DRAG_MOTION_NOT_DELIVERED',
+                         'M30H_INSIDE_QT_WHEEL_NOT_DELIVERED',
+                         'M30H_FRAME_NOT_RECEIVING_OUTSIDE_'):
+              assert needle in p, needle
+          for needle in ('SD_CI_COMPANY_QT_INPUT',
+                         'QEvent::MouseButtonPress','QEvent::Wheel',
+                         'STAGE_DIRECTOR_CI_COMPANY_INPUT'):
+              assert needle in widget, needle
+          for needle in ('wl_display_connect(NULL)',
+                         'zwlr_virtual_pointer_v1_motion_absolute',
+                         'zwlr_virtual_pointer_v1_button',
+                         'zwlr_virtual_pointer_v1_axis(',
+                         'wl_display_roundtrip(display)',
+                         'BLOCKED_M30H_POINTER_NOT_DISPOSABLE_CI'):
+              assert needle in pointer, needle
+          assert 'pkgs.wlr-protocols' in nix
+          assert 'wayland-scanner client-header' in nix
+          assert 'BLOCKED_M30H_INPUT_OUTSIDE_DISPOSABLE_CI' in harness
+          assert 'STAGE_DIRECTOR_CI_COMPANY_INPUT' in harness
+          assert "sd-ci-company-crop-probe', type: 'boolean', value: false" in Path('meson_options.txt').read_text()
+          for f in ('sway/stage_director.c',
+                    'sway/stage_director_company_vector_protocol.c',
+                    'sway/stage_director_company_digest.c'):
+              assert 'SD_CI_COMPANY_QT_INPUT' not in Path(f).read_text()
+          print('M30h source: real Wayland virtual pointer, Qt recipient and '
+                'inside/outside assertions; production path unchanged PASS')
+          PY
+
+  real-wayland-qt-input:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary SwayPX and exclude experimental crop code
+        shell: bash
+        run: |
+          set -euo pipefail
+          prod="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$prod/bin/sway"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$prod/bin/sway"; then
+            echo 'FAIL test selector linked into production SwayPX' >&2
+            exit 1
+          fi
+          echo 'M30h normal compositor source gate PASS'
+      - name: Build separate test-only M30g crop compositor
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_crop_compositor.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$ci/bin/sway"
+          test -x "$ci/bin/swaymsg"
+          grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$ci/bin/sway"
+          echo "SD_M30H_COMPOSITOR=$ci/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build actual Qt6 Wayland input event witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          qt="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_qt_wayland_probe.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$qt/bin/sd-company-qt-wayland-probe"
+          echo "STAGE_DIRECTOR_TEST_QT_COMPANY_WINDOW=$qt/bin/sd-company-qt-wayland-probe" >> "$GITHUB_ENV"
+      - name: Build native virtual pointer Wayland protocol sender
+        shell: bash
+        run: |
+          set -euo pipefail
+          pointer="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_virtual_pointer.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          echo "STAGE_DIRECTOR_TEST_COMPANY_POINTER=$pointer/bin/sd-company-m30h-pointer" >> "$GITHUB_ENV"
+      - name: Prepare pinned Mesa and real screenshot client
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Send real Wayland press drag wheel and negative overflow clicks
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_CROP: '1'
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30H_COMPOSITOR"
+      - name: Retain disposable real compositor screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30h-qt-pointer-and-crop-screenshots
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30h-*.ppm
+      - name: Declare exact limits even on CI success
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30h real native pointer test'
+            echo 'Actual zwlr_virtual_pointer protocol sends through the SwayPX seat.'
+            echo 'Two real QtWayland clients independently report received events.'
+            echo 'No map event outside 600x380 allowed; frame must get outside presses.'
+            echo 'Still synthetic Qt, NOT actual MapLibre or the running Company QML.'
+            echo 'Production input authority, selected host and popups not verified.'
+          } >> "$GITHUB_STEP_SUMMARY"

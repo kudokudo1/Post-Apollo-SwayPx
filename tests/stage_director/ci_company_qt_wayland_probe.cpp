@@ -3,6 +3,12 @@
 #include <QWidget>
 #include <QTimer>
 #include <QString>
+#include <QEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <QObject>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <unistd.h>
 
@@ -14,8 +20,60 @@
  * No private Company protocol, selection request, native fd transport,
  * network access, map rendering or scene/input authority is enabled.
  */
+/* M30h: observe ACTUAL Qt-delivered Wayland pointer events. This is not
+ * generated evidence or IPC focus selection; only Qt dispatch writes a line.
+ * The widget coordinates remain native to the actual 840x540 Qt source. */
+class InputSpy final : public QObject {
+public:
+    explicit InputSpy(const char *name) : name_(name) {}
+
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (!qobject_cast<QWidget *>(object)) {
+            return QObject::eventFilter(object, event);
+        }
+        const char *type = nullptr;
+        switch (event->type()) {
+        case QEvent::MouseButtonPress: type = "press"; break;
+        case QEvent::MouseButtonRelease: type = "release"; break;
+        case QEvent::MouseMove: type = "motion"; break;
+        case QEvent::Wheel: type = "wheel"; break;
+        default: return QObject::eventFilter(object, event);
+        }
+        int gx = 0, gy = 0, lx = 0, ly = 0;
+        int held = 0;
+        if (event->type() == QEvent::Wheel) {
+            const auto *wheel = static_cast<QWheelEvent *>(event);
+            gx = qRound(wheel->globalPosition().x());
+            gy = qRound(wheel->globalPosition().y());
+            lx = qRound(wheel->position().x());
+            ly = qRound(wheel->position().y());
+        } else {
+            const auto *mouse = static_cast<QMouseEvent *>(event);
+            gx = qRound(mouse->globalPosition().x());
+            gy = qRound(mouse->globalPosition().y());
+            lx = qRound(mouse->position().x());
+            ly = qRound(mouse->position().y());
+            held = static_cast<int>(mouse->buttons());
+        }
+        std::fprintf(stdout,
+            "SD_CI_COMPANY_QT_INPUT target=%s event=%s "
+            "global=%d,%d local=%d,%d buttons=%d pid=%ld\n",
+            name_, type, gx, gy, lx, ly, held, (long)getpid());
+        std::fflush(stdout);
+        return QObject::eventFilter(object, event);
+    }
+
+private:
+    const char *name_;
+};
+
 int main(int argc, char **argv) {
 	QApplication app(argc, argv);
+    const char *gate = std::getenv("STAGE_DIRECTOR_CI_COMPANY_INPUT");
+    const bool spy_input = gate && std::strcmp(gate, "1") == 0 &&
+        std::getenv("GITHUB_ACTIONS") && std::getenv("CI");
+    InputSpy map_spy("crop");
+    InputSpy frame_spy("frame");
 	const QString which = app.arguments().size() > 1
 		? app.arguments().at(1) : QStringLiteral("one");
 	if (which != QStringLiteral("one") &&
@@ -31,7 +89,12 @@ int main(int argc, char **argv) {
 		std::fprintf(stderr, "SD_CI_COMPANY_QT_ERROR not_real_wayland_qpa\n");
 		return 65;
 	}
-	QWidget window;
+	if (spy_input && which == QStringLiteral("crop")) {
+        app.installEventFilter(&map_spy);
+    } else if (spy_input && which == QStringLiteral("frame")) {
+        app.installEventFilter(&frame_spy);
+    }
+    QWidget window;
 	window.setStyleSheet(which == QStringLiteral("frame")
 		? QStringLiteral("background-color: #1b0623;")
 		: QStringLiteral("background-color: #55cfca;"));
