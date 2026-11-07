@@ -29,6 +29,9 @@
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+#include "sway/stage_director_ci_company_crop.h"
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
@@ -1032,9 +1035,15 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 	}
 
 	stage_director_view_mapped(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+	stage_director_ci_company_crop_on_map(view);
+#endif
 }
 
 void view_unmap(struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_CROP
+	stage_director_ci_company_crop_on_unmap(view);
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Guard reference cannot survive native XDG unmap / view destruction. */
 	stage_director_ci_scene_probe_early_unmap(view);

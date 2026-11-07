@@ -10,4 +10,5 @@ option('man-pages', type: 'feature', value: 'auto', description: 'Generate and i
 option('sd-bus-provider', type: 'combo', choices: ['auto', 'libsystemd', 'libelogind', 'basu'], value: 'auto', description: 'Provider of the sd-bus library')
 option('sd-ci-news-scene-probe', type: 'boolean', value: false, description: 'CI ONLY: probe wlroots NEWS actor scene clip and hit testing')
 
+option('sd-ci-company-crop-probe', type: 'boolean', value: false, description: 'CI ONLY: crop actual native Company-like Qt surface in disposable compositor')
 option('sd-ci-real-weather-watch-layer', type: 'boolean', value: false, description: 'CI ONLY: select real mapped Weather layer through scene hit-test; never production')
