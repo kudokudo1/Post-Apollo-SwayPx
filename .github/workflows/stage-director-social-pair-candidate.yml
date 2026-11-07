@@ -1,0 +1,61 @@
+name: Stage Director Social native candidate lease (no actuation)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/stage_director_social_pair_candidate.h"
+      - "sway/stage_director_social_pair_candidate.c"
+      - "tests/stage_director/test_social_pair_candidate.c"
+      - ".github/workflows/stage-director-social-pair-candidate.yml"
+      - "docs/stage-director-social-native-pair-candidate-20261107.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  social-native-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile zero-authority candidate state machine
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_social_pair_candidate.c \
+            tests/stage_director/test_social_pair_candidate.c \
+            -o "$RUNNER_TEMP/social-pair-candidate"
+          "$RUNNER_TEMP/social-pair-candidate"
+      - name: Check undefined behavior and production build isolation
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=undefined -fno-sanitize-recover=undefined \
+            -Iinclude \
+            sway/stage_director_social_pair_candidate.c \
+            tests/stage_director/test_social_pair_candidate.c \
+            -o "$RUNNER_TEMP/social-pair-candidate-ubsan"
+          "$RUNNER_TEMP/social-pair-candidate-ubsan"
+          python3 -B - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          # No production source lists silently add the unreviewed ledger.
+          assert "stage_director_social_pair_candidate.c" not in meson
+          assert "stage_director_social_pair_candidate.c" not in Path("meson.build").read_text()
+          source=Path("sway/stage_director_social_pair_candidate.c").read_text()
+          header=Path("include/sway/stage_director_social_pair_candidate.h").read_text()
+          for marker in ("can_move = false", "can_resize = false",
+                         "can_focus = false", "can_clip = false",
+                         "can_render = false", "can_input = false",
+                         "can_popup = false", "authenticated_pairing = false"):
+              assert marker in source, marker
+          assert "CANDIDATE" in header
+          print("SD_SOCIAL_CANDIDATE_PRODUCTION_ISOLATION "
+                "meson_unlinked=1 all_authority_false=1 result=PASS")
+          PY
+          test -z "$(git status --porcelain)"
+          echo "No production compositor pairing, IPC endpoint or runtime activation."
