@@ -218,7 +218,15 @@ def main():
     for path in (home, home / ".config", home / ".local/share",
                  home / ".cache"):
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    compat_qml = Path(e.get("STAGE_DIRECTOR_M30I_QML_IMPORT_PATH", "/no-qtqml"))
+    if not (str(compat_qml).startswith("/nix/store/") and
+            (compat_qml / "Qt5Compat/GraphicalEffects/qmldir").is_file()):
+        raise RuntimeError("BLOCKED_M30I_PINNED_QT_COMPAT_MISSING")
+    old_qml_paths = e.get("QML_IMPORT_PATH", "")
+    qml_paths = str(compat_qml) + (":" + old_qml_paths if old_qml_paths else "")
     environment = {**e,
+        "QML_IMPORT_PATH": qml_paths,
+        "QML2_IMPORT_PATH": qml_paths,
         "HOME": str(home),
         "XDG_CONFIG_HOME": str(home / ".config"),
         "XDG_DATA_HOME": str(home / ".local/share"),

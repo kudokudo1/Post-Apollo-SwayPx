@@ -130,6 +130,20 @@ jobs:
             exit 1
           fi
           echo "STAGE_DIRECTOR_TEST_QUICKSHELL=$bin" >> "$GITHUB_ENV"
+      - name: Include matching pinned Qt5Compat GraphicalEffects QML module
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          if [[ -z "$module" ]]; then
+            echo 'FAIL pinned Qt5Compat.GraphicalEffects QML module unavailable' >&2
+            find "$compat" -type f -name qmldir | head -n 30 >&2 || true
+            exit 1
+          fi
+          qmlroot="${module%/Qt5Compat/GraphicalEffects/qmldir}"
+          test -d "$qmlroot/Qt5Compat/GraphicalEffects"
+          echo "STAGE_DIRECTOR_M30I_QML_IMPORT_PATH=$qmlroot" >> "$GITHUB_ENV"
       - name: Prepare pinned Mesa renderer and actual output screenshot
         shell: bash
         run: |
