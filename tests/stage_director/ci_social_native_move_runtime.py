@@ -52,6 +52,26 @@ def ci_leased_move(swaymsg,ipc,env,leader_id,leader_app,leader_proc,
     return sum(x for x,_ in steps),sum(y for _,y in steps)
 
 
+def ci_leased_resize(swaymsg, ipc, env, leader_id, leader_app, leader_proc,
+                     steps):
+    c=f'[con_id="{leader_id}"]'
+    cmd(swaymsg,ipc,env,f"{c} focus")
+    leader=b.select(b.read_tree(swaymsg,ipc,env),leader_app,leader_proc.pid)
+    if leader is None or leader["id"] != leader_id:
+        raise RuntimeError("SD_CI_NATIVE_RESIZE_INVALID_LEADER")
+    rect=leader["rect"]
+    cmd(swaymsg,ipc,env,
+        f'seat - cursor set {rect["x"]+60} {rect["y"]+140}')
+    cmd(swaymsg,ipc,env,f"{c} focus")
+    cmd(swaymsg,ipc,env,"seat - cursor ci-social-start-resize 1")
+    try:
+        for dx,dy in steps:
+            cmd(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
+    finally:
+        cmd(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
+    return sum(x for x,_ in steps),sum(y for _,y in steps)
+
+
 def main():
     sway,swaymsg,foot,grim,mesa=ci_require()
     runtime=Path(tempfile.mkdtemp(prefix="social-native-seatop-",
@@ -171,6 +191,50 @@ def main():
         print("SD_CI_SOCIAL_NATIVE_GUEST_DRAG seatop=1 peer_follow=1 "
               "exact_geometry=PASS pixels=PASS",flush=True)
 
+        # HOST-LED NATIVE RESIZE. The guest slot follows the actual
+        # native leader's pending size within one seatop commit.
+        dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_HOST],b.APP_HOST,
+                              host,[(70,40),(20,20)])
+        host_box=(host_box[0],host_box[1],
+                  host_box[2]+dw,host_box[3]+dh)
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+        exact(swaymsg,ipc,env,b.APP_OTHER,other.pid,unrelated_box)
+        cmd(swaymsg,ipc,env,f'[con_id="{ids[b.APP_GUEST]}"] focus')
+        b.capture(grim,runtime/"host-native-resize.ppm",env,[
+            ("rail",(host_box[0]+25,host_box[1]+155),b.HOST_COLOR),
+            ("guest",(guest_box[0]+170,guest_box[1]+155),b.GUEST_COLOR),
+            ("unrelated",(unrelated_box[0]+130,unrelated_box[1]+110),
+             b.OTHER_COLOR),
+            ("background",(25,25),(0,0,0)),
+        ])
+        print("SD_CI_SOCIAL_NATIVE_HOST_RESIZE seatop=1 "
+              "peer_resize_before_commit=1 exact_geometry=PASS pixels=PASS",
+              flush=True)
+
+        # GUEST-LED NATIVE RESIZE. Its content rect stays right of the
+        # chassis rail, retaining exact selector+inset and outer geometry.
+        dw,dh=ci_leased_resize(swaymsg,ipc,env,ids[b.APP_GUEST],b.APP_GUEST,
+                              guest,[(-35,-15),(-20,-15)])
+        host_box=(host_box[0],host_box[1],
+                  host_box[2]+dw,host_box[3]+dh)
+        guest_box=b.guest_from_chassis(host_box)
+        exact(swaymsg,ipc,env,b.APP_HOST,host.pid,host_box)
+        exact(swaymsg,ipc,env,b.APP_GUEST,guest.pid,guest_box)
+        exact(swaymsg,ipc,env,b.APP_OTHER,other.pid,unrelated_box)
+        cmd(swaymsg,ipc,env,f'[con_id="{ids[b.APP_GUEST]}"] focus')
+        b.capture(grim,runtime/"guest-native-resize.ppm",env,[
+            ("rail",(host_box[0]+25,host_box[1]+155),b.HOST_COLOR),
+            ("guest",(guest_box[0]+170,guest_box[1]+155),b.GUEST_COLOR),
+            ("unrelated",(unrelated_box[0]+130,unrelated_box[1]+110),
+             b.OTHER_COLOR),
+            ("background",(25,25),(0,0,0)),
+        ])
+        print("SD_CI_SOCIAL_NATIVE_GUEST_RESIZE seatop=1 "
+              "peer_resize_before_commit=1 exact_geometry=PASS pixels=PASS",
+              flush=True)
+
         # Negative: a stale guest PID must not attach the host to another
         # window, even though the host itself may still be dragged.
         lease.write_text(f"{ids[b.APP_HOST]} {ids[b.APP_GUEST]} "
@@ -193,10 +257,12 @@ def main():
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_MISSING_PRECOMMIT_FOLLOW")
         if "SD_CI_SOCIAL_NATIVE_ATTACH denied=1" not in logs:
             raise RuntimeError("SD_CI_SOCIAL_NATIVE_STALE_NOT_DENIED")
+        if logs.count("SD_CI_SOCIAL_NATIVE_RESIZE_BEFORE_COMMIT") < 4:
+            raise RuntimeError("SD_CI_SOCIAL_NATIVE_RESIZE_NOT_PRECOMMITTED")
         print("SD_CI_SOCIAL_NATIVE_MOVE final=PASS "
               "native_seatop=1 same_precommit=1 "
               "real_physical_pointer=NOT_TESTED "
-              "real_resize=NOT_IMPLEMENTED "
+              "native_resize=CI_PROVEN "
               "live_desktop=UNCHANGED",flush=True)
     except Exception:
         log.flush()
