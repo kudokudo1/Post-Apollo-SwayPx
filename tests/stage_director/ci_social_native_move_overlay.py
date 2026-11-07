@@ -14,6 +14,7 @@ import sys
 
 MOVE = "sway/input/seatop_move_floating.c"
 CURSOR = "sway/commands/seat/cursor.c"
+RESIZE = "sway/input/seatop_resize_floating.c"
 
 def only(src: str, before: str, after: str, reason: str) -> str:
     if src.count(before) != 1 or after in src:
@@ -152,6 +153,112 @@ def patch_move(s: str) -> str:
     return only(s, attach_old, attach_new, "seatop_attach")
 
 
+
+def patch_resize(s: str) -> str:
+    """Disposable native resize seatop: pair before its existing commit."""
+    s=only(s, '#include "sway/tree/container.h"\n',
+        '#include "sway/tree/container.h"\n'
+        '#include "sway/tree/root.h"\n'
+        '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n'
+        '#include <sys/stat.h>\n#include <unistd.h>\n',
+        "resize_includes")
+    old='''struct seatop_resize_floating_event {
+	struct sway_container *con;
+	enum wlr_edges edge;
+	bool preserve_ratio;
+	double ref_lx, ref_ly;         // cursor's x/y at start of op
+	double ref_width, ref_height;  // container's size at start of op
+	double ref_con_lx, ref_con_ly; // container's x/y at start of op
+};
+'''
+    helpers=(C_HELPERS.replace(
+        "struct seatop_move_floating_event",
+        "struct seatop_resize_floating_event")
+        .replace(
+            '    e->sd_ci_peer_dx = peer->pending.x - e->con->pending.x;\n','')
+        .replace(
+            '    e->sd_ci_peer_dy = peer->pending.y - e->con->pending.y;\n','')
+        .replace(
+            '    e->sd_ci_peer = peer;\n',
+            '    e->sd_ci_peer = peer;\n'
+            '    e->sd_ci_host_leader = e->con == host;\n'))
+    new=old.replace('};\n','\tstruct sway_container *sd_ci_peer;\n'
+                    '\tbool sd_ci_host_leader;\n};\n',1)+helpers
+    s=only(s,old,new,"resize_event_and_lease")
+
+    follow_old='''	arrange_container(con);
+	transaction_commit_dirty();
+'''
+    follow_new='''	arrange_container(con);
+	/* The verified companion gets pending geometry in this SAME seatop
+	 * transaction. This is CI policy, not authorized production identity. */
+	if (e->sd_ci_peer && !e->sd_ci_peer->node.destroying &&
+			e->sd_ci_peer->view && e->sd_ci_peer->view->surface &&
+			e->con->pending.workspace &&
+			e->sd_ci_peer->pending.workspace == e->con->pending.workspace) {
+		double x, y, w, h;
+		if (e->sd_ci_host_leader) {
+			x = con->pending.x + 111;
+			y = con->pending.y + 1;
+			w = con->pending.width - 112;
+			h = con->pending.height - 2;
+		} else {
+			x = con->pending.x - 111;
+			y = con->pending.y - 1;
+			w = con->pending.width + 112;
+			h = con->pending.height + 2;
+		}
+		if (w >= 200 && h >= 200 && x >= 0 && y >= 0 &&
+				x + w <= 1920 && y + h <= 1080 &&
+				con->pending.width >= 200 && con->pending.height >= 200) {
+			struct sway_container *peer = e->sd_ci_peer;
+			double dx = x - peer->pending.x;
+			double dy = y - peer->pending.y;
+			double dw = w - peer->pending.width;
+			double dh = h - peer->pending.height;
+			peer->pending.x += dx;
+			peer->pending.y += dy;
+			peer->pending.width += dw;
+			peer->pending.height += dh;
+			peer->pending.content_x += dx;
+			peer->pending.content_y += dy;
+			peer->pending.content_width += dw;
+			peer->pending.content_height += dh;
+			arrange_container(peer);
+			fprintf(stderr, "SD_CI_SOCIAL_NATIVE_RESIZE_BEFORE_COMMIT leader=%zu peer=%zu\\n",
+				e->con->node.id,peer->node.id);
+		}
+	}
+	transaction_commit_dirty();
+'''
+    s=only(s,follow_old,follow_new,"resize_precommit")
+    unref_old='''	if (e->con == con) {
+		seatop_begin_default(seat);
+	}
+'''
+    unref_new='''	if (e->sd_ci_peer == con) {
+		e->sd_ci_peer = NULL;
+		fprintf(stderr, "SD_CI_SOCIAL_NATIVE_RESIZE_REVOKED peer_unmapped=1\\n");
+	}
+	if (e->con == con) {
+		seatop_begin_default(seat);
+	}
+'''
+    s=only(s,unref_old,unref_new,"resize_unref")
+    attach_old='''	e->ref_width = con->pending.width;
+	e->ref_height = con->pending.height;
+
+	seat->seatop_impl = &seatop_impl;
+'''
+    attach_new='''	e->ref_width = con->pending.width;
+	e->ref_height = con->pending.height;
+	sd_ci_social_attach(e);
+
+	seat->seatop_impl = &seatop_impl;
+'''
+    return only(s,attach_old,attach_new,"resize_attach")
+
+
 C_CURSOR = r'''
 /* Private CI-only operation starter / motion driver. Not a public Sway API.
  * This exercises the actual seatop_move_floating handle_pointer_motion,
@@ -179,6 +286,15 @@ static struct cmd_results *sd_ci_social_cursor_command(
         seatop_begin_move_floating(seat, con);
         return cmd_results_new(CMD_SUCCESS, NULL);
     }
+    if (!strcmp(argv[0], "ci-social-start-resize")) {
+        struct sway_container *con = seat_get_focused_container(seat);
+        if (!con || !con->view || !container_is_floating(con) ||
+                con->node.destroying || !con->view->surface)
+            return cmd_results_new(CMD_FAILURE, "No verified resize view");
+        seatop_begin_resize_floating(seat, con,
+                                    WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+        return cmd_results_new(CMD_SUCCESS, NULL);
+    }
     if (!strcmp(argv[0], "ci-social-step") && argc >= 3) {
         char *end_x = NULL, *end_y = NULL;
         long dx = strtol(argv[1], &end_x, 10);
@@ -191,7 +307,7 @@ static struct cmd_results *sd_ci_social_cursor_command(
         return cmd_results_new(CMD_SUCCESS, NULL);
     }
     if (!strcmp(argv[0], "ci-social-end")) {
-        seatop_begin_default(seat);
+        seatop_button(seat, 0, NULL, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
         return cmd_results_new(CMD_SUCCESS, NULL);
     }
     return cmd_results_new(CMD_INVALID, "Unknown CI-only pointer command");
@@ -203,6 +319,7 @@ def patch_cursor(s: str) -> str:
         '#include "sway/input/seat.h"\n'
         '#include "sway/tree/container.h"\n'
         '#include "sway/tree/view.h"\n'
+        '#include <wlr/util/edges.h>\n'
         '#include <stdlib.h>\n#include <string.h>\n', "cursor_includes")
     anchor = 'static const char expected_syntax[] = "Expected '
     if s.count(anchor) != 1:
@@ -237,7 +354,7 @@ def main() -> None:
                     ignore=shutil.ignore_patterns("__pycache__","result"),
                     dirs_exist_ok=False)
     # Source modifications are made ONLY under private disposable CI temp.
-    for path,fn in ((MOVE,patch_move),(CURSOR,patch_cursor)):
+    for path,fn in ((MOVE,patch_move),(CURSOR,patch_cursor),(RESIZE,patch_resize)):
         f=dest/path
         if f.is_symlink() or not f.is_file() or f.stat().st_size>250000:
             raise RuntimeError("CI_SOCIAL_NATIVE_PATCH_DISALLOWED_PATH "+path)
@@ -249,11 +366,11 @@ def main() -> None:
     check=subprocess.run(["git","-C",str(dest),"status","--short"],
                          capture_output=True,text=True,check=True)
     lines=[x for x in check.stdout.splitlines() if x.strip()]
-    expected={" M "+MOVE," M "+CURSOR}
+    expected={" M "+MOVE," M "+CURSOR," M "+RESIZE}
     if set(lines)!=expected:
         raise RuntimeError("CI_SOCIAL_NATIVE_PATCH_UNEXPECTED_FILES "+repr(lines))
     print("SD_CI_SOCIAL_NATIVE_SOURCE_COPY isolated=1 shared_repo_untouched=1 "
-          "modified_only=seatop_move_floating+seat_cursor result=PASS",flush=True)
+          "modified_only=move_seatop+resize_seatop+seat_cursor result=PASS",flush=True)
     print(dest,flush=True)
 
 if __name__=="__main__":
