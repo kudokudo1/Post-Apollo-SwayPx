@@ -221,7 +221,8 @@ fi
 
 # M30h: test actual Wayland virtual-pointer events and Qt delivery under
 # the same CI-only M30g native source crop. No live host/input authority.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
@@ -230,6 +231,38 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_input_containment.py
+fi
+
+# M30i: real source-pinned Company Quickshell PanelWindow. Capture actual
+# frame/canvas geometry + pixels across chassis sizes. Never launch MapLibre,
+# enable the QPA bridge, or touch the user's desktop.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ]]; then
+    echo "BLOCKED_M30I_QUICKSHELL_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_real_quickshell.py
+fi
+
+# M30j: real Company PanelWindow and kernel-matched Qt test actor in
+# ONE headless compositor, with real Wayland pointer interaction.
+# All three flags and the exact disposable runner are mandatory.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30J_REAL_COMPANY_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30j_combined.py
 fi
 
 kill -TERM "$child"

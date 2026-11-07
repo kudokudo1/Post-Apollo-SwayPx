@@ -1,0 +1,188 @@
+name: Stage Director M30i original Company Quickshell real PanelWindow geometry
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30h-qt-pointer-containment-20261107
+    paths:
+      - 'tests/stage_director/ci_company_real_quickshell_shell.qml'
+      - 'tests/stage_director/ci_company_real_quickshell.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30i.yml'
+      - 'docs/stage-director-company-m30i-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  company-quickshell-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source-only geometry diagnostics and no production bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          script = Path("tests/stage_director/ci_company_real_quickshell.py").read_text()
+          shell = Path("tests/stage_director/ci_company_real_quickshell_shell.qml").read_text()
+          ast.parse(script)
+          assert 'e3595b0035bb3d89aa87c6ba2bd1aac04a975181' in script
+          assert 'BLOCKED_M30I_COMPANY_SOURCE_NOT_EXACT_AND_CLEAN' in script
+          assert 'BLOCKED_M30I_NOT_DISPOSABLE_QUICKSHELL' in script
+          assert 'ciM30iActualCanvasHostRect' in script
+          assert 'ciM30iActualCanvasRect' in script
+          assert 'activeVectorViewportRect' in script
+          assert 'NO_COLOR' in script and 'QT_QPA_PLATFORM' in script
+          assert 'maplibre=NOT_EXECUTED' in script
+          assert 'native_actor_scene=OFF input=OFF' in script
+          assert 'bridge_enabled=' in shell
+          assert 'ShellRoot' in shell and 'CompanyNetworkW' in shell
+          assert 'chassisLevel = "compact"' in shell
+          assert 'chassisLevel = "fullscreen"' in shell
+          assert 'company.menuOpen = false' in shell
+          assert 'vectorBridgeOptIn: false' in shell
+          assert 'STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL' in Path(
+              "tests/stage_director/headless_sway_smoke.sh").read_text()
+          assert 'owner_verified=no scene=OFF input=OFF' in Path(
+              'sway/stage_director.c').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in Path(
+              'sway/stage_director_company_digest.c').read_text()
+          print("M30i source gate: real source-pinned Company UI in CI copy "
+                "with read-only geometry diagnostics, bridge OFF PASS")
+          PY
+
+  real-quickshell-viewport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exactly reviewed original Company QML source
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: e3595b0035bb3d89aa87c6ba2bd1aac04a975181
+          path: company-source
+          persist-credentials: false
+      - name: Check original Company M30e source and geometry ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_maplibre_source_contract.py \
+            --company company-source --sway .
+          python3 -B - <<'PY'
+          from pathlib import Path
+          root=Path("company-source")
+          network=(root/"widgets/CompanyNetworkW.qml").read_text()
+          coverage=(root/"widgets/CompanyCoveragePane.qml").read_text()
+          for token in ("activeVectorFrameInHostRect",
+                        "activeVectorViewportRect",
+                        "property bool vectorBridgeOptIn: false",
+                        'WlrLayershell.namespace: "post-apollo-company-network"',
+                        'CompanyVectorBridgeLink'):
+              assert token in network, token
+          for token in ("mapCanvas.mapToItem(root, 0, 0)",
+                        "VectorViewportPolicy.owner(",
+                        "vectorController.running",
+                        "id: mapCanvas"):
+              assert token in coverage, token
+          print("M30i pinned original Company QML viewport source PASS")
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual normal SwayPX for disposable Wayland session
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$sway/bin/sway"; then
+            echo 'FAIL M30i must use unchanged normal SwayPX' >&2
+            exit 1
+          fi
+          echo "SD_M30I_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build actual pinned Nixpkgs Quickshell on matching Qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then
+            bin="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then
+            bin="$qs/bin/qs"
+          else
+            echo 'FAIL no Quickshell executable from pinned Nix' >&2
+            exit 1
+          fi
+          echo "STAGE_DIRECTOR_TEST_QUICKSHELL=$bin" >> "$GITHUB_ENV"
+      - name: Include matching pinned Qt5Compat GraphicalEffects QML module
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          if [[ -z "$module" ]]; then
+            echo 'FAIL pinned Qt5Compat.GraphicalEffects QML module unavailable' >&2
+            find "$compat" -type f -name qmldir | head -n 30 >&2 || true
+            exit 1
+          fi
+          qmlroot="${module%/Qt5Compat/GraphicalEffects/qmldir}"
+          test -d "$qmlroot/Qt5Compat/GraphicalEffects"
+          echo "STAGE_DIRECTOR_M30I_QML_IMPORT_PATH=$qmlroot" >> "$GITHUB_ENV"
+      - name: Prepare pinned Mesa renderer and actual output screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Run real pinned CompanyNetworkW Quickshell standard compact fullscreen close
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+        run: |
+          set -euo pipefail
+          echo "STAGE_DIRECTOR_COMPANY_PINNED_SOURCE=$GITHUB_WORKSPACE/company-source" >> "$GITHUB_ENV"
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30I_COMPOSITOR"
+      - name: Retain actual Company Quickshell compositor screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30i-real-pinned-quickshell-layout
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30i-*.ppm
+      - name: Publish exact acceptance boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30i Real Company Quickshell geometry'
+            echo 'The original pinned CompanyNetworkW PanelWindow QML runs'
+            echo 'under real Quickshell on headless SwayPX if this job passed.'
+            echo 'Only a disposable COPY adds two read-only Canvas geometry probes.'
+            echo 'Default OFF bridge and zero native viewport candidate must remain.'
+            echo 'No real MapLibre child, host receipt, scene activation, popup'
+            echo 'containment or user desktop acceptance was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
