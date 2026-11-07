@@ -1,0 +1,208 @@
+name: Stage Director M30l original Company MapLibre Native Qt v3 on real Wayland
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30k-dynamic-viewport-ci-20261107
+    paths:
+      - 'tests/stage_director/ci_company_m30l_prepare.py'
+      - 'tests/stage_director/ci_company_m30l_real_maplibre.py'
+      - 'tests/stage_director/ci_company_maplibre_native.nix'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30l.yml'
+      - 'docs/stage-director-company-m30l-20261107.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  maplibre-native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check original Company MapLibre v3 source and CI-only test boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import ast
+          for f in ('ci_company_m30l_prepare.py',
+                    'ci_company_m30l_real_maplibre.py'):
+              ast.parse((Path('tests/stage_director')/f).read_text())
+          src=Path('tests/stage_director/ci_company_m30l_prepare.py').read_text()
+          run=Path('tests/stage_director/ci_company_m30l_real_maplibre.py').read_text()
+          nix=Path('tests/stage_director/ci_company_maplibre_native.nix').read_text()
+          harness=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          assert 'e3595b0035bb3d89aa87c6ba2bd1aac04a975181' in src
+          for token in ('BLOCKED_M30L_COMPANY_NOT_EXACT_CLEAN_PIN',
+                        'SD_COMPANY_M30L_SOURCE_COPY',
+                        'M30lQtInputWitness',
+                        'default_offline=1',
+                        'NO_OWNER_LOCAL_DATA'):
+              assert token in src+nix, token
+          for token in ('SD_COMPANY_M30L_REAL_MAPLIBRE',
+                        'M30L_MAPLIBRE_QTLOCATION_NOT_READY',
+                        'M30L_MAPLIBRE_OFFLINE_GEOJSON_NOT_RENDERED',
+                        'M30L_REAL_QT_MAPLIBRE_INPUT_MISSING_',
+                        'os.pidfd_open(process.pid',
+                        'M30L_NOT_UNIQUE_NATIVE_SWAY_IPC'):
+              assert token in run, token
+          assert 'BLOCKED_M30L_NATIVE_MAPLIBRE_OUTSIDE_PRIVATE_CI' in harness
+          assert 'owner_verified=no scene=OFF input=OFF' in Path(
+              'sway/stage_director.c').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = "";' in Path(
+              'sway/stage_director_company_digest.c').read_text()
+          assert "sd-ci-company-crop-probe', type: 'boolean', value: false" in Path(
+              'meson_options.txt').read_text()
+          print('M30l real original MapLibre Qt source and fail-closed '
+                'production boundary PASS')
+          PY
+
+  maplibre-offline-native-wayland:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exact original Company MapLibre Qt application
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: e3595b0035bb3d89aa87c6ba2bd1aac04a975181
+          path: company-source
+          persist-credentials: false
+      - name: Validate original Company source, style, and offline default
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_maplibre_source_contract.py \
+            --company company-source --sway .
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p=Path('company-source/experiments/company-vector-qt')
+          cmake=(p/'CMakeLists.txt').read_text()
+          cpp=(p/'main.cpp').read_text()
+          qml=(p/'main.qml').read_text()
+          assert 'find_package(QMapLibre 3.0 REQUIRED COMPONENTS Location)' in cmake
+          assert 'qmaplibre_location_setup_plugins(company-vector-probe)' in cmake
+          assert 'setGraphicsApi(QSGRendererInterface::OpenGLRhi)' in cpp
+          assert 'const bool online = args.contains("--online")' in cpp
+          assert 'const bool styledOnline = args.contains("--styled-online")' in cpp
+          assert 'QUrl::fromLocalFile(localPath)' in cpp
+          assert 'MapLibre 3.0' in qml and 'MapView {' in qml
+          assert 'name: "maplibre"' in qml
+          print('M30l exact reviewed original Company Qt/MapLibre v3 source PASS')
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Confirm pinned Nix MapLibre v3 QtLocation package
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix eval --raw --impure --expr \
+            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.kdePackages.maplibre-native-qt.version' \
+            | tee "$RUNNER_TEMP/m30l-maplibre-version"
+          test "$(cat "$RUNNER_TEMP/m30l-maplibre-version")" = 3.0.0
+          nix eval --raw --impure --expr \
+            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.kdePackages.qtlocation.version' \
+            | tee "$RUNNER_TEMP/m30l-qtlocation-version"
+      - name: Create exact-source disposable MapLibre test copy
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+        run: |
+          set -euo pipefail
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          export STAGE_DIRECTOR_M30L_CI_SOURCE="$RUNNER_TEMP/sd-company-m30l-native-src"
+          python3 -B tests/stage_director/ci_company_m30l_prepare.py
+          echo "STAGE_DIRECTOR_M30L_CI_SOURCE=$STAGE_DIRECTOR_M30L_CI_SOURCE" >> "$GITHUB_ENV"
+      - name: Build real Nix-pinned Company MapLibre Qt v3 application
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(nix build --impure --expr \
+              'import ./tests/stage_director/ci_company_maplibre_native.nix {
+                 source = builtins.path {
+                   path = builtins.getEnv "STAGE_DIRECTOR_M30L_CI_SOURCE";
+                   name = "company-m30l-exact-review-source";
+                 };
+               }' \
+              --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$app/bin/company-vector-probe"
+          test -f "$app/share/post-apollo-company-m30l/style-fixture.json"
+          echo "STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE=$app/bin/company-vector-probe" >> "$GITHUB_ENV"
+          printf 'M30l native Qt executable: %s\n' "$app/bin/company-vector-probe"
+      - name: Build unchanged SwayPX and real Wayland pointer helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git \
+              --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway" && test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_CI_COMPANY_M30J_REAL_PANEL' "$sway/bin/sway"; then
+            echo 'FAIL: M30l proof must use unchanged normal SwayPX' >&2
+            exit 1
+          fi
+          echo "SD_M30L_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          pointer="$(nix build --impure --expr \
+              'import ./tests/stage_director/ci_company_virtual_pointer.nix' \
+              --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          echo "STAGE_DIRECTOR_TEST_COMPANY_POINTER=$pointer/bin/sd-company-m30h-pointer" >> "$GITHUB_ENV"
+      - name: Prepare real compositor screenshot and Mesa OpenGL software rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr \
+              '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' \
+              --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr \
+              'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Run original offline MapLibre Qt app on actual private Wayland with pointer and screenshot
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30L_COMPOSITOR"
+      - name: Upload actual MapLibre Native Qt screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30l-original-maplibre-real-wayland-offline
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/sd-company-m30l-*.ppm
+      - name: Record strict M30l boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30l original Company MapLibre on real Wayland'
+            echo 'The exact source-pinned Company Qt6 MapLibre app is built'
+            echo 'against Nixpkgs pinned MapLibre Native Qt v3.0.0.'
+            echo 'Only a disposable copy changes QML window size/title,'
+            echo 'adds Qt input event logging and offline readiness witness.'
+            echo 'Successful native CI proves QtLocation/MapLibre plugin,'
+            echo 'offline geographic pixels, XDG PID, Wayland pointer and teardown.'
+            echo 'It does NOT yet prove host-integrated Company viewport,'
+            echo 'selected production native actor, or desktop activation.'
+          } >> "$GITHUB_STEP_SUMMARY"
