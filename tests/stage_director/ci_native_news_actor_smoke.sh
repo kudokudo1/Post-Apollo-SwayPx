@@ -186,6 +186,39 @@ if [[ "${STAGE_DIRECTOR_CI_SCENE_PROBE:-}" == 1 ]]; then
       cp -- "$tree_json" "$RUNNER_TEMP/stage-director-cold-$stage-tree.json"
       cp -- "$runtime/news-clip.png" "$RUNNER_TEMP/stage-director-render-evidence-cold-$stage.png"
       echo "SD_CI_COLD_CAPTURE stage=$stage screenshot_saved=1"
+      if [[ "$stage" == initial &&
+            "${STAGE_DIRECTOR_CI_UNMAP_PIXEL:-}" == 1 ]]; then
+        # Separate pixels left after actor destruction from the pixels
+        # rendered while this untrusted native Wayland actor is mapped.
+        # No virtual output geometry or production renderer change.
+        kill -TERM "$actor" 2>/dev/null || true
+        wait "$actor" 2>/dev/null || true
+        actor=""
+        absent=0
+        for _ in {1..50}; do
+          "$swaymsg_binary" -s "$ipc_socket" -r -t get_tree \
+            >"$runtime/news-tree-unmapped.json"
+          if python3 tests/stage_director/compare_news_unmap_pixels.py \
+                --check-absent "$runtime/news-tree-unmapped.json" >/dev/null; then
+            absent=1
+            break
+          fi
+          sleep 0.1
+        done
+        if [[ "$absent" != 1 ]]; then
+          echo "FAIL: actor remained mapped after bounded CI unmap" >&2
+          exit 1
+        fi
+        sleep 0.35
+        "$STAGE_DIRECTOR_TEST_GRIM" -t ppm "$runtime/news-clip-unmapped.ppm"
+        "$STAGE_DIRECTOR_TEST_GRIM" -t png \
+          "$RUNNER_TEMP/stage-director-render-evidence-unmapped.png"
+        cp -- "$runtime/news-clip-unmapped.ppm" \
+          "$RUNNER_TEMP/stage-director-unmapped.ppm"
+        cp -- "$runtime/news-tree-unmapped.json" \
+          "$RUNNER_TEMP/stage-director-unmapped-tree.json"
+        echo "SD_CI_UNMAP_CAPTURE surface_absent=1 screenshot_saved=1"
+      fi
     elif [[ "${STAGE_DIRECTOR_CI_OUTPUT_REALLOC:-}" == 1 ]]; then
       # Changing the isolated headless output size requires a newly sized
       # render buffer. This is a diagnostic, NEVER a production resize.
