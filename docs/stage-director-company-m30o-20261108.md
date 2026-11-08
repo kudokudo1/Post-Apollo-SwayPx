@@ -52,6 +52,26 @@ M30o flag enabled. There is no local installation or Quickshell restart.
 
 ## VERIFY
 
+**First combined native attempt: genuine fullscreen resize, geography and
+pointer PASS; standard-return source/input continuity PASS; final screenshot
+threshold red.** Exact first-run
+[GitHub Actions #42450476697](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42450476697)
+confirmed 840×540 initial, unsupported 1200×700 hidden, actual Qt Window
+*and* MapView 1493×788 with MapLibre geographic pixels visible, original
+XDG/PIDFD retained, real fullscreen pan/wheel and Company outside clicks
+correct, no source-overflow; 840×540 restored with exact camera preserved.
+
+The first test incorrectly required geographic fixture pixels in the 573×369
+standard viewport **after three real pan+zoom gestures had moved the actual
+camera away from the finite Flint synthetic data**. The screenshot had
+zero matching features, which is a valid map location outcome, not an input
+or native resize failure. The revised gate does **not** recenter or assume
+unlimited coverage. Instead it proves actual post-shrink QML
+`Window=840×540` and `MapView=840×540`, requires
+`MapView.map.mapReady=true` at every size checkpoint and verifies real
+native Wayland input still changes the camera. Fullscreen real geographic
+pixels remain mandatory. This exact-head rerun is pending.
+
 **PENDING AT IMPLEMENTATION.** Passing M30m/M30n does not prove fullscreen
 resizing. The exact native CI must establish:
 1. Source boundary checks plus unchanged standard SwayPX build.
