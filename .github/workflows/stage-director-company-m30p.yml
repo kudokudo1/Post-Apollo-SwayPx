@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - master
-      - stage-director/company-m30n-real-camera-continuity-ci-20261107
+      - stage-director/company-m30l-real-maplibre-native-ci-20261107
     paths:
       - 'tests/stage_director/ci_company_m30p_production_preflight.py'
       - '.github/workflows/stage-director-company-m30p.yml'
