@@ -11,6 +11,7 @@ sway_sources = files(
 	'main.c',
 	'realtime.c',
 	'scene_descriptor.c',
+	'stage_director_social_native.c',
 	'stage_director.c',
 	'stage_director_viewport.c',
 	'stage_director_company_map.c',
