@@ -10,6 +10,7 @@ on:
       - 'tests/stage_director/ci_company_m30t_prepare.py'
       - 'tests/stage_director/ci_company_m30t_pixel_geometry.py'
       - 'tests/stage_director/ci_company_m30o_real_resize.py'
+      - 'sway/stage_director_ci_company_crop.c'
       - 'tests/stage_director/headless_sway_smoke.sh'
       - '.github/workflows/stage-director-company-m30t.yml'
       - 'docs/stage-director-company-m30t-20261108.md'
@@ -86,6 +87,11 @@ jobs:
               assert token in fidelity,token
           assert 'BLOCKED_M30T_VISUAL_FIDELITY_OUTSIDE_PRIVATE_CI' in shell
           assert 'STAGE_DIRECTOR_CI_COMPANY_M30T' not in production
+          clip=Path('sway/stage_director_ci_company_crop.c').read_text()
+          assert 'ci_company_m30t_enabled' in clip
+          assert 'wlr_scene_buffer_set_dest_size(buffer, 0, 0);' in clip
+          assert 'COMPANY_TEST_M30O_FULLSCREEN_WIDTH' in clip
+          assert 'COMPANY_TEST_M30O_FULLSCREEN_HEIGHT' in clip
           print('SD_COMPANY_M30T_SOURCE_GATE no_production_change=1 '
                 'real_native_vs_compositor_shear_check=1 PASS')
           PY
