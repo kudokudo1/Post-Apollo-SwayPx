@@ -3,7 +3,7 @@ name: Stage Director M30w kernel-selected native Wayland buffer metadata (CI rea
 on:
   pull_request:
     branches:
-      - stage-director/company-m30l-real-maplibre-native-ci-20261107
+      - stage-director/company-m30t-native-pixel-geometry-fidelity-ci-20261108
     paths:
       - 'tests/stage_director/ci_company_m30s_real_maplibre.py'
       - 'tests/stage_director/ci_company_m30s_prepare.py'
