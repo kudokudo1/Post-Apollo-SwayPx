@@ -121,6 +121,24 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30Y:-}" == 1 ]]; then
   fi
 fi
 
+# M31a: test-only third compositor using a distinct Nix derivation that
+# overrides ONLY pinned SceneFX. Refuse a non-CI run or an unapproved binary.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M31A:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30Y:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30Z:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30T:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30W:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
+        -z "${STAGE_DIRECTOR_M31A_COMPOSITOR:-}" ||
+        "$sway_binary" != "$STAGE_DIRECTOR_M31A_COMPOSITOR" ||
+        "$sway_binary" != /nix/store/*/bin/sway ]]; then
+    echo "BLOCKED_M31A_PATCHED_SCENEFX_OUTSIDE_EXACT_CI" >&2
+    exit 2
+  fi
+  echo "SD_CI_COMPANY_M31A_PATCHED_GL_UNPACK private_scene=1 production=OFF"
+fi
+
 export XDG_RUNTIME_DIR="$runtime"
 export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
