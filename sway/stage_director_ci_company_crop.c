@@ -72,6 +72,7 @@ static unsigned ci_company_clip_frames;
  * observation never authenticates a production child or permits rendering. */
 static uint64_t ci_company_m30w_epoch;
 static bool ci_company_m30w_reported;
+static bool ci_company_m30y_reported;
 
 static bool ci_company_crop_enabled(void) {
     const char *ci = getenv("CI");
@@ -134,6 +135,14 @@ static bool ci_company_m30w_enabled(void) {
     const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30W");
     return ci_company_m30t_enabled() && flag &&
         strcmp(flag, "1") == 0;
+}
+
+/* M30y is an independent unpadded CI session, never M30t production. */
+static bool ci_company_m30y_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30Y");
+    return ci_company_m30o_enabled() &&
+        !ci_company_m30t_enabled() && !ci_company_m30w_enabled() &&
+        flag && strcmp(flag, "1") == 0;
 }
 
 static int ci_company_crop_width(void) {
@@ -468,6 +477,78 @@ static void ci_company_m30w_observe_buffer(
     }
 }
 
+/* M30y: observe original 1493px imported buffer, separately from M30w's
+ * corrected 1494px sample. No pixels, pointers, FDs or scene grants logged.
+ * Compiled only in the existing private CI compositor test derivation. */
+static void ci_company_m30y_observe_original(
+        struct wlr_scene_buffer *node, struct sway_view *view) {
+    if (!ci_company_m30y_enabled() || ci_company_m30y_reported ||
+            !view || view != ci_company_crop_actor ||
+            !ci_exact_native_qt(view) ||
+            ci_company_active_layout.profile != 3 ||
+            ci_company_active_layout.width !=
+                COMPANY_TEST_M30O_FULLSCREEN_WIDTH ||
+            ci_company_active_layout.height !=
+                COMPANY_TEST_M30O_FULLSCREEN_HEIGHT ||
+            view->geometry.width !=
+                COMPANY_TEST_M30O_FULLSCREEN_WIDTH ||
+            view->geometry.height !=
+                COMPANY_TEST_M30O_FULLSCREEN_HEIGHT ||
+            !node || !node->buffer) return;
+
+    struct wlr_scene_surface *surface =
+        wlr_scene_surface_try_from_buffer(node);
+    if (!surface || surface->surface != view->surface ||
+            !view->surface->resource) return;
+    struct wl_client *client =
+        wl_resource_get_client(view->surface->resource);
+    if (!client) return;
+    pid_t pid = -1;
+    uid_t uid = (uid_t)-1;
+    gid_t gid = (gid_t)-1;
+    wl_client_get_credentials(client, &pid, &uid, &gid);
+    if (pid != view->pid || pid <= 1 || uid != getuid()) return;
+
+    struct wlr_buffer *actual = node->buffer;
+    struct wlr_dmabuf_attributes dma = {0};
+    struct wlr_shm_attributes shm = {0};
+    const bool dma_ok = wlr_buffer_get_dmabuf(actual, &dma);
+    const bool shm_ok = !dma_ok && wlr_buffer_get_shm(actual, &shm);
+    const char *kind = dma_ok ? "DMABUF" : shm_ok ? "SHM" : "UNKNOWN";
+    const uint32_t format = dma_ok ? dma.format :
+        shm_ok ? shm.format : 0;
+    const int planes = dma_ok ? dma.n_planes : shm_ok ? 1 : 0;
+    const int pitch = dma_ok && dma.n_planes > 0 ?
+        (int)dma.stride[0] : shm_ok ? shm.stride : 0;
+    const bool attrs_match = dma_ok ?
+        (dma.width == actual->width && dma.height == actual->height &&
+         dma.n_planes > 0 && dma.n_planes <= 4) :
+        shm_ok ? (shm.width == actual->width &&
+                  shm.height == actual->height) : false;
+    const int scale = view->surface->current.scale;
+    const int transform = view->surface->current.transform;
+    const bool observed = attrs_match &&
+        actual->width == COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+        actual->height == COMPANY_TEST_M30O_FULLSCREEN_HEIGHT &&
+        format != 0 && pitch > 0 && scale > 0 &&
+        transform >= 0 && transform <= 7;
+
+    ci_company_m30y_reported = true;
+    wlr_log(WLR_INFO,
+        "SD_CI_COMPANY_M30Y_ORIGINAL_NATIVE_BUFFER "
+        "status=%s kind=%s root_surface=1 physical=%dx%d "
+        "canvas=%dx%d format=0x%08x plane0_stride=%d "
+        "planes=%d modifier=%s surface_scale=%d "
+        "surface_transform=%d epoch=%llu actor=KERNEL_CI_ONLY "
+        "production_actor=UNVERIFIED scene_authority=NONE "
+        "input_authority=NONE",
+        observed ? "OBSERVED" : "REFUSED",
+        kind,actual->width,actual->height,
+        ci_company_active_layout.width,ci_company_active_layout.height,
+        format,pitch,planes,dma_ok ? "DMA_PRESENT" : "UNKNOWN",
+        scale,transform,(unsigned long long)ci_company_m30w_epoch);
+}
+
 static void ci_company_crop_buffer(struct wlr_scene_buffer *buffer,
         int sx, int sy, void *data) {
     (void)sx;
@@ -475,6 +556,8 @@ static void ci_company_crop_buffer(struct wlr_scene_buffer *buffer,
     if (!wlr_scene_surface_try_from_buffer(buffer)) return;
     if (ci_company_m30w_enabled())
         ci_company_m30w_observe_buffer(buffer, data);
+    if (ci_company_m30y_enabled())
+        ci_company_m30y_observe_original(buffer, data);
     /* M30t CI ONLY: when source dimensions match the exact trusted
      * fullscreen host Canvas, retain the native buffer's natural
      * destination geometry. M30o previously forced dest_size even
@@ -547,6 +630,7 @@ void stage_director_ci_company_crop_on_map(struct sway_view *view) {
     ci_company_crop_actor = view;
     ci_company_clip_frames = 0;
     ci_company_m30w_reported = false;
+    ci_company_m30y_reported = false;
     ci_company_m30w_epoch++;
     ci_company_m30k_logged_profile = -1;
     ci_company_m30k_fullscreen_logged = false;
@@ -565,6 +649,7 @@ void stage_director_ci_company_crop_on_unmap(struct sway_view *view) {
     ci_company_crop_actor = NULL;
     ci_company_clip_frames = 0;
     ci_company_m30w_reported = false;
+    ci_company_m30y_reported = false;
     ci_company_active_layout = (struct ci_company_layout) {0};
     ci_company_m30k_logged_profile = -1;
     if (view->content_tree && view->container &&
