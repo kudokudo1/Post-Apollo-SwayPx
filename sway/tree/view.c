@@ -28,6 +28,7 @@
 #include "sway/output.h"
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director_social_native.h"
 #include "sway/stage_director.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
