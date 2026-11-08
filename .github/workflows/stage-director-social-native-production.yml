@@ -1,0 +1,65 @@
+name: Stage Director Social native production compositor build
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/stage_director_social_native.h"
+      - "include/sway/commands.h"
+      - "sway/stage_director_social_native.c"
+      - "sway/commands.c"
+      - "sway/meson.build"
+      - "sway/tree/view.c"
+      - "sway/input/seatop_move_floating.c"
+      - "sway/input/seatop_resize_floating.c"
+      - ".github/workflows/stage-director-social-native-production.yml"
+      - "docs/stage-director-social-production-integration-20261107.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual production SwayPX with Social native grouping
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          "$sway/bin/sway" --version
+          echo "SD_SOCIAL_PRODUCTION_NATIVE_BUILD actual_sway_binary=PASS"
+      - name: Confirm real seatop hook and group safety seams
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          src=Path("sway/stage_director_social_native.c").read_text()
+          move=Path("sway/input/seatop_move_floating.c").read_text()
+          resize=Path("sway/input/seatop_resize_floating.c").read_text()
+          view=Path("sway/tree/view.c").read_text()
+          commands=Path("sway/commands.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert '"stage_director_social", cmd_stage_director_social' in commands
+          assert "'stage_director_social_native.c'" in meson
+          for role in ("QS_SOCIAL_MENU","vesktop","dev.vencord.vesktop"):
+              assert role in src
+          for token in ("wl_resource_get_client","identity_current","last_generation",
+                        'revoke("explicit-clear")',"initial_slot","stage_director_social_native_view_lost"):
+              assert token in src
+          assert move.index("stage_director_social_native_move(e->con") < move.index("transaction_commit_dirty();",move.index("container_floating_move_to(e->con, cursor->x"))
+          assert resize.index("stage_director_social_native_resize(con") < resize.index("transaction_commit_dirty();",resize.index("arrange_container(con);",resize.index("static void handle_pointer_motion")))
+          assert view.count("stage_director_social_native_view_lost(view);") == 2
+          print("SD_SOCIAL_PRODUCTION_NATIVE_SEAMS hooks=2 unmap_and_destroy=2 command=1 result=PASS")
+          PY
+          test -z "$(git status --porcelain)"
