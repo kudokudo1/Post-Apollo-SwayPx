@@ -55,7 +55,7 @@ jobs:
               assert token in b,token
           for token in ('COMPANY_MERGED_SHA',
                         'EXPECTED_QML_BLOBS',
-                        'original_company_checkout=UNCHANGED',
+                        'original_Company_M30q_transform_unmodified=1',
                         'instrument_without_geometry_repair'):
               assert token in (old+a+b),token
           assert 'const origin = mapCanvas.mapToItem(root, 0, 0);' in old
