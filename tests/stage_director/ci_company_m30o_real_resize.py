@@ -302,7 +302,18 @@ def main():
     if not (str(compat).startswith("/nix/store/") and
             (compat / "Qt5Compat/GraphicalEffects/qmldir").is_file()):
         raise RuntimeError("BLOCKED_M30K_QT5COMPAT_NOT_PINNED")
-    tmp_home = temp / "sd-company-m30o-home"
+    # M30y executes two separate headless compositor sessions in ONE
+    # GitHub Actions job. The original unpadded session must never reuse
+    # the first session's temporary QML copy, HOME, or QML cache.
+    # Keep the original M30o/M30w naming and behavior unchanged otherwise.
+    original_m30y_session = env.get("STAGE_DIRECTOR_CI_COMPANY_M30Y") == "1"
+    if original_m30y_session and (
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" or
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1"):
+        raise RuntimeError("M30Y_ORIGINAL_SESSION_NOT_ISOLATED")
+    tmp_home = temp / (
+        "sd-company-m30y-original-home" if original_m30y_session
+        else "sd-company-m30o-home")
     for sub in ("", ".config", ".cache", ".local/share"):
         (tmp_home / sub).mkdir(parents=True, exist_ok=True, mode=0o700)
     qml_paths = str(compat) + (":" + env["QML_IMPORT_PATH"]
@@ -313,7 +324,9 @@ def main():
              "XDG_CACHE_HOME": str(tmp_home / ".cache"),
              "QML_IMPORT_PATH": qml_paths, "QML2_IMPORT_PATH": qml_paths,
              "QT_QPA_PLATFORM": "wayland", "NO_COLOR": "1"}
-    shell = real.prepare(checkout, temp / "sd-company-m30o-copy")
+    shell = real.prepare(checkout, temp / (
+        "sd-company-m30y-original-copy" if original_m30y_session
+        else "sd-company-m30o-copy"))
     qml_source = Path("tests/stage_director/ci_company_m30o_resizable_shell.qml")
     if not qml_source.is_file() or qml_source.is_symlink():
         raise RuntimeError("BLOCKED_M30K_SHELL_MISSING")
