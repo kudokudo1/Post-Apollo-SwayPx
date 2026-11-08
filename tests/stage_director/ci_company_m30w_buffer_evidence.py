@@ -59,6 +59,18 @@ def evidence(log: str) -> dict:
         raise RuntimeError("M30W_SHM_MUST_NOT_CLAIM_DMA_MODIFIER")
     if fields["kind"]=="DMABUF" and fields["modifier"]!="DMA_PRESENT":
         raise RuntimeError("M30W_DMA_MODIFIER_EVIDENCE_MISSING")
+    # The one real CI proof used *RGB565 shared-memory* with two
+    # physical bytes/pixel, not Qt CPU RGBA8888. Keep acceptance pinned
+    # to that independently observed format/stride. Any new GPU/DRM
+    # format needs its own actual measurement + owner-reviewed profile.
+    #
+    # Linux drm_fourcc.h: DRM_FORMAT_RGB565 = fourcc('R','G','1','6').
+    expected_rgb565 = int.from_bytes(b"RG16","little")
+    if fields["kind"]!="SHM" or fmt!=expected_rgb565:
+        raise RuntimeError("M30W_UNREVIEWED_NATIVE_FORMAT_OR_ALLOCATION_KIND")
+    packed_row_bytes=1494*2
+    if pitch!=packed_row_bytes:
+        raise RuntimeError("M30W_RGB565_NATIVE_PITCH_MISMATCH")
     dma_rows = [line.split(DMA_MARKER,1)[1] for line in log.splitlines()
                 if DMA_MARKER in line]
     modifier=None
@@ -87,6 +99,12 @@ def evidence(log: str) -> dict:
         "fourccHex":fields["format"],
         "actualPlane0PitchBytes":pitch,
         "planeCount":planes,
+        "formatName":"DRM_FORMAT_RGB565",
+        "observedFormatBitsPerPixel":16,
+        "packedRowBytes":packed_row_bytes,
+        "observedRowPaddingBytes":pitch-packed_row_bytes,
+        "formatEvidenceScope":"EXACT_HEADLESS_MESA_QT_CI_ONLY",
+        "otherFormatsAutomaticallyApproved":False,
         "modifierHex":modifier,
         "nativeSurfaceScale":scale,
         "nativeSurfaceTransform":transform,
@@ -119,7 +137,7 @@ def main(args: list[str]) -> int:
         def line(**kw):
             fields={"status":"OBSERVED","kind":"SHM","root_surface":"1",
                 "physical":"1494x788","canvas":"1493x788",
-                "format":"0x34325241","plane0_stride":"5976",
+                "format":"0x36314752","plane0_stride":"2988",
                 "planes":"1","modifier":"UNKNOWN",
                 "surface_scale":"1","surface_transform":"0",
                 "epoch":"1","actor":"KERNEL_CI_ONLY",
@@ -128,7 +146,9 @@ def main(args: list[str]) -> int:
             fields.update(kw)
             return MARKER+" ".join(k+"="+v for k,v in fields.items())
         r=evidence(line())
-        assert r["actualPlane0PitchBytes"]==5976
+        assert r["actualPlane0PitchBytes"]==2988
+        assert r["formatName"]=="DRM_FORMAT_RGB565"
+        assert r["observedRowPaddingBytes"]==0
         for b in [
             "",
             line(status="REFUSED",kind="UNKNOWN"),
@@ -136,6 +156,10 @@ def main(args: list[str]) -> int:
             line(canvas="1494x788"),
             line(format="0x00000000"),
             line(plane0_stride="0"),
+            line(plane0_stride="2986"),
+            line(plane0_stride="5976"),
+            line(format="0x34325241",plane0_stride="5976"),
+            line(kind="DMABUF",modifier="DMA_PRESENT"),
             line(scene_authority="YES"),
             line(actor="TITLE_ONLY"),
             line(production_actor="VERIFIED"),
