@@ -359,7 +359,8 @@ fi
 
 # M30o: source-resizable MapLibre inside original Company fullscreen.
 # Disposable-only test; the M30m/M30n exact fail-closed logic stays intact.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30S:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
@@ -375,6 +376,30 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_m30o_real_resize.py
+fi
+
+# M30s: real MapLibre Qt+original MERGED Company M30q QML, WITHOUT the
+# historical M30i coordinate fix re-applied to a disposable copy.
+# This is test-only: no production native actor, compositor authority or
+# other Stage Director Social work is modified by this dispatch.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30S:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30N:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30L:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30R:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30S_MERGED_COMPANY_NATIVE_OUTSIDE_PRIVATE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30s_real_maplibre.py
 fi
 
 # M30l: ORIGINAL Company MapLibre v3 QtLocation executable from a
