@@ -72,9 +72,8 @@ def patch(src: str) -> str:
         "\tif (drm_format == DRM_FORMAT_RGB565 && width == 1493) {\n"
         "\t\tstatic bool m31a_logged = false;\n"
         "\t\tif (!m31a_logged) {\n"
-        f'\t\t\twlr_log(WLR_INFO, "{MARKER} width=1493 packed_pitch=2986 "
-'
-        '\t\t\t\t"production_authority=OFF");\n'
+        '\t\t\twlr_log(WLR_INFO, "M31A_SCENEFX_GL_UNPACK_ALIGNMENT_CI_ONLY '
+        'width=1493 packed_pitch=2986 production_authority=OFF");\n'
         "\t\t\tm31a_logged = true;\n"
         "\t\t}\n"
         "\t}\n"
