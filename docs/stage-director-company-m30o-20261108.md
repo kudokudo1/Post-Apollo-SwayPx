@@ -70,7 +70,15 @@ unlimited coverage. Instead it proves actual post-shrink QML
 `Window=840×540` and `MapView=840×540`, requires
 `MapView.map.mapReady=true` at every size checkpoint and verifies real
 native Wayland input still changes the camera. Fullscreen real geographic
-pixels remain mandatory. This exact-head rerun is pending.
+pixels remain mandatory. The subsequent rerun
+[GitHub Actions #42450866267](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42450866267)
+passed every real map resize, clip, input, camera and return gate, including
+the positive post-shrink `MapLibre.mapReady` observer and real Wayland
+input. It then missed only the **Company close timer** because M30o's QML
+is scheduled to close at 122 seconds while the copied M30n final wait
+expired at 26 seconds after the preceding phase. The bounded close wait
+was increased to 45 seconds; the positive close/teardown check remains
+mandatory. Exact-head final CI is pending.
 
 **PENDING AT IMPLEMENTATION.** Passing M30m/M30n does not prove fullscreen
 resizing. The exact native CI must establish:
