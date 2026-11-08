@@ -606,6 +606,35 @@ def main():
                           "fullscreen-real-geography")
         assert_clip_unchanged(fullscreen_before,fullscreen_img,
                               CANVAS["fullscreen"])
+        # M30y runs in its own second private compositor session with
+        # M30t/M30w disabled, preserving the original 1493px fullscreen
+        # source rather than calculating an imaginary baseline pitch.
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_M30Y") == "1":
+            if (env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" or
+                    env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1"):
+                raise RuntimeError("M30Y_MUST_USE_INDEPENDENT_UNPADDED_SESSION")
+            from ci_company_m30y_original_evidence import (
+                original_evidence, MARKER as ORIGINAL_MARKER)
+            original_deadline = time.monotonic() + 12
+            while time.monotonic() < original_deadline:
+                original_log = sway_log.read_text(errors="replace")
+                if ORIGINAL_MARKER in original_log:
+                    break
+                if actor.poll() is not None:
+                    raise RuntimeError("M30Y_ORIGINAL_QT_EXITED")
+                time.sleep(.15)
+            else:
+                raise RuntimeError("M30Y_ORIGINAL_NATIVE_REPORT_MISSING " +
+                                   sway_log.read_text(errors="replace")[-2000:])
+            original_details = original_evidence(original_log)
+            (temp / "sd-company-m30y-original-native-evidence.json").write_text(
+                json.dumps(original_details, sort_keys=True, indent=2) + "\n")
+            print("SD_COMPANY_M30Y_ORIGINAL_BUFFER "
+                  "actual_wlroots_import=1 selected_native_root=1 "
+                  "physical=1493x788 "
+                  f"pitch={original_details['actualPlane0PitchBytes']} "
+                  "cpu_qimage_substitution=NO "
+                  "production_scene_input=OFF PASS", flush=True)
         # M30w: read-only observation of the real wlroots-imported
         # native scene buffer, selected by the existing kernel-checked Qt
         # actor and exact Company fullscreen host. No QImage CPU pitch
