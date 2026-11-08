@@ -400,7 +400,27 @@ static void ci_company_apply_clip(struct sway_view *view) {
         .width = ci_company_crop_width(),
         .height = ci_company_crop_height(),
     };
-    wlr_scene_subsurface_tree_set_clip(&view->content_tree->node, &crop);
+    /* When M30t's verified *entire native Qt source* is identical in
+     * width/height to the exact mapped fullscreen Company Canvas, no
+     * source clipping is needed. The old full-surface clip plus
+     * destination override distorted Qt Rectangles in the software
+     * Wayland screenshot, despite the source QQuickWindow being straight.
+     * Disable source remapping ONLY for this exact CI-only equality.
+     * Standard/compact or any intermediate geometry still requires
+     * the original fail-closed clipping and source-size checks. */
+    const bool full_native_exact = ci_company_m30t_enabled() &&
+        ci_company_active_layout.profile == 3 &&
+        ci_company_active_layout.width ==
+            COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+        ci_company_active_layout.height ==
+            COMPANY_TEST_M30O_FULLSCREEN_HEIGHT &&
+        view->geometry.width ==
+            COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+        view->geometry.height ==
+            COMPANY_TEST_M30O_FULLSCREEN_HEIGHT &&
+        view->geometry.x == 0 && view->geometry.y == 0;
+    wlr_scene_subsurface_tree_set_clip(&view->content_tree->node,
+        full_native_exact ? NULL : &crop);
     wlr_scene_node_for_each_buffer(&view->content_tree->node,
         ci_company_crop_buffer, NULL);
 }
