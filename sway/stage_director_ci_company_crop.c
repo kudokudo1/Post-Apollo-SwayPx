@@ -43,6 +43,10 @@
 #define COMPANY_TEST_M30K_COMPACT_CROP_H 128
 #define COMPANY_TEST_M30K_FULLSCREEN_HOST_W 1920
 #define COMPANY_TEST_M30K_FULLSCREEN_HOST_H 1080
+#define COMPANY_TEST_M30O_FULLSCREEN_CANVAS_X 166
+#define COMPANY_TEST_M30O_FULLSCREEN_CANVAS_Y 203
+#define COMPANY_TEST_M30O_FULLSCREEN_WIDTH 1493
+#define COMPANY_TEST_M30O_FULLSCREEN_HEIGHT 788
 
 struct ci_company_layout {
     int x, y, width, height;
@@ -93,6 +97,15 @@ static bool ci_company_m30k_enabled(void) {
 static bool ci_company_m30m_enabled(void) {
     const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30M");
     return ci_company_m30k_enabled() && flag &&
+        strcmp(flag, "1") == 0;
+}
+
+/* M30o is a separate private CI-only *resizable* MapLibre experiment.
+ * M30m/M30n keep the original 840x540 fullscreen-refusal behavior.
+ * Neither test profile is compiled into normal production SwayPX. */
+static bool ci_company_m30o_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30O");
+    return ci_company_m30m_enabled() && flag &&
         strcmp(flag, "1") == 0;
 }
 
@@ -165,17 +178,28 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
             } else if (ci_company_m30k_enabled() &&
                     host_w == COMPANY_TEST_M30K_FULLSCREEN_HOST_W &&
                     host_h == COMPANY_TEST_M30K_FULLSCREEN_HOST_H) {
-                /* Real 1493x788 Canvas will not fit the 840x540 source.
-                 * Hiding it is mandatory; never stretch or reveal overflow. */
-                if (!ci_company_m30k_fullscreen_logged) {
-                    ci_company_m30k_after_fullscreen = true;
-                    ci_company_m30k_recovery_probes = 0;
-                    wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FULLSCREEN "
-                        "source_smaller_than_canvas=1 scene_hidden=1 "
-                        "authority=NONE");
-                    ci_company_m30k_fullscreen_logged = true;
+                if (ci_company_m30o_enabled()) {
+                    /* The SAME native MapLibre client must resize to the
+                     * exact real fullscreen Canvas before any scene/input
+                     * is enabled. No inferred or app-supplied geometry. */
+                    canvas_x = COMPANY_TEST_M30O_FULLSCREEN_CANVAS_X;
+                    canvas_y = COMPANY_TEST_M30O_FULLSCREEN_CANVAS_Y;
+                    crop_w = COMPANY_TEST_M30O_FULLSCREEN_WIDTH;
+                    crop_h = COMPANY_TEST_M30O_FULLSCREEN_HEIGHT;
+                    profile = 3;
+                } else {
+                    /* Preserve M30k/M30m/M30n fail-closed fullscreen when
+                     * the native source remains 840x540. */
+                    if (!ci_company_m30k_fullscreen_logged) {
+                        ci_company_m30k_after_fullscreen = true;
+                        ci_company_m30k_recovery_probes = 0;
+                        wlr_log(WLR_INFO, "SD_CI_COMPANY_M30K_FULLSCREEN "
+                            "source_smaller_than_canvas=1 scene_hidden=1 "
+                            "authority=NONE");
+                        ci_company_m30k_fullscreen_logged = true;
+                    }
+                    return false;
                 }
-                return false;
             } else {
                 return false;
             }
@@ -223,8 +247,12 @@ static bool ci_m30j_real_company_layer(int *target_x, int *target_y) {
                         output->ly + output->height ||
                     canvas_x < 0 || canvas_y < 0 ||
                     crop_w <= 0 || crop_h <= 0 ||
-                    crop_w > COMPANY_TEST_SOURCE_WIDTH ||
-                    crop_h > COMPANY_TEST_SOURCE_HEIGHT ||
+                    crop_w > (ci_company_m30o_enabled() && profile == 3
+                        ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH
+                        : COMPANY_TEST_SOURCE_WIDTH) ||
+                    crop_h > (ci_company_m30o_enabled() && profile == 3
+                        ? COMPANY_TEST_M30O_FULLSCREEN_HEIGHT
+                        : COMPANY_TEST_SOURCE_HEIGHT) ||
                     canvas_x + crop_w > host_w ||
                     canvas_y + crop_h > host_h)
                 return false;
@@ -389,10 +417,27 @@ void stage_director_ci_company_crop_on_unmap(struct sway_view *view) {
 
 static bool ci_company_crop_ready(void) {
     struct sway_view *view = ci_company_crop_actor;
+    /* On M30o the trusted Company host profile must be read BEFORE
+     * checking native geometry, because the exact expected source size
+     * changes during standard/compact -> fullscreen transitions. A
+     * partial or unknown host always fails closed. */
+    if (ci_company_m30o_enabled()) {
+        int target_x = 0, target_y = 0;
+        if (!ci_m30j_real_company_layer(&target_x, &target_y))
+            return false;
+    }
     const bool native_ok = ci_exact_native_qt(view);
+    const int expected_w = ci_company_m30o_enabled() &&
+        ci_company_active_layout.profile == 3
+        ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH
+        : COMPANY_TEST_SOURCE_WIDTH;
+    const int expected_h = ci_company_m30o_enabled() &&
+        ci_company_active_layout.profile == 3
+        ? COMPANY_TEST_M30O_FULLSCREEN_HEIGHT
+        : COMPANY_TEST_SOURCE_HEIGHT;
     if (!native_ok ||
-            view->geometry.width != COMPANY_TEST_SOURCE_WIDTH ||
-            view->geometry.height != COMPANY_TEST_SOURCE_HEIGHT ||
+            view->geometry.width != expected_w ||
+            view->geometry.height != expected_h ||
             view->geometry.x != 0 || view->geometry.y != 0) {
         if (ci_company_m30k_enabled() &&
                 ci_company_m30k_after_fullscreen &&
@@ -490,6 +535,17 @@ static bool ci_company_crop_revalidate_or_hide(const char *phase) {
                     ci_company_active_layout.width,
                     ci_company_active_layout.height,
                     target_x, target_y);
+                if (ci_company_m30o_enabled()) {
+                    wlr_log(WLR_INFO,
+                        "SD_CI_COMPANY_M30O_RESIZED_SOURCE_VISIBLE "
+                        "profile=%d source=%dx%d crop=%dx%d "
+                        "trusted_host=1 same_native_root=1 "
+                        "scene=CI_ONLY authority=NONE",
+                        ci_company_active_layout.profile,
+                        view->geometry.width, view->geometry.height,
+                        ci_company_active_layout.width,
+                        ci_company_active_layout.height);
+                }
             }
         } else if (scene->parent == root->layers.popup) {
             /* Preserve the original M30j single-placement behavior. */
