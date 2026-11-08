@@ -60,6 +60,8 @@ def main():
                     const QVariant mwv=m30lRoot->property("m30oMapWidth");
                     const QVariant mhv=m30lRoot->property("m30oMapHeight");
                     bool okW=false,okH=false,okMW=false,okMH=false;
+                    if (!m30lRoot->property("m30lMapReady").toBool())
+                        return;
                     const int w=wv.toInt(&okW),h=hv.toInt(&okH);
                     const int mw=mwv.toInt(&okMW),mh=mhv.toInt(&okMH);
                     if (!okW || !okH || !okMW || !okMH ||
@@ -73,7 +75,8 @@ def main():
                     last->append(mw);last->append(mh);
                     std::fprintf(stdout,
                         "SD_COMPANY_M30O_REAL_QML_SOURCE "
-                        "window=%dx%d map=%dx%d\\n",w,h,mw,mh);
+                        "window=%dx%d map=%dx%d map_ready=1\\n",
+                        w,h,mw,mh);
                     std::fflush(stdout);
                 });
             sizePoll->start();
