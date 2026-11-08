@@ -368,7 +368,7 @@ jobs:
           corrected=json.loads((p/"sd-company-m30w-real-buffer-evidence.json").read_text())
           pair=compare(orig,corrected)
           (p/"sd-company-m30y-paired-native-evidence.json").write_text(
-              json.dumps(pair,sort_keys=True,indent=2)+"\\n")
+              json.dumps(pair,sort_keys=True,indent=2))
           print("SD_COMPANY_M30Y_REAL_PAIRED_NATIVE_IMPORT "
                 "original=1493px corrected=1494px "
                 "original_measured_pitch="+str(pair["originalMeasuredPitchBytes"])+" "
