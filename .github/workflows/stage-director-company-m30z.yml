@@ -1,0 +1,458 @@
+name: Stage Director M30z original vs corrected native MapLibre pixel fidelity (CI only)
+
+on:
+  pull_request:
+    branches:
+      - stage-director/company-m30y-original-buffer-pitch-ci-20261108
+    paths:
+      - 'tests/stage_director/ci_company_m30s_real_maplibre.py'
+      - 'tests/stage_director/ci_company_m30s_prepare.py'
+      - 'tests/stage_director/ci_company_m30t_prepare.py'
+      - 'tests/stage_director/ci_company_m30t_pixel_geometry.py'
+      - 'tests/stage_director/ci_company_m30w_buffer_evidence.py'
+      - 'tests/stage_director/ci_company_m30y_original_evidence.py'
+      - 'tests/stage_director/ci_company_m30z_pixel_origin.py'
+      - 'tests/stage_director/ci_company_m30o_real_resize.py'
+      - 'sway/stage_director_ci_company_crop.c'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30z.yml'
+      - 'docs/stage-director-company-m30z-20261108.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  merged-company-original-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify M30w read-only wlroots native buffer source and existing CI authority isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          a=Path('tests/stage_director/ci_company_m30s_real_maplibre.py').read_text()
+          b=Path('tests/stage_director/ci_company_m30s_prepare.py').read_text()
+          shell=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          old=Path('tests/stage_director/ci_company_m30r_real_source.py').read_text()
+          native=Path('tests/stage_director/ci_company_m30o_real_resize.py').read_text()
+          production=Path('sway/stage_director.c').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          ast.parse(a);ast.parse(b)
+          for token in ('merged.instrument_without_geometry_repair',
+                        'native.real.prepare=',
+                        'native.real.PIN=merged.COMPANY_MERGED_SHA',
+                        'SD_COMPANY_M30S_MERGED_SOURCE_AND_NATIVE_MAPLIBRE',
+                        'STAGE_DIRECTOR_CI_COMPANY_M30S',
+                        'BLOCKED_M30S_NOT_EXACT_DISPOSABLE_CI'):
+              assert token in a,token
+          for token in ('source.PIN=merged.COMPANY_MERGED_SHA',
+                        'observer.main()',
+                        'merged.EXPECTED_QML_BLOBS',
+                        'NATIVE_BLOBS',
+                        'BLOCKED_M30S_NOT_EXACT_CLEAN_MERGED_COMPANY',
+                        'SD_COMPANY_M30S_MERGED_NATIVE_SOURCE'):
+              assert token in b,token
+          for token in ('COMPANY_MERGED_SHA',
+                        'EXPECTED_QML_BLOBS',
+                        'original_Company_M30q_transform_unmodified=1',
+                        'instrument_without_geometry_repair'):
+              assert token in (old+a+b),token
+          assert 'const origin = mapCanvas.mapToItem(root, 0, 0);' in old
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30S' in shell
+          assert 'BLOCKED_M30S_MERGED_COMPANY_NATIVE_OUTSIDE_PRIVATE_CI' in shell
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30S' not in production
+          assert 'company_m30_manifest_elf_sha256[] = "";' in digest
+          assert 'owner_verified=no scene=OFF input=OFF' in production
+          assert 'SD_COMPANY_M30O_REAL_FULLSCREEN_RESIZE' in native
+          fidelity=Path('tests/stage_director/ci_company_m30t_pixel_geometry.py').read_text()
+          fidelity_prep=Path('tests/stage_director/ci_company_m30t_prepare.py').read_text()
+          ast.parse(fidelity);ast.parse(fidelity_prep)
+          for token in ('SD_COMPANY_M30T_NATIVE_QT_GRAB',
+                        'grabWindow().convertToFormat',
+                        'm30tPixelFiducials',
+                        'ci_company_m30s_prepare',
+                        'BLOCKED_M30T_SOURCE_OUTSIDE_DISPOSABLE_ACTIONS'):
+              assert token in fidelity_prep,token
+          for token in ('M30T_DISTORTION_PRESENT_DO_NOT_ACCEPT',
+                        'NATIVE_QT_RENDERER_SKEW',
+                        'COMPOSITOR_CROP_OR_TRANSFORM_SKEW',
+                        'CALIBRATION_AXIS_ALIGNED',
+                        'left_vertical_drift_px',
+                        'horizontal_drift_px'):
+              assert token in fidelity,token
+          assert 'BLOCKED_M30T_VISUAL_FIDELITY_OUTSIDE_PRIVATE_CI' in shell
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30T' not in production
+          clip=Path('sway/stage_director_ci_company_crop.c').read_text()
+          assert 'ci_company_m30t_enabled' in clip
+          assert 'wlr_scene_buffer_set_dest_size(buffer, 0, 0);' in clip
+          assert 'COMPANY_TEST_M30O_FULLSCREEN_WIDTH' in clip
+          assert 'COMPANY_TEST_M30O_FULLSCREEN_HEIGHT' in clip
+          assert 'COMPANY_TEST_M30O_FULLSCREEN_WIDTH + 1' in clip
+          assert 'EXPECTED_NATIVE = (1494,788)' in fidelity
+          assert 'root.width === 1494' in fidelity_prep
+          evidence=Path('tests/stage_director/ci_company_m30w_buffer_evidence.py').read_text()
+          ast.parse(evidence)
+          code=Path('sway/stage_director_ci_company_crop.c').read_text()
+          native=Path('tests/stage_director/ci_company_m30o_real_resize.py').read_text()
+          assert 'ci_company_m30w_observe_buffer' in code
+          assert 'ci_exact_native_qt(view)' in code
+          assert 'wlr_scene_surface_try_from_buffer(node)' in code
+          assert 'surface->surface != view->surface' in code
+          assert 'wlr_buffer_get_dmabuf(actual, &dma)' in code
+          assert 'wlr_buffer_get_shm(actual, &shm)' in code
+          assert 'SD_CI_COMPANY_M30W_NATIVE_BUFFER' in code
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30W' in code
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30W' not in production
+          assert 'SD_COMPANY_M30W_REAL_BUFFER' in native
+          assert 'actual_wlroots_import=1' in native
+          for token in ('M30W_NO_REAL_BUFFER_FORMAT_AND_PITCH',
+                        'M30W_WRONG_SELECTED_ROOT_OR_DIMENSIONS',
+                        'M30W_TEST_ONLY_AUTHORITY_BOUNDARY_CHANGED',
+                        'productionActorAttested', 'cpuQtReadbackPitchNotSubstituted',
+                        'source":"wlr_buffer_get_shm_or_dmabuf"'):
+              assert token in evidence,token
+          print('SD_COMPANY_M30W_SOURCE_GATE '
+                'real_selected_scene_buffer=1 no_pixel_read=1 '
+                'no_production_change=1 scene_input=OFF PASS')
+          PY
+
+      - name: Validate M30y original-buffer observer source and production isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          observer=Path("sway/stage_director_ci_company_crop.c").read_text()
+          gate=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          runner=Path("tests/stage_director/ci_company_m30o_real_resize.py").read_text()
+          production=Path("sway/stage_director.c").read_text()
+          assert "ci_company_m30y_observe_original" in observer
+          assert "wlr_buffer_get_shm(actual, &shm)" in observer
+          assert "SD_CI_COMPANY_M30Y_ORIGINAL_NATIVE_BUFFER" in observer
+          assert "BLOCKED_M30Y_ORIGINAL_BUFFER_OUTSIDE_PRIVATE_CI" in gate
+          assert "M30Y_MUST_USE_INDEPENDENT_UNPADDED_SESSION" in runner
+          assert "STAGE_DIRECTOR_CI_COMPANY_M30Y" not in production
+          assert "SD_CI_COMPANY_M30Y_ORIGINAL_NATIVE_BUFFER" not in production
+          print("M30Y_TEST_ONLY_ORIGINAL_OBSERVER production_unchanged=1 PASS")
+          PY
+      - name: Source-only M30z original Qt grab and zero production authority
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          prep=Path("tests/stage_director/ci_company_m30t_prepare.py").read_text()
+          runner=Path("tests/stage_director/ci_company_m30o_real_resize.py").read_text()
+          pixels=Path("tests/stage_director/ci_company_m30z_pixel_origin.py").read_text()
+          production=Path("sway/stage_director.c").read_text()
+          clip=Path("sway/stage_director_ci_company_crop.c").read_text()
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30Z' in prep
+          assert 'root.width === 1494 || root.width === 1493' in prep
+          assert 'SD_COMPANY_M30Z_ORIGINAL_QT_GRAB' in prep
+          assert 'SD_COMPANY_M30Z_ORIGINAL_PIXEL_CAPTURE' in runner
+          assert 'sd-company-m30z-original-native-fullscreen.ppm' in pixels
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30Z' not in production
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M30Z' not in clip
+          assert 'productionRendererOrInputAuthorized": False' in pixels
+          print('M30Z_SOURCE_GATE native_qt_capture=CI_ONLY production_untouched=1 PASS')
+          PY
+      - name: Selftest original-vs-corrected pixel geometry and severe skew
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_m30z_pixel_origin.py --selftest
+      - name: Selftest original 1493px import metadata with unknown pitch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_m30y_original_evidence.py --selftest
+      - name: Selftest straight-rectangle geometry and reject synthetic skew
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_m30t_pixel_geometry.py --selftest
+      - name: Selftest independent kernel-buffer metadata parsing and refusals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_m30w_buffer_evidence.py --selftest
+
+  actual-company-native-viewport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exact merged M30q Company QML and original MapLibre files
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          path: company-source
+          persist-credentials: false
+      - name: Check exact merged Company source and unchanged native MapLibre
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import subprocess,sys
+          sys.path.insert(0,'tests/stage_director')
+          import ci_company_m30r_real_source as merged
+          import ci_company_m30s_prepare as native
+          source=Path('company-source')
+          def git(*args):
+              return subprocess.check_output(
+                  ['git','-C',str(source),*args],text=True).strip()
+          assert git('rev-parse','HEAD')==merged.COMPANY_MERGED_SHA
+          assert not git('status','--porcelain')
+          for path,sha in {**merged.EXPECTED_QML_BLOBS,
+                           **native.NATIVE_BLOBS}.items():
+              assert git('hash-object',path)==sha,path
+          coverage=(source/'widgets/CompanyCoveragePane.qml').read_text()
+          network=(source/'widgets/CompanyNetworkW.qml').read_text()
+          assert 'column.x + mapRow.x + mapSurface.x + mapCanvas.x' in coverage
+          assert 'mapCanvas.parent !== mapSurface' in coverage
+          assert 'const origin = mapCanvas.mapToItem(root, 0, 0);' not in coverage
+          assert 'const origin = companyFrame.mapToItem(null, 0, 0);' in network
+          assert 'const origin = companyFrame.mapToItem(root, 0, 0);' not in network
+          assert 'property bool vectorBridgeOptIn: false' in network
+          print('SD_COMPANY_M30S_PINNED_SOURCE '
+                'merged_original_qml=1 unchanged_native_maplibre=1 '
+                'original_checkout_clean=1 bridge=OFF PASS')
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual normal SwayPX for disposable Wayland session
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$sway/bin/sway"; then
+            echo 'FAIL M30i must use unchanged normal SwayPX' >&2
+            exit 1
+          fi
+          echo "SD_M30I_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build separately compiled CI-only Company native clip compositor
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_crop_compositor.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$ci/bin/sway"
+          test -x "$ci/bin/swaymsg"
+          grep -aFq 'SD_CI_COMPANY_M30J_REAL_PANEL' "$ci/bin/sway"
+          echo "SD_M30J_COMPOSITOR=$ci/bin/sway" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$ci/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Build actual pinned Nixpkgs Quickshell on matching Qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then
+            bin="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then
+            bin="$qs/bin/qs"
+          else
+            echo 'FAIL no Quickshell executable from pinned Nix' >&2
+            exit 1
+          fi
+          echo "STAGE_DIRECTOR_TEST_QUICKSHELL=$bin" >> "$GITHUB_ENV"
+      - name: Build original Company MapLibre v3 Qt application with offline data
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30N: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30O: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30S: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30T: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30W: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30Z: '1'
+        run: |
+          set -euo pipefail
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          export STAGE_DIRECTOR_M30L_CI_SOURCE="$RUNNER_TEMP/sd-company-m30l-native-src"
+          python3 -B tests/stage_director/ci_company_m30t_prepare.py
+          # Each source and plugin comes from the same CI pinned Nixpkgs tree.
+          app="$(nix build --impure --expr \
+              'import ./tests/stage_director/ci_company_maplibre_native.nix {
+                 source = builtins.path {
+                   path = builtins.getEnv "STAGE_DIRECTOR_M30L_CI_SOURCE";
+                   name = "company-m30l-exact-review-source";
+                 };
+               }' \
+              --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$app/bin/company-vector-probe"
+          test -f "$app/share/post-apollo-company-m30l/style-fixture.json"
+          echo "STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE=$app/bin/company-vector-probe" >> "$GITHUB_ENV"
+      - name: Build real private Wayland virtual-pointer helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          pointer="$(nix build --impure --expr 'import ./tests/stage_director/ci_company_virtual_pointer.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          echo "STAGE_DIRECTOR_TEST_COMPANY_POINTER=$pointer/bin/sd-company-m30h-pointer" >> "$GITHUB_ENV"
+      - name: Include matching pinned Qt5Compat GraphicalEffects QML module
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          if [[ -z "$module" ]]; then
+            echo 'FAIL pinned Qt5Compat.GraphicalEffects QML module unavailable' >&2
+            find "$compat" -type f -name qmldir | head -n 30 >&2 || true
+            exit 1
+          fi
+          qmlroot="${module%/Qt5Compat/GraphicalEffects/qmldir}"
+          test -d "$qmlroot/Qt5Compat/GraphicalEffects"
+          echo "STAGE_DIRECTOR_M30I_QML_IMPORT_PATH=$qmlroot" >> "$GITHUB_ENV"
+      - name: Prepare pinned Mesa renderer and actual output screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Verify real selected wlroots buffer format and pitch plus M30t pixel fidelity
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_CROP: '1'
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30J: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30K: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30M: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30N: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30O: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30S: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30T: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30W: '1'
+        run: |
+          set -euo pipefail
+          echo "STAGE_DIRECTOR_COMPANY_PINNED_SOURCE=$GITHUB_WORKSPACE/company-source" >> "$GITHUB_ENV"
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30J_COMPOSITOR"
+      - name: Preserve corrected 1494px native evidence before original baseline session
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/sd-company-m30w-real-buffer-evidence.json"
+          test -s "$RUNNER_TEMP/sd-company-m30o-fullscreen-real-maplibre.ppm"
+          cp "$RUNNER_TEMP/sd-company-m30o-fullscreen-real-maplibre.ppm" \
+             "$RUNNER_TEMP/sd-company-m30y-corrected-1494-fullscreen.ppm"
+          if test -s "$RUNNER_TEMP/sd-company-m30o-sway.log"; then
+            cp "$RUNNER_TEMP/sd-company-m30o-sway.log" \
+               "$RUNNER_TEMP/sd-company-m30y-corrected-sway.log"
+          fi
+      - name: Observe genuine original 1493px native source in separate disposable CI session
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_CROP: '1'
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30J: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30K: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30M: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30N: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30O: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30S: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30T: '0'
+          STAGE_DIRECTOR_CI_COMPANY_M30W: '0'
+          STAGE_DIRECTOR_CI_COMPANY_M30Y: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30Z: '1'
+        run: |
+          set -euo pipefail
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30J_COMPOSITOR"
+          test -s "$RUNNER_TEMP/sd-company-m30y-original-native-evidence.json"
+      - name: Compare separately measured 1493px and 1494px imported Wayland buffers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import json,sys
+          sys.path.insert(0,"tests/stage_director")
+          from ci_company_m30y_original_evidence import compare
+          p=Path(__import__("os").environ["RUNNER_TEMP"])
+          orig=json.loads((p/"sd-company-m30y-original-native-evidence.json").read_text())
+          corrected=json.loads((p/"sd-company-m30w-real-buffer-evidence.json").read_text())
+          pair=compare(orig,corrected)
+          (p/"sd-company-m30y-paired-native-evidence.json").write_text(
+              json.dumps(pair,sort_keys=True,indent=2))
+          print("SD_COMPANY_M30Y_REAL_PAIRED_NATIVE_IMPORT "
+                "original=1493px corrected=1494px "
+                "original_measured_pitch="+str(pair["originalMeasuredPitchBytes"])+" "
+                "corrected_measured_pitch="+str(pair["correctedMeasuredPitchBytes"])+" "
+                "cause_certified=NO production_input=OFF PASS")
+          PY
+      - name: Compare original and corrected Qt-source-to-compositor fiducials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_company_m30z_pixel_origin.py --analyze \
+            "$RUNNER_TEMP/sd-company-m30z-original-native-fullscreen.ppm" \
+            "$RUNNER_TEMP/sd-company-m30o-m30z-original-composited-fullscreen.ppm" \
+            "$RUNNER_TEMP/sd-company-m30t-native-fullscreen.ppm" \
+            "$RUNNER_TEMP/sd-company-m30y-corrected-1494-fullscreen.ppm" \
+            "$RUNNER_TEMP/sd-company-m30y-original-native-evidence.json" \
+            "$RUNNER_TEMP/sd-company-m30w-real-buffer-evidence.json" \
+            "$RUNNER_TEMP/sd-company-m30z-real-pixel-origin.json"
+      - name: Retain M30z paired Qt/compositor fiducials and measured native buffer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30z-original-vs-corrected-pixel-fidelity
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/sd-company-m30o-*.ppm
+            ${{ runner.temp }}/sd-company-m30o-*.log
+            ${{ runner.temp }}/sd-company-m30t-*.ppm
+            ${{ runner.temp }}/sd-company-m30t-*.json
+            ${{ runner.temp }}/sd-company-m30w-*.json
+            ${{ runner.temp }}/sd-company-m30y-*.json
+            ${{ runner.temp }}/sd-company-m30y-*.ppm
+            ${{ runner.temp }}/sd-company-m30y-*.log
+            ${{ runner.temp }}/sd-company-m30z-*.ppm
+            ${{ runner.temp }}/sd-company-m30z-*.json
+            ${{ runner.temp }}/sway.log
+      - name: Summarize measured original and corrected native pixel geometry
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30z Company original and corrected Qt/compositor pixel origin'
+            echo 'Retained real Wayland compositor-buffer metadata is'
+            echo 'collected only for the kernel-matched native Qt root.'
+            echo 'Probe asks wlroots for actual imported SHM or DMA-BUF'
+            echo 'format, dimensions, stride, modifier, planes, scale and'
+            echo 'transform. UNKNOWN or mismatches refuse acceptance.'
+            echo 'No Qt CPU bytesPerLine is substituted for actual pitch.'
+            echo 'No memory maps, pixel data, FDs or client pointers logged.'
+            echo 'The original M30t native vs compositor axis fidelity and'
+            echo 'input/PIDFD/close checks remain intact.'
+            echo 'Original 1493px actual SHM pitch now separately measured,'
+            echo 'not extrapolated from 1494px or from Qt CPU readback.'
+            echo 'Two disposable sessions; no same live native actor claim.'
+            echo 'Real source/compositor fiducials at 1493px and 1494px.'
+            echo 'No inference about hardware, driver alignment or root cause.'
+            echo 'PRODUCTION Company actor, scene, crop and input OFF.'
+            echo 'No Social compositor or local workstation changes.'
+          } >> "$GITHUB_STEP_SUMMARY"
