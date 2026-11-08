@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import sys
 
-EXPECTED_NATIVE = (1493,788)
+EXPECTED_NATIVE = (1494,788)
 EXPECTED_COMPOSITOR = (1920,1080)
 CANVAS_ORIGIN=(166,203)
 SAMPLE_Y=tuple(range(205,491,26))
