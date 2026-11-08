@@ -252,7 +252,8 @@ fi
 # frame/canvas geometry + pixels across chassis sizes. Never launch MapLibre,
 # enable the QPA bridge, or touch the user's desktop.
 if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 &&
-      "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ]]; then
+      "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30R:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
@@ -262,6 +263,24 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" == 1 &&
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_real_quickshell.py
+fi
+
+# M30r: run the MERGED original Company QML without any replacement
+# of its native-map coordinate math. Read-only diagnostics are added only
+# to a disposable copy. No renderer, actor admission or production input.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30R:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30R_MERGED_COMPANY_OUTSIDE_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30r_real_source.py
 fi
 
 # M30j: real Company PanelWindow and kernel-matched Qt test actor in
