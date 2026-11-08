@@ -4,6 +4,7 @@
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/seat.h"
+#include "sway/stage_director_social_native.h"
 #include "sway/tree/arrange.h"
 #include "sway/tree/view.h"
 #include "sway/tree/workspace.h"
@@ -16,6 +17,7 @@ struct seatop_resize_floating_event {
 	double ref_lx, ref_ly;         // cursor's x/y at start of op
 	double ref_width, ref_height;  // container's size at start of op
 	double ref_con_lx, ref_con_ly; // container's x/y at start of op
+	uint64_t sd_social_generation;
 };
 
 static void handle_button(struct sway_seat *seat, uint32_t time_msec,
@@ -142,6 +144,8 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	con->pending.content_height += relative_grow_height;
 
 	arrange_container(con);
+	/* Group member pending size is updated within this same transaction. */
+	(void)stage_director_social_native_resize(con, e->sd_social_generation);
 	transaction_commit_dirty();
 }
 
@@ -180,12 +184,14 @@ void seatop_begin_resize_floating(struct sway_seat *seat,
 	e->ref_con_ly = con->pending.y;
 	e->ref_width = con->pending.width;
 	e->ref_height = con->pending.height;
+	(void)stage_director_social_native_begin(con, &e->sd_social_generation);
 
 	seat->seatop_impl = &seatop_impl;
 	seat->seatop_data = e;
 
 	container_set_resizing(con, true);
 	container_raise_floating(con);
+	stage_director_social_native_guest_above(con, e->sd_social_generation);
 	transaction_commit_dirty();
 
 	const char *image = edge == WLR_EDGE_NONE ?

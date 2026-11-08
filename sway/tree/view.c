@@ -28,6 +28,7 @@
 #include "sway/output.h"
 #include "sway/input/seat.h"
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director_social_native.h"
 #include "sway/stage_director.h"
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
@@ -122,6 +123,7 @@ err:
 }
 
 void view_destroy(struct sway_view *view) {
+	stage_director_social_native_view_lost(view);
 	if (!sway_assert(view->surface == NULL, "Tried to free mapped view")) {
 		return;
 	}
@@ -1035,6 +1037,7 @@ void view_map(struct sway_view *view, struct wlr_surface *wlr_surface,
 }
 
 void view_unmap(struct sway_view *view) {
+	stage_director_social_native_view_lost(view);
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Guard reference cannot survive native XDG unmap / view destruction. */
 	stage_director_ci_scene_probe_early_unmap(view);

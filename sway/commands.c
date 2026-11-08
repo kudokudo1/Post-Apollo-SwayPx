@@ -160,6 +160,7 @@ static const struct cmd_handler command_handlers[] = {
 	{ "splith", cmd_splith },
 	{ "splitt", cmd_splitt },
 	{ "splitv", cmd_splitv },
+	{ "stage_director_social", cmd_stage_director_social },
 	{ "sticky", cmd_sticky },
 	{ "swap", cmd_swap },
 	{ "title_format", cmd_title_format },

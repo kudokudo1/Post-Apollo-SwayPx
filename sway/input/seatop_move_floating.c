@@ -2,10 +2,12 @@
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/seat.h"
+#include "sway/stage_director_social_native.h"
 
 struct seatop_move_floating_event {
 	struct sway_container *con;
 	double dx, dy; // cursor offset in container
+	uint64_t sd_social_generation;
 };
 
 static void finalize_move(struct sway_seat *seat) {
@@ -14,6 +16,7 @@ static void finalize_move(struct sway_seat *seat) {
 	// We "move" the container to its own location
 	// so it discovers its output again.
 	container_floating_move_to(e->con, e->con->pending.x, e->con->pending.y);
+	(void)stage_director_social_native_move(e->con, e->sd_social_generation);
 	transaction_commit_dirty();
 
 	e->con->animation_state.seat_is_moving_float = false;
@@ -43,6 +46,8 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	e->con->animation_state.seat_is_moving_float = true;
 
 	container_floating_move_to(e->con, cursor->x - e->dx, cursor->y - e->dy);
+	/* The peer is staged BEFORE the compositor transaction. */
+	(void)stage_director_social_native_move(e->con, e->sd_social_generation);
 	transaction_commit_dirty();
 }
 
@@ -73,6 +78,7 @@ void seatop_begin_move_floating(struct sway_seat *seat,
 	e->con = con;
 	e->dx = cursor->cursor->x - con->pending.x;
 	e->dy = cursor->cursor->y - con->pending.y;
+	(void)stage_director_social_native_begin(con, &e->sd_social_generation);
 
 	con->animation_state.seat_is_moving_float = true;
 
@@ -80,6 +86,7 @@ void seatop_begin_move_floating(struct sway_seat *seat,
 	seat->seatop_data = e;
 
 	container_raise_floating(con);
+	stage_director_social_native_guest_above(con, e->sd_social_generation);
 	transaction_commit_dirty();
 
 	cursor_set_image(cursor, "grab", NULL);

@@ -199,7 +199,7 @@ sway_cmd cmd_shadow_offset;
 sway_cmd cmd_shadow_inactive_color;
 sway_cmd cmd_shadows;
 sway_cmd cmd_shadows_on_csd;
-sway_cmd cmd_shortcuts_inhibitor;
+sway_cmd cmd_stage_director_social;sway_cmd cmd_shortcuts_inhibitor;
 sway_cmd cmd_show_marks;
 sway_cmd cmd_smart_borders;
 sway_cmd cmd_smart_corner_radius;
