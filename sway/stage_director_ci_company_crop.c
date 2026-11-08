@@ -109,6 +109,17 @@ static bool ci_company_m30o_enabled(void) {
         strcmp(flag, "1") == 0;
 }
 
+/* M30t is an isolated CI-only compositor pixel-fidelity experiment.
+ * The native source can be 1493x788 during fullscreen. When the
+ * *verified* source and viewport are the same exact size, there is
+ * no need to override the natural buffer destination dimensions.
+ * This flag is never compiled into production SwayPX. */
+static bool ci_company_m30t_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30T");
+    return ci_company_m30o_enabled() && flag &&
+        strcmp(flag, "1") == 0;
+}
+
 static int ci_company_crop_width(void) {
     if (ci_company_m30k_enabled())
         return ci_company_active_layout.width;
@@ -351,9 +362,24 @@ static void ci_company_crop_buffer(struct wlr_scene_buffer *buffer,
     (void)sy;
     (void)data;
     if (!wlr_scene_surface_try_from_buffer(buffer)) return;
-    /* wlr_scene_subsurface_tree_set_clip sets the *source* crop; Sway's
-     * output_configure_scene separately sets buffer *destination* size,
-     * so normalize both after its normal frame pass. */
+    /* M30t CI ONLY: when source dimensions match the exact trusted
+     * fullscreen host Canvas, retain the native buffer's natural
+     * destination geometry. M30o previously forced dest_size even
+     * though it was identical to the source, while also clipping its
+     * source box. The resulting screenshot sheared plain QML Rectangles.
+     * Observe the real pixel proof: no arbitrary source may bypass
+     * the existing exact-size/host/pidfd admission gate. */
+    if (ci_company_m30t_enabled() &&
+            ci_company_active_layout.profile == 3 &&
+            ci_company_active_layout.width ==
+                COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+            ci_company_active_layout.height ==
+                COMPANY_TEST_M30O_FULLSCREEN_HEIGHT) {
+        wlr_scene_buffer_set_dest_size(buffer, 0, 0);
+        return;
+    }
+    /* Legacy private M30o/M30m/m behavior is unchanged with M30t OFF.
+     * Its crop is based on exact trusted Company host geometry. */
     wlr_scene_buffer_set_dest_size(buffer,
         ci_company_crop_width(), ci_company_crop_height());
 }
