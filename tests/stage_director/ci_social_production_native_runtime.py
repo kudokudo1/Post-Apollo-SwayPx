@@ -17,7 +17,16 @@ import ci_social_production_fixture as b
 
 
 def command(swaymsg,ipc,env,action,success=True):
-    result=json.loads(b.run(str(swaymsg),"-s",str(ipc),"-r",action,env=env))
+    # A deliberately refused Sway command may set swaymsg's exit code to
+    # nonzero. Parse its raw JSON reply instead of treating that as a
+    # transport failure before checking our expected-denial assertion.
+    p=subprocess.run([str(swaymsg),"-s",str(ipc),"-r",action],
+                     capture_output=True,text=True,timeout=12,env=env)
+    try:
+        result=json.loads(p.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("SD_SOCIAL_PRODUCTION_COMMAND_REPLY_INVALID "
+                           + p.stderr[-600:]) from exc
     passed=isinstance(result,list) and len(result)==1 and isinstance(
         result[0],dict) and result[0].get("success") is True
     if passed is not success:
