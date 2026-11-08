@@ -13,6 +13,10 @@ on:
       - "sway/input/seatop_resize_floating.c"
       - ".github/workflows/stage-director-social-native-production.yml"
       - "docs/stage-director-social-production-integration-20261107.md"
+      - "tests/stage_director/ci_social_production_cursor_overlay.py"
+      - "tests/stage_director/ci_social_production_fixture.py"
+      - "tests/stage_director/ci_social_production_native_runtime.py"
+      - "tests/stage_director/ci_social_production_udmabuf.sh"
   workflow_dispatch:
 
 permissions:
@@ -62,4 +66,48 @@ jobs:
           assert view.count("stage_director_social_native_view_lost(view);") == 2
           print("SD_SOCIAL_PRODUCTION_NATIVE_SEAMS hooks=2 unmap_and_destroy=2 command=1 result=PASS")
           PY
+          test -z "$(git status --porcelain)"
+
+  production-native-headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      STAGE_DIRECTOR_CI_SOCIAL_NATIVE_MOVE: "1"
+      STAGE_DIRECTOR_CI_SOCIAL_REAL_PAIR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Only instrument disposable cursor test driver
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/ci_social_production_cursor_overlay.py
+          test -z "$(git status --porcelain)"
+      - name: Build actual production grouping with disposable cursor driver
+        run: |
+          set -euo pipefail
+          temp_src="$RUNNER_TEMP/sd-ci-social-production-src"
+          compositor="$(cd "$temp_src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -x "$grim/bin/grim"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          echo "SD_SOCIAL_CI_SWAY=$compositor/bin/sway" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+          echo "SD_SOCIAL_CI_MESA=$mesa" >> "$GITHUB_ENV"
+      - name: Verify production native pair, actual seatops and compositor pixels
+        run: |
+          set -euo pipefail
+          bash tests/stage_director/ci_social_production_udmabuf.sh
           test -z "$(git status --porcelain)"
