@@ -17,6 +17,7 @@ This room provides the semantic **MODEL** view while preserving the compositor's
 ### ✮˙๋࣭⭑ CONTENTS // CURRENT
 
 - renderer / compositor architecture
+- **PROPOSED // Stage Director provider-neutral native XDG window grouping:** [role admission, consumer matrix, safety gates and rollout contract](./stage-director-provider-neutral-window-group-v0.md). No runtime authority or activation in this proposal.
 - animation and effects model
 - protocol / IPC relationships
 
