@@ -1,0 +1,182 @@
+name: Stage Director M30r merged Company QML real Quickshell verification
+
+on:
+  pull_request:
+    branches:
+      - stage-director/company-m30l-real-maplibre-native-ci-20261107
+    paths:
+      - 'tests/stage_director/ci_company_m30r_real_source.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+      - '.github/workflows/stage-director-company-m30r.yml'
+      - 'docs/stage-director-company-m30r-20261108.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  merged-company-original-qml-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require M30r pinned merged source without runtime grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path("tests/stage_director/ci_company_m30r_real_source.py").read_text()
+          old=Path("tests/stage_director/ci_company_real_quickshell.py").read_text()
+          smoke=Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          stage=Path("sway/stage_director.c").read_text()
+          digest=Path("sway/stage_director_company_digest.c").read_text()
+          ast.parse(p)
+          for token in (
+              "877eb00d0f260f9fdda52712f35abec59b2f83b3",
+              "7f6ceaa578be942fde4728ff0ca36bd18752aa44",
+              "432573110a65e6e7a5dd94da9f958f80261e227d",
+              "instrument_without_geometry_repair",
+              "original.PIN = COMPANY_MERGED_SHA",
+              "original.prepare = instrument_without_geometry_repair",
+              "original.patch_read_only(",
+              "M30R_ORIGINAL_QML_SOURCE_DRIFT",
+              "SD_COMPANY_M30R_MERGED_COMPANY_NATIVE_QML",
+              "no_ci_geometry_replacement=1"):
+              assert token in p, token
+          assert "SD_COMPANY_M30I_QML_GEOMETRY" in old
+          assert "BLOCKED_M30I_QUICKSHELL_OUTSIDE_DISPOSABLE_CI" in smoke
+          assert "BLOCKED_M30R_MERGED_COMPANY_OUTSIDE_DISPOSABLE_CI" in smoke
+          assert "STAGE_DIRECTOR_CI_COMPANY_M30R" not in stage
+          assert "company_m30_manifest_elf_sha256[] = \"\";" in digest
+          assert "owner_verified=no scene=OFF input=OFF" in stage
+          print("SD_COMPANY_M30R_SOURCE_BOUNDARY "
+                "original_company_merged_qml=PINNED "
+                "geometry_replacement=OFF "
+                "normal_compositor_scene_input=OFF PASS")
+          PY
+
+  real-merged-company-quickshell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exactly reviewed merged Company main source
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          path: company-source
+          persist-credentials: false
+      - name: Check true merged Company coordinate source and default OFF bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          company=Path("company-source")
+          sha=subprocess.check_output(
+              ["git","-C",str(company),"rev-parse","HEAD"],text=True).strip()
+          assert sha=="877eb00d0f260f9fdda52712f35abec59b2f83b3", sha
+          assert not subprocess.check_output(
+              ["git","-C",str(company),"status","--porcelain"],text=True).strip()
+          coverage=(company/"widgets/CompanyCoveragePane.qml").read_text()
+          network=(company/"widgets/CompanyNetworkW.qml").read_text()
+          assert "column.x + mapRow.x + mapSurface.x + mapCanvas.x" in coverage
+          assert "mapCanvas.parent !== mapSurface" in coverage
+          assert "const origin = mapCanvas.mapToItem(root, 0, 0);" not in coverage
+          assert "const origin = companyFrame.mapToItem(null, 0, 0);" in network
+          assert "const origin = companyFrame.mapToItem(root, 0, 0);" not in network
+          assert "property bool vectorBridgeOptIn: false" in network
+          print("SD_COMPANY_M30R_MERGED_SOURCE "
+                "original_company_head=PINNED "
+                "candidate_geometry_fix=LANDED bridge=OFF PASS")
+          PY
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build unchanged normal SwayPX for isolated Wayland compositor
+        shell: bash
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          if grep -aFq 'SD_CI_COMPANY_CROP_FRAME' "$sway/bin/sway"; then
+            echo 'M30R_PRODUCTION_COMPOSITOR_CONTAINS_CI_MAP_RENDERER' >&2
+            exit 1
+          fi
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "SD_M30R_COMPOSITOR=$sway/bin/sway" >> "$GITHUB_ENV"
+      - name: Build genuine pinned Quickshell
+        shell: bash
+        run: |
+          set -euo pipefail
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then
+            bin="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then
+            bin="$qs/bin/qs"
+          else
+            echo 'M30R_NO_PINNED_QUICKSHELL_EXECUTABLE' >&2
+            exit 1
+          fi
+          echo "STAGE_DIRECTOR_TEST_QUICKSHELL=$bin" >> "$GITHUB_ENV"
+      - name: Provide matched Qt5Compat QML and Mesa renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          test -n "$module"
+          qmlroot="${module%/Qt5Compat/GraphicalEffects/qmldir}"
+          test -d "$qmlroot/Qt5Compat/GraphicalEffects"
+          echo "STAGE_DIRECTOR_M30I_QML_IMPORT_PATH=$qmlroot" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          echo "STAGE_DIRECTOR_TEST_GRIM=$grim/bin/grim" >> "$GITHUB_ENV"
+      - name: Verify merged Company QML live under real Quickshell standard compact fullscreen close
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30R: '1'
+        run: |
+          set -euo pipefail
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_M30R_COMPOSITOR"
+      - name: Retain real merged Company QML compositor screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30r-merged-original-qml-quickshell
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/sd-company-m30i-*.ppm
+      - name: Publish exact original-Company acceptance boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M30r merged Company QML native geometry verification'
+            echo 'Actual merged Company source was checked out at fixed SHA.'
+            echo 'The old M30i geometry repair is NEVER replayed on the copy.'
+            echo 'Read-only CI diagnostics are the only injected QML code.'
+            echo 'An actual Quickshell PanelWindow ran standard, compact,'
+            echo 'fullscreen and close on private real Wayland/SwayPX.'
+            echo 'Bridge OFF, no native map child, no renderer scene/input.'
+            echo 'This is NOT Company MapLibre production or Fedora acceptance.'
+          } >> "$GITHUB_STEP_SUMMARY"
