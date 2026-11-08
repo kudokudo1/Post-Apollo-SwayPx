@@ -49,7 +49,7 @@ def main():
         z: 10000
         width: root.width
         height: root.height
-        visible: root.width === 1493 && root.height === 788
+        visible: root.width === 1494 && root.height === 788
         Rectangle {
             x: 305; y: 170; width: 6; height: 361
             color: "#04FF32"
@@ -85,9 +85,9 @@ def main():
             QObject::connect(fidelityPoll,&QTimer::timeout,&app,
                 [window,m30lRoot,fidelityPoll,settled]() {
                     if (!m30lRoot->property("m30lMapReady").toBool()
-                            || m30lRoot->property("m30oWindowWidth").toInt()!=1493
+                            || m30lRoot->property("m30oWindowWidth").toInt()!=1494
                             || m30lRoot->property("m30oWindowHeight").toInt()!=788
-                            || m30lRoot->property("m30oMapWidth").toInt()!=1493
+                            || m30lRoot->property("m30oMapWidth").toInt()!=1494
                             || m30lRoot->property("m30oMapHeight").toInt()!=788) {
                         *settled=0;
                         return;
@@ -96,7 +96,7 @@ def main():
                     fidelityPoll->stop();
                     const QImage pixels=window->grabWindow().convertToFormat(
                         QImage::Format_RGB888);
-                    if (pixels.width()!=1493 || pixels.height()!=788) {
+                    if (pixels.width()!=1494 || pixels.height()!=788) {
                         std::fprintf(stderr,
                             "SD_COMPANY_M30T_NATIVE_QT_GRAB_FAILED dimensions\\n");
                         std::fflush(stderr);
@@ -112,7 +112,7 @@ def main():
                     }
                     std::fprintf(stdout,
                         "SD_COMPANY_M30T_NATIVE_QT_GRAB real_grabWindow=1 "
-                        "size=1493x788 qml_fiducials=1 offline=1\\n");
+                        "size=1494x788 qml_fiducials=1 offline=1\\n");
                     std::fflush(stdout);
                 });
             fidelityPoll->start();
