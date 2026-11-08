@@ -1,0 +1,119 @@
+name: Stage Director M30p Company production admission preflight (source-only)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m30l-real-maplibre-native-ci-20261107
+    paths:
+      - 'tests/stage_director/ci_company_m30p_production_preflight.py'
+      - '.github/workflows/stage-director-company-m30p.yml'
+      - 'docs/stage-director-company-m30p-20261108.md'
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_company_pairing.c'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director_company_digest.c'
+      - 'sway/stage_director_ci_company_crop.c'
+      - 'tests/stage_director/ci_company_real_quickshell.py'
+      - 'tests/stage_director/ci_company_m30o_real_resize.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-company-swaypx-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout SwayPX source without persistent token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exactly reviewed original Company source
+        uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: e3595b0035bb3d89aa87c6ba2bd1aac04a975181
+          path: company-source
+          persist-credentials: false
+      - name: Evaluate production readiness only, with no runtime changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile tests/stage_director/ci_company_m30p_production_preflight.py
+          python3 -B tests/stage_director/ci_company_m30p_production_preflight.py \
+            --company company-source --sway . > "$RUNNER_TEMP/m30p-readiness.json"
+          python3 -B - "$RUNNER_TEMP/m30p-readiness.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert data["schema"]=="post-apollo.company-map.production-readiness-source-v1"
+          assert data["company_source_sha"]=="e3595b0035bb3d89aa87c6ba2bd1aac04a975181"
+          assert data["scope"]=="SOURCE_ONLY_NO_RUNTIME_OR_OPERATOR_AUTHORITY"
+          assert data["source_contract_verified"] is True
+          assert data["production_ready"] is False
+          assert data["production_activation"]=="REFUSED"
+          expected={
+              "company-coverage-coordinate-repair",
+              "company-panel-coordinate-repair",
+              "approved-native-executable-hash",
+              "selected-native-actor-render-input-authority",
+              "desktop-operator-acceptance",
+          }
+          blockers={row["id"]:row for row in data["blockers"]}
+          assert set(blockers)==expected
+          assert blockers["approved-native-executable-hash"]["state"]=="UNPINNED"
+          assert blockers["selected-native-actor-render-input-authority"]["state"]=="NOT_IMPLEMENTED"
+          assert all(row["state"]!="READY" for row in data["blockers"])
+          print("M30P_SOURCE_VERIFIED production_ready=0 authority=NONE "
+                "company_coordinate_repairs=NOT_LANDED "
+                "approved_elf_digest=UNPINNED scene_input=OFF PASS")
+          PY
+
+          # The same inspected source MUST fail when asked to authorize
+          # deployment. A zero status here would be an unsafe regression.
+          set +e
+          python3 -B tests/stage_director/ci_company_m30p_production_preflight.py \
+            --company company-source --sway . --require-production-ready \
+            > "$RUNNER_TEMP/m30p-must-refuse.json"
+          exit_code=$?
+          set -e
+          if [[ "$exit_code" != 3 ]]; then
+            echo "M30P_UNSAFE_PRODUCTION_APPROVAL_RET=$exit_code" >&2
+            exit 1
+          fi
+          cmp "$RUNNER_TEMP/m30p-readiness.json" "$RUNNER_TEMP/m30p-must-refuse.json"
+          echo "M30P_EXPLICIT_PRODUCTION_READY_REQUEST_REFUSED PASS"
+
+          # No guessed hash, actor custody or source modification in M30p.
+          if grep -q 'ci_company_m30p' sway/stage_director.c; then
+            echo "M30P_PRODUCTION_COMPOSITOR_WAS_MODIFIED" >&2
+            exit 1
+          fi
+          test -z "$(git -C company-source status --porcelain --untracked-files=no)"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo "M30P_NO_PRODUCTION_CHANGE original_company=UNCHANGED swaypx=UNCHANGED PASS"
+      - name: Store read-only readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m30p-production-admission-readiness
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/m30p-readiness.json
+      - name: Record exact output scope
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## M30p source-only Company production preflight"
+            echo "Original Company QML is pinned and unmodified."
+            echo "M30o fullscreen proof is CI-only."
+            echo "Manifest digest remains unapproved, original QML"
+            echo "coordinate fixes are not landed, and production"
+            echo "render/scene/input authority remains OFF."
+            echo "This job must never report production_ready=true."
+            echo "No runtime, native child, local machine, network tiles,"
+            echo "Hospital registration, merge, or deployment occurred."
+          } >> "$GITHUB_STEP_SUMMARY"
