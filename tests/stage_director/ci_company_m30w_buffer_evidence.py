@@ -21,7 +21,7 @@ def evidence(log: str) -> dict:
             if MARKER in line]
     if len(rows) != 1:
         raise RuntimeError("M30W_MISSING_OR_MULTIPLE_ROOT_BUFFER_REPORTS")
-    fields = dict(re.findall(r"([a-z_]+)=([^\s]+)",rows[0]))
+    fields = dict(re.findall(r"([a-z0-9_]+)=([^\s]+)",rows[0]))
     required = (
         "status","kind","root_surface","physical","canvas",
         "format","plane0_stride","planes","modifier",
@@ -65,7 +65,7 @@ def evidence(log: str) -> dict:
     if fields["kind"]=="DMABUF":
         if len(dma_rows)!=1:
             raise RuntimeError("M30W_MISSING_EXACT_DMA_METADATA")
-        dma=dict(re.findall(r"([a-z_]+)=([^\s]+)",dma_rows[0]))
+        dma=dict(re.findall(r"([a-z0-9_]+)=([^\s]+)",dma_rows[0]))
         if set(dma)!=set(("modifier","plane0_stride","format",
                            "planes","epoch","authority")) or (
                 dma["authority"]!="NONE" or
