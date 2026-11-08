@@ -320,7 +320,8 @@ fi
 
 # M30n: same actual source-pinned Company/MapLibre process from M30m.
 # Demand real QtLocation camera motion, viewport persistence and geography.
-if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30N:-}" == 1 ]]; then
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30N:-}" == 1 &&
+      "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" != 1 ]]; then
   if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
         "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
         "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
@@ -335,6 +336,26 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30N:-}" == 1 ]]; then
   fi
   export WAYLAND_DISPLAY="${socket##*/}"
   python3 -B tests/stage_director/ci_company_m30n_real_camera.py
+fi
+
+# M30o: source-resizable MapLibre inside original Company fullscreen.
+# Disposable-only test; the M30m/M30n exact fail-closed logic stays intact.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_CROP:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_INPUT:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30J:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30M:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30N:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30L:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30O_RESIZE_OUTSIDE_EXACT_PRIVATE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m30o_real_resize.py
 fi
 
 # M30l: ORIGINAL Company MapLibre v3 QtLocation executable from a
