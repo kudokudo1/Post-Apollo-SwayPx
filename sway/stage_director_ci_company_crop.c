@@ -473,8 +473,15 @@ static bool ci_company_crop_ready(void) {
             return false;
     }
     const bool native_ok = ci_exact_native_qt(view);
-    const int expected_w = ci_company_m30o_enabled() &&
+    /* CI-only M30t stride-alignment experiment: permit precisely one
+     * extra physical Qt source column on fullscreen, cropped away from
+     * Company's genuine 1493px Canvas. All ordinary M30o native geometry
+     * gates still demand 1493px, and every unknown width is refused. */
+    const int expected_w = ci_company_m30t_enabled() &&
         ci_company_active_layout.profile == 3
+        ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH + 1
+        : ci_company_m30o_enabled() &&
+          ci_company_active_layout.profile == 3
         ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH
         : COMPANY_TEST_SOURCE_WIDTH;
     const int expected_h = ci_company_m30o_enabled() &&
