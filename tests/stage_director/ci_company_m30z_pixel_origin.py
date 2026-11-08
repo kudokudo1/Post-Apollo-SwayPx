@@ -58,6 +58,75 @@ def _interpret(original_native: dict, original_composed: dict | None,
     }
 
 
+# M30z second pass: follow the two green fiducials around the *full*
+# visible 1493px row, including wrap at the left/right edge. The original
+# narrow M30t scan assumed both bars would stay in the original x window.
+# This does NOT assume the amount or direction of shear before measuring.
+SCAN_ROWS = tuple(range(170, 496, 25))
+VISIBLE_WIDTH = 1493
+BAR_CENTERS = (307.5, 464.5)
+EXPECTED_SEPARATION = BAR_CENTERS[1] - BAR_CENTERS[0]
+
+
+def wrapped_bar_trace(image, offset: tuple[int, int], label: str) -> dict:
+    ox, oy = offset
+    observations = []
+    for y in SCAN_ROWS:
+        spans = geometry.runs(
+            x for x in range(VISIBLE_WIDTH)
+            if geometry.is_green(geometry.rgb(image, ox + x, oy + y)))
+        spans = [(a, b) for a, b in spans if b-a+1 <= 12]
+        if len(spans) != 2:
+            raise RuntimeError(f"M30Z_{label}_WRAPPED_BARS_MISSING "
+                               f"row={y} spans={spans[:10]}")
+        c0, c1 = [(a+b)/2.0 for a, b in spans]
+        if abs(((c1 - c0) % VISIBLE_WIDTH) -
+               EXPECTED_SEPARATION) <= 1.0:
+            left, right = c0, c1
+        elif abs(((c0 - c1) % VISIBLE_WIDTH) -
+                 EXPECTED_SEPARATION) <= 1.0:
+            left, right = c1, c0
+        else:
+            raise RuntimeError(f"M30Z_{label}_WRAPPED_BAR_SPACING_WRONG "
+                               f"row={y} centers={c0},{c1}")
+        shift = (left - BAR_CENTERS[0]) % VISIBLE_WIDTH
+        if shift > VISIBLE_WIDTH / 2:
+            shift -= VISIBLE_WIDTH
+        observations.append({
+            "row": y,
+            "leftCenterPx": left,
+            "rightCenterPx": right,
+            "leftShiftFromQtPx": shift,
+            "barCrossesWrap": left > 1000 or right > 1000
+        })
+    if len(observations) != len(SCAN_ROWS):
+        raise RuntimeError("M30Z_INCOMPLETE_WRAPPED_BAR_MEASUREMENT")
+    n = len(observations)
+    mean_x = sum(d["row"] for d in observations) / n
+    mean_y = sum(d["leftShiftFromQtPx"] for d in observations) / n
+    xx = sum((d["row"]-mean_x)**2 for d in observations)
+    if xx <= 0:
+        raise RuntimeError("M30Z_INSUFFICIENT_VERTICAL_ROW_VARIATION")
+    slope = sum(
+        (d["row"]-mean_x)*(d["leftShiftFromQtPx"]-mean_y)
+        for d in observations) / xx
+    intercept = mean_y - slope*mean_x
+    residual = max(abs(d["leftShiftFromQtPx"] -
+                       (slope*d["row"]+intercept))
+                   for d in observations)
+    return {
+        "measuredRows": n,
+        "visibleWidthPx": VISIBLE_WIDTH,
+        "signedHorizontalShiftPerSourceRowPx": round(slope, 6),
+        "shiftInterceptPx": round(intercept, 6),
+        "maximumFitResidualPx": round(residual, 6),
+        "rowsWithWrappedBars": sum(d["barCrossesWrap"] for d in observations),
+        "rowSamples": observations,
+        "reference": "actual compositor and native PPM pixels",
+        "causeCertified": False
+    }
+
+
 def analyze(original_qt: Path, original_final: Path,
             corrected_qt: Path, corrected_final: Path,
             original_meta_path: Path, corrected_meta_path: Path,
@@ -104,6 +173,39 @@ def analyze(original_qt: Path, original_final: Path,
         corrected_screen, ORIGIN, "M30Z_CORRECTED_COMPOSITED")
     report = _interpret(native, composited, corrected_native,
                         corrected_composed, missing)
+    # The narrow M30t scan misses bars that wrap around a 1493px row.
+    # Re-scan the *actual* PPMs across the entire visible width, never
+    # extrapolating a shift from buffer pitch or invented pixel positions.
+    source_trace = wrapped_bar_trace(original_source, (0, 0), "NATIVE_ORIGINAL")
+    corrected_source_trace = wrapped_bar_trace(
+        corrected_source, (0, 0), "NATIVE_CORRECTED")
+    original_final_trace = wrapped_bar_trace(
+        original_screen, ORIGIN, "COMPOSITOR_ORIGINAL")
+    corrected_final_trace = wrapped_bar_trace(
+        corrected_screen, ORIGIN, "COMPOSITOR_CORRECTED")
+    for label, trace in (("SOURCE_ORIGINAL", source_trace),
+                         ("SOURCE_CORRECTED", corrected_source_trace),
+                         ("COMPOSITOR_CORRECTED", corrected_final_trace)):
+        if (abs(trace["signedHorizontalShiftPerSourceRowPx"]) > .02 or
+                abs(trace["shiftInterceptPx"]) > 1 or
+                trace["maximumFitResidualPx"] > .5):
+            raise RuntimeError("M30Z_"+label+"_REFERENCE_DRIFT_INVALID")
+    shifted = (abs(original_final_trace[
+        "signedHorizontalShiftPerSourceRowPx"] + 1.0) <= .02 and
+        abs(original_final_trace["shiftInterceptPx"]) <= 1 and
+        original_final_trace["maximumFitResidualPx"] <= .5 and
+        original_final_trace["rowsWithWrappedBars"] >= 1)
+    report["originalCompositorWrappedBarTrace"] = original_final_trace
+    report["originalQtSourceWrappedBarTrace"] = source_trace
+    report["correctedCompositorWrappedBarTrace"] = corrected_final_trace
+    report["correctedQtSourceWrappedBarTrace"] = corrected_source_trace
+    report["originalFullWidthBarTrackingSucceeded"] = True
+    report["pixelRowShiftOfExactlyOneLeftObserved"] = shifted
+    report["narrowM30tScanMissedWrappedBars"] = composited is None
+    report["classification"] = (
+        "ORIGINAL_COMPOSITOR_ONE_PIXEL_LEFT_PER_ROW_WITH_MODULO_WRAP"
+        if shifted else "ORIGINAL_COMPOSITOR_DIFFERENT_MEASURED_ROW_PATTERN")
+    report["originalCompositorDistortionObserved"] = shifted
     report.update({
         "schema": SCHEMA,
         "status": "OBSERVED_TEST_ONLY_PIXEL_COMPARISON",
@@ -125,6 +227,9 @@ def analyze(original_qt: Path, original_final: Path,
     print("SD_COMPANY_M30Z_ORIGINAL_PIXEL_GEOMETRY "
           "qt_straight=1 corrected_straight=1 "
           "original_classification="+report["classification"]+" "
+          "measured_pixel_shift_per_row="+str(report[
+              "originalCompositorWrappedBarTrace"][
+              "signedHorizontalShiftPerSourceRowPx"])+" "
           "actual_native_original_pitch=2986 corrected_pitch=2988 "
           "pixel_shear_cause_certified=NO production_authority=OFF PASS",
           flush=True)
@@ -158,6 +263,27 @@ def selftest() -> None:
             raise
     else:
         raise RuntimeError("M30Z_ACCEPTED_BAD_NATIVE_QT_SOURCE")
+    # Test full-width scan with true modulo wrap, not a fixture of
+    # invented real PPM evidence. Contrast a straight 1493px reference
+    # with precisely one pixel shifted left per successive source row.
+    def synthetic_wrap(per_row_shift):
+        w, h = VISIBLE_WIDTH, 788
+        pixels = bytearray(bytes((27, 6, 35)) * (w * h))
+        for y in SCAN_ROWS:
+            offset = per_row_shift * y
+            for base in (305, 462):
+                for dx in range(6):
+                    x = (base + offset + dx) % w
+                    p = (y*w + x)*3
+                    pixels[p:p+3] = bytes((4, 255, 50))
+        return w, h, memoryview(pixels)
+    straight_trace=wrapped_bar_trace(synthetic_wrap(0), (0,0),"TEST_STRAIGHT")
+    wrapped_trace=wrapped_bar_trace(synthetic_wrap(-1),(0,0),"TEST_WRAPPED")
+    if (straight_trace["signedHorizontalShiftPerSourceRowPx"] != 0 or
+            wrapped_trace["signedHorizontalShiftPerSourceRowPx"] != -1 or
+            wrapped_trace["maximumFitResidualPx"] != 0 or
+            wrapped_trace["rowsWithWrappedBars"] < 1):
+        raise RuntimeError("M30Z_MODULO_ROW_SHIFT_SELFTEST_FAILED")
     print("SD_COMPANY_M30Z_SELFTEST 35px_shear=DETECTED "
           "missing_unmeasurable=REFUSED_SOURCE_OR_DECLARED "
           "production_authority=OFF PASS", flush=True)
