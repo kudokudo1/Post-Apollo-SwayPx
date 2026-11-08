@@ -107,6 +107,20 @@ if [[ "$cold_size" == 1888x1056 ]]; then
 fi
 echo "SD_CI_COLD_BOOT virtual_output=$cold_size"
 
+# M30y is restricted to a second unpadded, disposable CI-only Wayland
+# session; never combine its original source with corrected M30t/M30w.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M30Y:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30O:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30K:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30T:-}" == 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M30W:-}" == 1 ||
+        -z "${RUNNER_TEMP:-}" || "$runtime" != "$RUNNER_TEMP"/* ]]; then
+    echo "BLOCKED_M30Y_ORIGINAL_BUFFER_OUTSIDE_PRIVATE_CI" >&2
+    exit 2
+  fi
+fi
+
 export XDG_RUNTIME_DIR="$runtime"
 export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
