@@ -127,11 +127,23 @@ def straight(result):
 
 def diagnose(native_file,compositor_file,json_file):
     raw=measure(read_ppm(native_file,EXPECTED_NATIVE),(0,0),"NATIVE")
-    composed=measure(read_ppm(compositor_file,EXPECTED_COMPOSITOR),
-                     CANVAS_ORIGIN,"COMPOSITED")
+    # A compositor shear can shift a vertical reference bar beyond the
+    # expected measurement window or crop it entirely. That is a known
+    # visual failure and must be classified, not mistaken for missing Qt
+    # source geometry. Still always require both actual captured images.
+    final_image=read_ppm(compositor_file,EXPECTED_COMPOSITOR)
+    try:
+        composed=measure(final_image,CANVAS_ORIGIN,"COMPOSITED")
+        compositor_missing=False
+    except RuntimeError as exc:
+        if "FIDUCIAL_MISSING" not in str(exc) and (
+                "FIDUCIAL_PAIR_AMBIGUOUS" not in str(exc)):
+            raise
+        composed={"error":str(exc)}
+        compositor_missing=True
     native_straight=straight(raw)
-    composed_straight=straight(composed)
-    placement=all(abs(x-y)<=3 for x,y in zip(
+    composed_straight=not compositor_missing and straight(composed)
+    placement=not compositor_missing and all(abs(x-y)<=3 for x,y in zip(
         (raw["left_at_top_px"],raw["right_at_top_px"],
          raw["left_at_bottom_px"],raw["right_at_bottom_px"]),
         (composed["left_at_top_px"],composed["right_at_top_px"],
@@ -149,6 +161,7 @@ def diagnose(native_file,compositor_file,json_file):
         "final_swaypx_geometry":composed,
         "native_straight":native_straight,
         "composited_straight":composed_straight,
+        "compositor_reference_bars_missing":compositor_missing,
         "native_to_compositor_placement_within_3px":placement,
         "classification":classification,
         "production_authority":"OFF",
@@ -156,7 +169,7 @@ def diagnose(native_file,compositor_file,json_file):
     json_file.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
     print("SD_COMPANY_M30T_PIXEL_GEOMETRY "
           f"source_vertical_drift={raw['left_vertical_drift_px']:.2f} "
-          f"composited_vertical_drift={composed['left_vertical_drift_px']:.2f} "
+          f"composited_vertical_drift={composed.get('left_vertical_drift_px','NOT_MEASURABLE')} "
           f"native_straight={int(native_straight)} "
           f"composited_straight={int(composed_straight)} "
           f"placement={int(placement)} "
