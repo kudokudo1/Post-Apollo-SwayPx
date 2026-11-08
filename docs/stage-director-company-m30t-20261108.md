@@ -67,7 +67,46 @@ No operator action or desktop restart needed.
 
 ## VERIFY
 
-PENDING exact-head CI. Required:
+### M30t observed results
+
+- The original 1493×788 native Qt source had **straight** Qt
+  `QQuickWindow::grabWindow()` reference bars, but the final SwayPX
+  screenshot showed diagonal bars (roughly one horizontal pixel shifted
+  per output row). A source-vs-final pixel geometry check correctly
+  rejected this result.
+- First bounded CI experiments, removing redundant native buffer
+  destination-size overriding and/or full-surface clipping alone,
+  did **not** remove the diagonal distortion.
+- An exact **1494×788 physical Qt buffer**, retaining Company's
+  **1493×788 visible fullscreen Canvas** (the final extra column is
+  clipped), cleared the visual distortion:
+  [M30t alignment proof](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42499958781).
+  Both Qt and final compositor reference bars measured **0.0 px**
+  vertical and horizontal drift; x/y placement differences were
+  within the required 3 px, with neither missing/shifted bar.
+- The same positive run also passed actual standard/compact/fullscreen
+  MapLibre geography, pan, wheel, camera persistence, unsupported
+  intermediate-size hiding, PIDFD/XDG continuity and proper close.
+  M30m/M30n/M30r/M30s and Meta Apollo Grammar regressions passed
+  on the same head.
+- The M30p source-only production-admission preflight was **red**
+  on the successful M30t head, because it expected a *literal*
+  `wait_real_size(qt_log,(1493,788)` in the M30o test script.
+  M30t's source test now expresses a guarded 1493-default vs
+  1494-test-only choice. The preflight provenance contract has been
+  updated to recognize the guarded equivalent without changing any
+  production scene/input/ELF admission conditions. Its exact-head
+  rerun is required before full CI verification is claimed.
+
+**Production/desktop visual acceptance remains pending.** The workaround
+is validated in one disposable headless Mesa+Wayland configuration;
+it is not yet proof of all GPU formats, scale factors or multi-monitor
+surfaces, nor definitive proof of which low-level component mishandles
+the odd physical buffer pitch.
+
+### Automated acceptance gates
+
+The following gates must remain intact for the final PR head:
 1. Source/normal compositor M30s guards intact.
 2. Selftest passes for straight reference bars and rejects 35px shear.
 3. Qt fullscreen source is genuinely 1493×788.
@@ -113,12 +152,16 @@ Other workers own Social Stage Director modules, which remain untouched.
 
 ## NEXT
 
-Inspect M30t CI result. If the source already contains skew, investigate
-MapLibre Qt v3/OpenGLRhi software rendering or QtQuick state restore in
-a separate Company-owned renderer task. If the native source is straight
-but the final compositor output is skewed, investigate the test-only
-SwayPX crop destination texture mapping without touching the Social
-production compositor until cross-owner approval.
+Confirm the final source/checkpoint exact-head CI, particularly the M30p
+source-preflight refusal and M30t full-native visual-fidelity gates.
+After green checks, inspect the actual corrected fullscreen screenshot
+with the operator and review whether a 1-pixel native buffer padding
+policy should belong in the Company-owned renderer, the compositor's
+selected host adapter, or a platform-neutral image/texture upload
+alignment fix. The CI demonstration must never be ported verbatim to
+production without its owner/security review.
+
+No changes to Social's production compositor are authorized.
 
 Keep the original M30s green functional baseline and this separate
 visual-fidelity rejection as distinct checkpoint evidence.
