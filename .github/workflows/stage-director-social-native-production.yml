@@ -56,7 +56,7 @@ jobs:
           meson=Path("sway/meson.build").read_text()
           assert '"stage_director_social", cmd_stage_director_social' in commands
           assert "'stage_director_social_native.c'" in meson
-          for role in ("QS_SOCIAL_MENU","vesktop","dev.vencord.vesktop"):
+          for role in ("QS_SOCIAL_MENU","vesktop","dev.vencord.vesktop","dev.vencord.Vesktop"):
               assert role in src
           for token in ("wl_resource_get_client","identity_current","last_generation",
                         'revoke("explicit-clear")',"initial_slot","stage_director_social_native_view_lost"):
