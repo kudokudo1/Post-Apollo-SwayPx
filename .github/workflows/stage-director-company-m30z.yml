@@ -157,7 +157,7 @@ jobs:
           assert 'root.width === 1494 || root.width === 1493' in prep
           assert 'SD_COMPANY_M30Z_ORIGINAL_QT_GRAB' in prep
           assert 'SD_COMPANY_M30Z_ORIGINAL_PIXEL_CAPTURE' in runner
-          assert 'sd-company-m30z-original-native-fullscreen.ppm' in pixels
+          assert 'sd-company-m30z-original-native-fullscreen.ppm' in prep
           assert 'STAGE_DIRECTOR_CI_COMPANY_M30Z' not in production
           assert 'STAGE_DIRECTOR_CI_COMPANY_M30Z' not in clip
           assert 'productionRendererOrInputAuthorized": False' in pixels
