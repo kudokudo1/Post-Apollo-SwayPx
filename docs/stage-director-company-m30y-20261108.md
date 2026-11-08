@@ -8,7 +8,7 @@ STAFF ROLE // Nurse 2, external Hospital-compatible successor
 PROVIDER // OPEN AI // CHATGPT
 CONNECTION // EXTERNAL / HOSPITAL-COMPATIBLE, no verified live registration
 ASSIGNMENT // Measure the previously distorted 1493px imported native buffer instead of inferring its pitch from the corrected 1494px buffer
-PHASE // Disposable CI-only two-session experiment
+PHASE // Isolated two-session native evidence measured; production integration pending
 BASE // M30w exact head `bf3be2236ebedb620bd16ef8a98c10aaa3f94f30`
 OWNER // SwayPX Company isolated CI harness only; Social production host/pairing untouched
 PERMISSIONS // GitHub branch, draft PR, tests; no production scene changes, local machine write or merge.
@@ -17,7 +17,7 @@ PERMISSIONS // GitHub branch, draft PR, tests; no production scene changes, loca
 
 M30t [PR #116](https://github.com/kudokudo1/Post-Apollo-SwayPx/pull/116) measured no drift when a 1494×788 physical Qt buffer was clipped into the original 1493×788 visible Company Canvas. M30w [draft PR #117](https://github.com/kudokudo1/Post-Apollo-SwayPx/pull/117) independently inspected the real imported root `wlroots` buffer of that corrected source: SHM RGB565 (`0x36314752`), 1494×788, measured row pitch 2988, scale 1. Company M30x [PR #1561](https://github.com/kudokudo1/The-Post-Apollo-Project/pull/1561) reconciled this with its distinct Qt CPU RGBA readback and has merged.
 
-**Remaining uncertainty:** M30w never measured the physical imported native buffer of the **original 1493px distorted source**. Do not assume its stride was 2986, 2988 or anything else. Nor can a single corrected CI sample certify a universal driver/GPU alignment defect.
+**Historical uncertainty resolved by M30y:** M30w had measured only the corrected 1494px buffer; M30y now directly measured the original unpadded 1493px buffer at **2986 actual bytes/row** in a second private compositor session. The corrected 1494px buffer remains **2988 actual bytes/row**. Both are SHM RGB565 (16-bit), and both measured pitches equal packed width × 2 with **zero extra row-padding bytes**. The measured 2-byte pitch increase is explained by the one extra pixel per row. The original pitch is not divisible by 4 and the corrected pitch is, which is *compatible* with an alignment-sensitive bug, but it does not establish the actual source of the diagonal pixels or certify a universal pitch rule.
 
 This M30y source-only extension retains M30w's unchanged corrected run and introduces a **separate isolated compositor boot** with `STAGE_DIRECTOR_CI_COMPANY_M30T=0`, `M30W=0`, `M30Y=1`. It runs the same pinned MapLibre Qt, original merged Company QML, SwayPX headless Mesa, Quickshell, exact kernel-matched Wayland root and 1920×1080 virtual output. Unlike M30t, it preserves the **original 1493×788 native source** without a padding column.
 
@@ -42,7 +42,18 @@ Nothing to install or activate on the operator's machine.
 
 ## VERIFY
 
-The baseline M30w exact-head native test previously passed [run #42513247422](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42513247422). M30y CI is pending and **must**:
+**M30y exact-head CI succeeded at commit `a5854346e265e8cae1ee7a43e3f4bf6d0705dedc`**: [Actions run #42519372425](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42519372425), four of four checks passed. The first attempt [#42514943733](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42514943733) had failed at the **second session's reused QML copy directory**, before any original buffer report. M30y isolated the original session's QML copy and HOME/cache under new private paths, leaving prior tests' paths unchanged; the successful rerun passed both native sessions.
+
+Actual observed compositor log records in successful run:
+
+| Test-only native root | Format | Real imported stride | Row padding | Canvas |
+|---|---|---:|---:|---|
+| Original unpadded `1493×788` | SHM RGB565 (FourCC `0x36314752`) | **2986 bytes** | 0 bytes | `1493×788` |
+| Corrected `1494×788` | SHM RGB565 (same FourCC) | **2988 bytes** | 0 bytes | `1493×788` |
+
+The original observation reports `SD_COMPANY_M30Y_ORIGINAL_BUFFER ... physical=1493x788 pitch=2986 ... PASS`. The corrected observation reports `SD_COMPANY_M30W_REAL_BUFFER ... source=1494x788 pitch=2988 ... PASS`. Paired parser records `original_measured_pitch=2986 corrected_measured_pitch=2988 cause_certified=NO`. The corrected M30t pixel-fidelity diagnostic measured **0.0-pixel vertical drift**, real Qt/Wayland pan and zoom, root PIDFD/XDG continuity, invalid-size refusal, clean close, and unmodified original Company QML. **The first/original visual shear is historical M30t evidence; this M30y comparison deliberately did not implement a new pixel-shear quantifier for the original unpadded capture.**
+
+All acceptance checks passed on the reviewed code:
 
 1. Compile only the CI probe into a disposable SwayPX compositor; production binary must not contain M30y markers.
 2. Preserve the padded 1494×788 M30w real native buffer witness, MapLibre input and M30t zero-skew tests.
@@ -51,13 +62,13 @@ The baseline M30w exact-head native test previously passed [run #42513247422](ht
 5. Independently compare both real imported buffers and refuse unreviewed formats, scales, authority, missing/ambiguous evidence, or invalid pitches.
 6. Preserve original source and CI-only authority restrictions.
 
-**Failure to observe** is a failed experiment and never permission to fill the missing pitch with Qt QImage bytesPerLine or arithmetic.
+**Failure to observe** would have been a failed experiment, never permission to fill a missing pitch with Qt QImage bytesPerLine or arithmetic. Here both rows were actually observed.
 
 ## WATCH OUT FOR
 
 These are two separate ephemeral native processes, not one identical live actor. Their sameness is limited to pinned source, renderer, compositor build and output profile. One headless Mesa/Wayland test is not a universal rule for Intel/AMD/NVIDIA, Wayland DMA-BUF, fractional scaling or the operator's multi-monitor Fedora desktop.
 
-Even observing identical strides does not prove the compositor's exact pixel-shear root cause. Geometry, pitch, source cropping and compositor texture upload must be correlated with the reference-line screenshots in a later authorized design; do not rewrite the production compositor based on one comparison.
+The measured row strides are **different by exactly two bytes**, but each matches its own tightly packed RGB565 width, and neither has physical row padding. A 4-byte alignment-sensitive upload or crop error remains a possible explanation because 2986 is 2 modulo 4 while 2988 is divisible by 4. The data do **not** demonstrate that adding extra row-padding bytes fixed the skew. Geometry, actual upload stride, texture interpretation, clipping and screenshot fiducials need controlled, independent follow-up before production surgery.
 
 ## CHECKLIST
 
@@ -65,16 +76,16 @@ Even observing identical strides does not prove the compositor's exact pixel-she
 - [x] Keep M30w branch unchanged and make an independent M30y branch
 - [x] Add CI-only original imported-buffer observer, root/identity validation and timeout
 - [x] Add parser, negative tests, paired report, separate session and artifact workflow
-- [ ] Exact-head M30y CI and real 1493px imported stride observed
-- [ ] Compare actual 1493 vs 1494 imported buffers and preserve screenshots
+- [x] Exact-head M30y CI passed; real original imported stride = 2986 bytes
+- [x] Original 1493 vs corrected 1494 imported buffers measured; paired evidence and screenshots archived in GitHub Actions
 - [ ] SwayPX Company selected-host production trust/custody contract (separate)
 - [ ] Fedora GPU, multi-output and scale verification under explicit local approval
 - [ ] Operator review and merge authorization
 
 ## NEXT
 
-Run M30y exact-head CI; classify the actual original stride/format and pixel evidence. If this succeeds, hand both native observations to the Company/SwayPX integration owners to design an authenticated production selected-host crop/input implementation. Keep Social Stage Director production pairing and user hardware untouched.
+**Native evidence milestone complete.** Hand the measured RGB565 native 1493/2986 and 1494/2988 profiles plus the 0px corrected reference-fiducial proof to the SwayPX Company selected-host integration owner. The next bounded engineering experiment should correlate the **original source's pixel shear** with import pitch / shader texture upload / clipping, without confusing observed width-dependent packed pitch with padding; after that design authenticated production selected-host crop/input. Keep Social Stage Director production pairing, the operator's desktop and local Fedora untouched.
 
 ## DECISIONS
 
-No merge, runtime install, Shell reload, compositor restart, live Company bridge opt-in, online tiles or production selected actor granted. Operator final DONE remains separate.
+No merge, runtime install, Shell reload, compositor restart, live Company bridge opt-in, online tiles or production selected actor granted. The actual native pitches are **observations**, not authorization for a 4-byte alignment rule or permanent one-column padding. Operator final DONE remains separate.
