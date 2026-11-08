@@ -583,13 +583,18 @@ def main():
                                 "intermediate-resize")
 
         # This is actual Wayland source resizing, not buffer stretching.
-        sway_control(wid,"resize set width 1493 px height 788 px")
+        full_native_width = (1494 if
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" else 1493)
+        # M30t tests a 1494-pixel Qt buffer with a 1493-pixel real
+        # Company canvas. The rightmost physical column remains cropped.
+        # M30o without M30t keeps its original exact source width.
+        sway_control(wid,f"resize set width {full_native_width} px height 788 px")
         sway_control(wid,"move position 166 203")
-        wait_real_size(qt_log,(1493,788),"fullscreen-exact")
+        wait_real_size(qt_log,(full_native_width,788),"fullscreen-exact")
         wait_profile(sway_log,FULL_PROFILE)
         time.sleep(.7)
         full_actor=native_actor(qt_pid)
-        if full_actor["id"]!=qt_xdg or "1493" not in str(
+        if full_actor["id"]!=qt_xdg or str(full_native_width) not in str(
                 full_actor.get("rect")) or "788" not in str(
                 full_actor.get("rect")):
             raise RuntimeError("M30O_MAP_NOT_REAL_FULLSCREEN_NATIVE " +
@@ -601,8 +606,29 @@ def main():
                           "fullscreen-real-geography")
         assert_clip_unchanged(fullscreen_before,fullscreen_img,
                               CANVAS["fullscreen"])
+        # M30t does NOT relax existing M30o test gates. The separately
+        # selected CI-only experiment uses Qt's own offscreen readback and
+        # this *same* genuine compositor frame to diagnose 2D shear.
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1":
+            from ci_company_m30t_pixel_geometry import diagnose
+            native_ppm = temp / "sd-company-m30t-native-fullscreen.ppm"
+            compositor_ppm = temp / "sd-company-m30o-fullscreen-real-maplibre.ppm"
+            report = temp / "sd-company-m30t-pixel-geometry.json"
+            native_deadline = time.monotonic() + 12
+            while time.monotonic() < native_deadline:
+                if native_ppm.is_file() and (
+                    "SD_COMPANY_M30T_NATIVE_QT_GRAB real_grabWindow=1"
+                    in qt_log.read_text(errors="replace")):
+                    break
+                if actor.poll() is not None:
+                    raise RuntimeError("M30T_MAPLIBRE_EXITED_BEFORE_GRAB")
+                time.sleep(0.15)
+            else:
+                raise RuntimeError("M30T_NATIVE_QT_GRAB_MISSING " +
+                                   qt_log.read_text(errors="replace")[-1600:])
+            diagnose(native_ppm, compositor_ppm, report)
         print("SD_COMPANY_M30O_FULLSCREEN_VISIBLE "
-              "same_native_pidfd_xdg=1 source_and_mapview=1493x788 "
+              f"same_native_pidfd_xdg=1 source_and_mapview={full_native_width}x788 "
               "full_company_canvas=1493x788 real_map_pixels=1 PASS",
               flush=True)
         camera_full=test_input("fullscreen",2)
@@ -672,7 +698,8 @@ def main():
         final = wait_qml(company_log, 4, 45)
         screenshot("company-closed")
         print("SD_COMPANY_M30O_REAL_FULLSCREEN_RESIZE "
-              "source_840_to_1493_to_840=PASS actual_mapview_resize=PASS "
+              f"source_840_to_{full_native_width}_to_840=PASS "
+              "actual_mapview_resize=PASS "
               "unsupported_sizes_hidden=PASS fullscreen_geo_pixels=PASS "
               "real_fullscreen_native_pointer=PASS "
               "camera_persisted_same_pidfd_xdg=PASS "

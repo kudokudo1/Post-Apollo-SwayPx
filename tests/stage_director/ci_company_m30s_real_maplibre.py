@@ -37,10 +37,12 @@ def main() -> None:
     finally:
         env.pop("STAGE_DIRECTOR_CI_COMPANY_M30R",None)
 
+    source_full_width = (1494 if
+        env.get("STAGE_DIRECTOR_CI_COMPANY_M30T")=="1" else 1493)
     print("SD_COMPANY_M30S_MERGED_SOURCE_AND_NATIVE_MAPLIBRE "
           "company_original_merged_m30q=1 geometry_copy_patch=OFF "
           "real_Quickshell_and_MapLibre_in_same_Wayland=1 "
-          "source_840_to_1493_to_840=PASS "
+          f"source_840_to_{source_full_width}_to_840=PASS "
           "genuine_geography_and_fullscreen_input=PASS "
           "camera_and_native_pidfd_xdg_preserved=PASS "
           "production_scene_input=OFF PASS",flush=True)

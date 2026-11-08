@@ -109,6 +109,17 @@ static bool ci_company_m30o_enabled(void) {
         strcmp(flag, "1") == 0;
 }
 
+/* M30t is an isolated CI-only compositor pixel-fidelity experiment.
+ * The native source can be 1493x788 during fullscreen. When the
+ * *verified* source and viewport are the same exact size, there is
+ * no need to override the natural buffer destination dimensions.
+ * This flag is never compiled into production SwayPX. */
+static bool ci_company_m30t_enabled(void) {
+    const char *flag = getenv("STAGE_DIRECTOR_CI_COMPANY_M30T");
+    return ci_company_m30o_enabled() && flag &&
+        strcmp(flag, "1") == 0;
+}
+
 static int ci_company_crop_width(void) {
     if (ci_company_m30k_enabled())
         return ci_company_active_layout.width;
@@ -351,9 +362,24 @@ static void ci_company_crop_buffer(struct wlr_scene_buffer *buffer,
     (void)sy;
     (void)data;
     if (!wlr_scene_surface_try_from_buffer(buffer)) return;
-    /* wlr_scene_subsurface_tree_set_clip sets the *source* crop; Sway's
-     * output_configure_scene separately sets buffer *destination* size,
-     * so normalize both after its normal frame pass. */
+    /* M30t CI ONLY: when source dimensions match the exact trusted
+     * fullscreen host Canvas, retain the native buffer's natural
+     * destination geometry. M30o previously forced dest_size even
+     * though it was identical to the source, while also clipping its
+     * source box. The resulting screenshot sheared plain QML Rectangles.
+     * Observe the real pixel proof: no arbitrary source may bypass
+     * the existing exact-size/host/pidfd admission gate. */
+    if (ci_company_m30t_enabled() &&
+            ci_company_active_layout.profile == 3 &&
+            ci_company_active_layout.width ==
+                COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+            ci_company_active_layout.height ==
+                COMPANY_TEST_M30O_FULLSCREEN_HEIGHT) {
+        wlr_scene_buffer_set_dest_size(buffer, 0, 0);
+        return;
+    }
+    /* Legacy private M30o/M30m/m behavior is unchanged with M30t OFF.
+     * Its crop is based on exact trusted Company host geometry. */
     wlr_scene_buffer_set_dest_size(buffer,
         ci_company_crop_width(), ci_company_crop_height());
 }
@@ -374,7 +400,27 @@ static void ci_company_apply_clip(struct sway_view *view) {
         .width = ci_company_crop_width(),
         .height = ci_company_crop_height(),
     };
-    wlr_scene_subsurface_tree_set_clip(&view->content_tree->node, &crop);
+    /* When M30t's verified *entire native Qt source* is identical in
+     * width/height to the exact mapped fullscreen Company Canvas, no
+     * source clipping is needed. The old full-surface clip plus
+     * destination override distorted Qt Rectangles in the software
+     * Wayland screenshot, despite the source QQuickWindow being straight.
+     * Disable source remapping ONLY for this exact CI-only equality.
+     * Standard/compact or any intermediate geometry still requires
+     * the original fail-closed clipping and source-size checks. */
+    const bool full_native_exact = ci_company_m30t_enabled() &&
+        ci_company_active_layout.profile == 3 &&
+        ci_company_active_layout.width ==
+            COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+        ci_company_active_layout.height ==
+            COMPANY_TEST_M30O_FULLSCREEN_HEIGHT &&
+        view->geometry.width ==
+            COMPANY_TEST_M30O_FULLSCREEN_WIDTH &&
+        view->geometry.height ==
+            COMPANY_TEST_M30O_FULLSCREEN_HEIGHT &&
+        view->geometry.x == 0 && view->geometry.y == 0;
+    wlr_scene_subsurface_tree_set_clip(&view->content_tree->node,
+        full_native_exact ? NULL : &crop);
     wlr_scene_node_for_each_buffer(&view->content_tree->node,
         ci_company_crop_buffer, NULL);
 }
@@ -427,8 +473,15 @@ static bool ci_company_crop_ready(void) {
             return false;
     }
     const bool native_ok = ci_exact_native_qt(view);
-    const int expected_w = ci_company_m30o_enabled() &&
+    /* CI-only M30t stride-alignment experiment: permit precisely one
+     * extra physical Qt source column on fullscreen, cropped away from
+     * Company's genuine 1493px Canvas. All ordinary M30o native geometry
+     * gates still demand 1493px, and every unknown width is refused. */
+    const int expected_w = ci_company_m30t_enabled() &&
         ci_company_active_layout.profile == 3
+        ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH + 1
+        : ci_company_m30o_enabled() &&
+          ci_company_active_layout.profile == 3
         ? COMPANY_TEST_M30O_FULLSCREEN_WIDTH
         : COMPANY_TEST_SOURCE_WIDTH;
     const int expected_h = ci_company_m30o_enabled() &&
