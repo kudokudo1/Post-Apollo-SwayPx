@@ -84,6 +84,7 @@ def main():
         "output * resolution 1920x1080\n"
         "focus_follows_mouse no\n"
         'for_window [app_id="sd-ci-social-host"] floating enable, border none\n'
+        'for_window [app_id="dev.vencord.Vesktop"] floating enable, border none\n'
         'for_window [app_id="vesktop"] floating enable, border none\n'
         'for_window [app_id="sd-ci-social-unrelated"] floating enable, border none\n',
         encoding="utf-8")
@@ -106,7 +107,7 @@ def main():
         if not display or not ipc:
             raise RuntimeError("SD_SOCIAL_PRODUCTION_NO_PRIVATE_SOCKETS")
         env["WAYLAND_DISPLAY"]=display.name
-        host_id="sd-ci-social-host";guest_id="vesktop";other_id="sd-ci-social-unrelated"
+        host_id="sd-ci-social-host";guest_id="dev.vencord.Vesktop";other_id="sd-ci-social-unrelated"
         host=b.foot_process(foot,host_id,"QS_SOCIAL_MENU",
                             b.HOST_COLOR,runtime,env)
         guest=b.foot_process(foot,guest_id,"VESKTOP MAIN",
@@ -198,17 +199,18 @@ def main():
         # not inherit the pairing and cannot pass 'status'.
         b.quiet_stop(guest)
         b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,present=False)
-        replacement=b.foot_process(foot,guest_id,"REPLACEMENT MAIN",
+        replacement_id="vesktop"  # Retain support for the original lowercase native ID.
+        replacement=b.foot_process(foot,replacement_id,"REPLACEMENT MAIN",
                                    b.GUEST_COLOR,runtime,env)
         actors.append(replacement)
-        new=b.wait_for(swaymsg,ipc,env,guest_id,replacement.pid)
+        new=b.wait_for(swaymsg,ipc,env,replacement_id,replacement.pid)
         if new["id"]==gc:
             raise RuntimeError("SD_SOCIAL_PRODUCTION_STALE_ID_REUSED")
         command(swaymsg,ipc,env,"stage_director_social status",False)
         command(swaymsg,ipc,env,
                 f"stage_director_social pair {hc} {gc} 110 1",False)
         b.locate(swaymsg,ipc,env,new["id"],b.guest_from_chassis(outer))
-        b.wait_for(swaymsg,ipc,env,guest_id,replacement.pid,
+        b.wait_for(swaymsg,ipc,env,replacement_id,replacement.pid,
                    b.guest_from_chassis(outer))
         command(swaymsg,ipc,env,
                 f'stage_director_social pair {hc} {new["id"]} 110 1')
