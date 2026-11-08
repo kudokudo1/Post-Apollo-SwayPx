@@ -77,7 +77,52 @@ is necessary.
 
 ## VERIFY
 
-EXACT-HEAD CI PENDING. It must establish:
+### Actual native buffer observations from initial CI
+
+[M30w native run #42512469632](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42512469632)
+passed both source boundary and genuine native Wayland jobs. The
+imported root buffer's `wlr_buffer_get_shm()` reported:
+
+- `allocation=SHM`; one plane, no DMA modifier;
+- `FourCC=0x36314752` = **`DRM_FORMAT_RGB565`**,
+  **16 bits per physical pixel**, per the Linux `drm_fourcc.h`
+  definition `fourcc('R','G','1','6')`;
+- `buffer=1494×788`, **measured physical pitch=2988 bytes**,
+  `scale=1`, `transform=0`, root surface identity matched,
+  mapped CI epoch 1;
+- Actual Company Canvas remains **1493×788**;
+- Source and final compositor fiducial vertical drift **0.0 px**,
+  native pan/zoom, PIDFD/XDG continuity, wrong-size hiding,
+  return to standard and close all PASS.
+
+The report is archived as `sd-company-m30w-real-buffer-evidence.json`
+under artifact `sd-company-m30w-real-native-buffer-metadata`.
+
+**This supersedes the earlier pixel-format HYPOTHESIS.** Company M30v
+reported **5976 CPU `QImage` bytes/row** for a deliberately 1494-pixel
+RGBA8888 allocation. The actual *wlroots imported native SHM* uses
+**2988 bytes/row in RGB565**, with exactly two bytes per physical pixel.
+M30u's 4-byte/pixel, 8-byte alignment candidate happens to produce the
+same 1494 physical width but is **not the observed compositor format**.
+That Company proposal must not be silently promoted into production.
+
+The observed RGB565 geometry is consistent with a 4-byte-pitch
+boundary for an odd physical width (1493×2=2986, 1494×2=2988).
+That is an **inference**, not an independent measurement of the
+original unpadded 1493-pixel `wl_buffer`, nor proof of a universal
+driver alignment rule. No compositor native import, GPU, or production
+authorization was changed.
+
+M30w's post-observation parser is now deliberately **format-specific
+and fail-closed**: it requires the exact `RGB565` SHM test profile and
+measured 2988 pitch. A different format/allocation, even if valid on
+other GPUs, is UNREVIEWED for this test and fails until independently
+observed and approved. This tightened exact-head verification requires
+a new CI run.
+
+### Exact-head CI acceptance
+
+The current strict-source gate must establish:
 1. Existing M30t native MapLibre, original Company QML, and 0-pixel
    Qt/compositor visual geometry fidelity remain green.
 2. New C code compiles with the pinned wlroots API in SwayPX's isolated
@@ -124,12 +169,19 @@ hardware must be separately verified before a production policy exists.
 
 ## NEXT
 
-Run real M30w CI. If wlroots exposes the imported SHM or DMA-BUF,
-inspect the actual pixel format and pitch and preserve the metadata
-without licensing it as a universal GPU/desktop rule. If not available,
-report the exact unsupported boundary and consider a separate,
-reviewed **buffer-attach lifecycle** observation point rather than
-guessing.
+Re-run exact-head M30w CI with the strict RGB565/2988-pitch acceptance
+profile and preserve its screenshot and JSON. Then notify the
+**Company-owned M30u buffer policy owner** that the proposed
+4-byte-per-pixel/8-byte-alignment profile was **not** the native CI
+wlroots-imported format; a new candidate revision must be based on
+actual accepted pixel format and stride, not merely Qt CPU QImage
+`bytesPerLine()`.
+
+Before production, separately measure the original problematic
+1493-wide source's actual format/stride and contrast it against the
+1494 corrected source. The current one-side evidence explains the
+observed corrected profile but does not conclusively establish
+the precise driver/texture bug.
 
 With genuine host-authorized production evidence, a future
 SwayPX Company owner can match selected `wl_client`, XDG root,
