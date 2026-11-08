@@ -665,7 +665,11 @@ def main():
         after_close = screenshot("native-closed")
         m30j.check_restored(original, after_close,
                             CANVAS["standard"][:2])
-        final = wait_qml(company_log, 4, 26)
+        # Company QML intentionally closes at 122s, unlike M30n's
+        # 75s schedule. The full-size resize test also needs additional
+        # transition time. Keep a bounded positive close witness rather
+        # than accidentally timing out before its scheduled timer fires.
+        final = wait_qml(company_log, 4, 45)
         screenshot("company-closed")
         print("SD_COMPANY_M30O_REAL_FULLSCREEN_RESIZE "
               "source_840_to_1493_to_840=PASS actual_mapview_resize=PASS "
