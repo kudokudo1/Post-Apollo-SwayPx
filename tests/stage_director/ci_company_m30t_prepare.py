@@ -74,7 +74,7 @@ def main():
             "visible: root.width === 1494 && root.height === 788",
             "visible: (root.width === 1494 || root.width === 1493) "
             "&& root.height === 788", "M30Z_TEST_ONLY_FIDUCIAL_WIDTH")
-    qml.write_text(text[:-2]+probe+"}\\n",encoding="utf-8")
+    qml.write_text(text[:-2]+probe+"}\n",encoding="utf-8")
 
     cpp=out/"main.cpp"
     s=cpp.read_text(encoding="utf-8")
