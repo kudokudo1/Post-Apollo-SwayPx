@@ -77,7 +77,8 @@ static bool exact_guest(struct sway_container *con) {
 	const char *id = view_get_app_id(con->view);
 	const char *shell = view_get_shell(con->view);
 	return id && (!strcmp(id, "vesktop") ||
-			!strcmp(id, "dev.vencord.vesktop")) &&
+			!strcmp(id, "dev.vencord.vesktop") ||
+			!strcmp(id, "dev.vencord.Vesktop")) &&
 		shell && !strcmp(shell, "xdg_shell");
 }
 
