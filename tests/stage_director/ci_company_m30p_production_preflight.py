@@ -142,8 +142,20 @@ def main() -> int:
             'getenv("STAGE_DIRECTOR_CI_COMPANY_M30O")' in ci_actor and
             "ci_company_m30o_enabled" in ci_actor,
             "CI_ONLY_COMPANY_RENDERER_ISOLATION")
+    # Normal M30o must still demand exactly 1493x788. M30t adds one
+    # CI-only opt-in 1494px *physical* buffer, with the same 1493px
+    # Company Canvas and positive exact source-size observation.
+    # This is a source provenance check, NEVER a production render grant.
+    ordinary_m30o = 'wait_real_size(qt_log,(1493,788)' in ci_resize
+    guarded_m30t = (
+        'full_native_width = (1494 if' in ci_resize and
+        'env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" else 1493)' in ci_resize and
+        'wait_real_size(qt_log,(full_native_width,788),"fullscreen-exact")' in ci_resize and
+        'COMPANY_TEST_M30O_FULLSCREEN_WIDTH + 1' in ci_actor and
+        'ci_company_m30t_enabled()' in ci_actor and
+        'full_native_exact ? NULL : &crop' in ci_actor)
     require('SD_COMPANY_M30O_REAL_FULLSCREEN_RESIZE' in ci_resize and
-            'wait_real_size(qt_log,(1493,788)' in ci_resize,
+            (ordinary_m30o or guarded_m30t),
             "EXACT_FULL_RESIZE_TEST_PROVENANCE")
 
     checks = [
