@@ -698,7 +698,8 @@ def main():
         final = wait_qml(company_log, 4, 45)
         screenshot("company-closed")
         print("SD_COMPANY_M30O_REAL_FULLSCREEN_RESIZE "
-              "source_840_to_1493_to_840=PASS actual_mapview_resize=PASS "
+              f"source_840_to_{full_native_width}_to_840=PASS "
+              "actual_mapview_resize=PASS "
               "unsupported_sizes_hidden=PASS fullscreen_geo_pixels=PASS "
               "real_fullscreen_native_pointer=PASS "
               "camera_persisted_same_pidfd_xdg=PASS "
