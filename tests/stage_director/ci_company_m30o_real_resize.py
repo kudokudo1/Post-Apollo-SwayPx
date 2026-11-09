@@ -606,6 +606,32 @@ def main():
                           "fullscreen-real-geography")
         assert_clip_unchanged(fullscreen_before,fullscreen_img,
                               CANVAS["fullscreen"])
+        # M30w: read-only observation of the real wlroots-imported
+        # native scene buffer, selected by the existing kernel-checked Qt
+        # actor and exact Company fullscreen host. No QImage CPU pitch
+        # substitutions, no production actor/scene/input authorization.
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1":
+            from ci_company_m30w_buffer_evidence import evidence, MARKER
+            native_deadline=time.monotonic()+12
+            while time.monotonic() < native_deadline:
+                records=sway_log.read_text(errors="replace")
+                if MARKER in records:
+                    break
+                if actor.poll() is not None:
+                    raise RuntimeError("M30W_MAPLIBRE_EXITED_BEFORE_BUFFER_REPORT")
+                time.sleep(.15)
+            else:
+                raise RuntimeError("M30W_NATIVE_BUFFER_OBSERVATION_NOT_EMITTED " +
+                                   sway_log.read_text(errors="replace")[-2400:])
+            details=evidence(records)
+            (temp/"sd-company-m30w-real-buffer-evidence.json").write_text(
+                json.dumps(details,sort_keys=True,indent=2)+"\n")
+            print("SD_COMPANY_M30W_REAL_BUFFER "
+                  "actual_wlroots_import=1 root_surface=1 "
+                  f"kind={details['kind']} "
+                  f"pitch={details['actualPlane0PitchBytes']} "
+                  f"source={details['physicalWidth']}x{details['physicalHeight']} "
+                  "logical_canvas=1493x788 scene_input=OFF PASS",flush=True)
         # M30t does NOT relax existing M30o test gates. The separately
         # selected CI-only experiment uses Qt's own offscreen readback and
         # this *same* genuine compositor frame to diagnose 2D shear.
