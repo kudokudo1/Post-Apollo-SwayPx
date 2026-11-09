@@ -630,7 +630,22 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 
 static void _arrange_container(struct sway_container *con,
 		int width, int height, int x, int y, bool title_bar, int gaps) {
-	wlr_scene_node_set_position(&con->scene_tree->node, x, y);
+	/* M32e: the embedded native Qt CONTAINER was already reparented
+	 * and positioned in the compositor's popup tree. Ordinary Sway
+	 * focus/floating transactions must not reset that parent position.
+	 * The previous guard preserved only the nested view tree. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	if (!con->view ||
+			!stage_director_company_scene_is_embedded_root(con->view->surface)) {
+#endif
+		wlr_scene_node_set_position(&con->scene_tree->node, x, y);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	} else {
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+			"preserved_embedded_container_position=1");
+	}
+#endif
 
 	// this container might have previously been in the scratchpad,
 	// make sure it's enabled for viewing
