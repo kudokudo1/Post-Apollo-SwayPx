@@ -9,6 +9,9 @@
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director_company_input.h"
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
@@ -793,11 +796,26 @@ static void _arrange_container(struct sway_container *con,
 			);
 		}
 
-		// make sure to reparent, it's possible that the client just came out of
-		// fullscreen mode where the parent of the surface is not the container
-		wlr_scene_node_reparent(&con->view->scene_tree->node, con->content_tree);
-		wlr_scene_node_set_position(&con->view->scene_tree->node,
-			border_left, border_top);
+		// The private Company native scene is already parented into the
+		// root popup layer with compositor-owned crop/seat containment.
+		// A later focus transaction must NOT relocate that exact view back
+		// into the workspace. Other views retain the original Sway path.
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		if (!stage_director_company_scene_is_embedded_root(con->view->surface)) {
+#endif
+			// make sure to reparent, it's possible that the client just came
+			// out of fullscreen where the parent is not the container.
+			wlr_scene_node_reparent(&con->view->scene_tree->node,
+				con->content_tree);
+			wlr_scene_node_set_position(&con->view->scene_tree->node,
+				border_left, border_top);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		} else {
+			sway_log(SWAY_INFO,
+				"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+				"preserved_embedded_native_view=1");
+		}
+#endif
 
 		wlr_scene_node_set_enabled(&con->blur->node, con->blur_enabled);
 		wlr_scene_node_set_position(&con->blur->node, border_left, border_top);
