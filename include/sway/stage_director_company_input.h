@@ -58,6 +58,10 @@ bool stage_director_company_scene_reject_popup(struct sway_view *view);
 bool stage_director_company_scene_reject_keyboard_view(struct sway_view *view);
 bool stage_director_company_scene_reject_keyboard_surface(
     struct wlr_surface *surface);
+/* Relative pointer events bypass normal scene hit testing. Block them
+ * entirely for the embedded Qt root until a trusted confined broker exists. */
+bool stage_director_company_scene_is_embedded_root(
+    struct wlr_surface *surface);
 bool stage_director_company_scene_reject_pointer(
     struct wlr_surface *hit_surface,
     double global_x, double global_y, bool session_locked);
