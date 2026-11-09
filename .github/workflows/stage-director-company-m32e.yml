@@ -1,0 +1,108 @@
+name: Company M32e private compositor scene execution preflight (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32d-input-popup-focus-containment-20261109
+    paths:
+      - 'include/sway/stage_director_company_scene.h'
+      - 'sway/stage_director_company_scene.c'
+      - 'sway/stage_director.c'
+      - '.github/workflows/stage-director-company-m32e.yml'
+      - 'docs/stage-director-company-m32e-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-trust-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert test-only scene call, exact fixture and ordinary compositor refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          stage=Path('sway/stage_director.c').read_text()
+          scene=Path('sway/stage_director_company_scene.c').read_text()
+          header=Path('include/sway/stage_director_company_scene.h').read_text()
+          meson=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          def exact_one(source,token):
+              assert source.count(token)==1,(token,source.count(token))
+          exact_one(stage,'stage_director_company_scene_apply_m32e_fixture_only(')
+          exact_one(scene,'bool stage_director_company_scene_apply_m32e_fixture_only(')
+          exact_one(header,'bool stage_director_company_scene_apply_m32e_fixture_only(')
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n\t\t\t\tif (stage_director_company_scene_apply_m32e_fixture_only(' in stage
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n/*\n * M32e' in scene
+          for needed in ('getenv("CI")','getenv("GITHUB_ACTIONS")',
+                         'getenv("STAGE_DIRECTOR_CI_COMPANY_M32E")',
+                         'getenv("RUNNER_TEMP")',
+                         '"/home/runner/work/_temp"',
+                         'host->host_global.width != 1920',
+                         'actor.root_global.width != 1493',
+                         'view->geometry.width != 1493',
+                         '.frame_in_host = {0, 0, 1920, 1080}',
+                         '.map_in_frame = {166, 203, 1493, 788}',
+                         'stage_director_company_scene_prepare(&e, &guard, exact_source)',
+                         'stage_director_company_scene_apply_ci_only(view, &e, &guard)'):
+              assert needed in scene,needed
+          assert 'company_scene_ci_args += \'-DSD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION=1\'' in meson
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          assert 'stage_director_company_scene_apply_ci_only(' not in stage
+          print('SD_COMPANY_M32E_SOURCE_BOUNDARY production=OFF '
+                'real_native_scene_call=CI_ONLY fixed_geometry=PASS '
+                'fake_test_authority=EXPLICIT digest=UNPINNED PASS')
+          PY
+
+  private-full-build-and-empty-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile normal SwayPX and prove no test-only scene call
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'FAIL test-only scene call leaked to ordinary SwayPX' >&2
+            exit 1
+          fi
+          echo 'SD_COMPANY_M32E_NORMAL_SCENE production=OFF source=NO_TEST_CALL PASS'
+      - name: Compile actual private wlroots setter and exact fixture call site
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32e-private-live-scene-probe"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway" && test -x "$private/bin/swaymsg"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo "SD_COMPANY_M32E_PRIVATE_SCENE_BINARY=$private/bin/sway" >> "$GITHUB_ENV"
+          echo "SD_COMPANY_M32E_PRIVATE_SWAYMSG=$private/bin/swaymsg" >> "$GITHUB_ENV"
+          echo 'SD_COMPANY_M32E_NATIVE_CALLSITE compiled=1 actual_scene_setter=LINKED production=OFF PASS'
+      - name: Boot and stop the private compositor without a Company/Qt actor
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          export STAGE_DIRECTOR_MESA_DIR="$mesa"
+          export STAGE_DIRECTOR_TEST_SWAYMSG="$SD_COMPANY_M32E_PRIVATE_SWAYMSG"
+          bash tests/stage_director/headless_sway_smoke.sh "$SD_COMPANY_M32E_PRIVATE_SCENE_BINARY"
+          echo 'SD_COMPANY_M32E_EMPTY_WAYLAND compositor_boot=PASS live_MapLibre=NOT_TESTED real_scene_pixels=NOT_TESTED'
