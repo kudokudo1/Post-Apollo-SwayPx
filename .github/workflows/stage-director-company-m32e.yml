@@ -265,7 +265,7 @@ jobs:
               raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
           popup_code=r'''
               std::fprintf(stderr,
-                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=%d gha=%d enabled=%d\\n",
+                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=%d gha=%d enabled=%d\n",
                   qgetenv("CI") == "true", qgetenv("GITHUB_ACTIONS") == "true",
                   qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1");
               std::fflush(stderr);
@@ -288,16 +288,16 @@ jobs:
                           popup->setPosition(window->position() + QPoint(1300, 80));
                           popup->setColor(QColor("#ED981A"));
                           std::fprintf(stderr,
-                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1\\n");
+                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1\n");
                           std::fflush(stderr);
                           popup->show();
                       });
                   poll->start();
-                  std::fprintf(stderr,"SD_COMPANY_M32I_QT_HOOK_ARMED\\n");
+                  std::fprintf(stderr,"SD_COMPANY_M32I_QT_HOOK_ARMED\n");
                   std::fflush(stderr);
                   QTimer::singleShot(9000, &app, [trigger]() {
                       std::fprintf(stderr,
-                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=%d\\n",
+                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=%d\n",
                           QFileInfo::exists(trigger));
                       std::fflush(stderr);
                   });
