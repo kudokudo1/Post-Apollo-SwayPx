@@ -63,14 +63,40 @@ def wait_file(path: Path, marker: str, seconds: float, process=None):
 
 def compare_pixels(before, after, rgb):
     x,y,w,h=CANVAS
-    inside=0
+    # Positive proof of *this exact pinned* MapLibre offline source:
+    # its bright cyan header rail and gold VECTOR PROOF title appear in
+    # the actual Qt screenshot, not in Company's original raster map.
+    # The center fixture must separately show true geographic strokes.
+    # This is stronger than a sparse uniform-background delta counter,
+    # which missed the original dark MapLibre fixture (63/85 samples).
+    def features(image, rectangle, step=2):
+        left,top,right,bottom=rectangle
+        cyan=gold=0
+        for py in range(top,bottom,step):
+            for px in range(left,right,step):
+                r,g,b=rgb(image,px,py)
+                cyan+=int(g>120 and b>110 and 10*g>13*r)
+                gold+=int(r>130 and g>70 and b<150)
+        return cyan,gold
+
+    top=(x+12,y,x+w-12,y+90)
+    geographic=(x+170,y+290,x+590,y+560)
+    baseline_header=features(before,top)
+    native_header=features(after,top)
+    baseline_geo=features(before,geographic)
+    native_geo=features(after,geographic)
+    if not (native_header[0]>=250 and native_header[1]>=100 and
+            baseline_header[0]<30 and baseline_header[1]<20 and
+            native_geo[0]>=35 and native_geo[1]>=10 and
+            baseline_geo[0]<20 and baseline_geo[1]<10):
+        raise RuntimeError("M32E_NATIVE_MAPLIBRE_GEO_PALETTE_MISSING "
+            f"header={native_header} baseline_header={baseline_header} "
+            f"geo={native_geo} baseline_geo={baseline_geo}")
+    print("SD_COMPANY_M32E_MAPLIBRE_SOURCE_PIXELS "
+          f"cyan_header={native_header[0]} gold_header={native_header[1]} "
+          f"cyan_geography={native_geo[0]} gold_geography={native_geo[1]} "
+          "real_MapLibre_Qt_fixture=PASS",flush=True)
     outside_ok=0
-    for py in range(y+90,y+h-70,26):
-        for px in range(x+95,x+w-90,29):
-            a,b=rgb(before,px,py),rgb(after,px,py)
-            inside+=sum(abs(t-u) for t,u in zip(a,b))>=48
-    if inside<85:
-        raise RuntimeError(f"M32E_REAL_MAP_PIXELS_NOT_CHANGED inside={inside}")
     for px,py in ((x-20,y+120),(x-20,y+320),(x+w+20,y+120),
                   (x+w+20,y+320),(x+100,y-18),(x+300,y-18),
                   (x+100,y+h+18),(x+300,y+h+18)):
@@ -78,7 +104,7 @@ def compare_pixels(before, after, rgb):
         outside_ok+=sum(abs(t-u) for t,u in zip(a,b))<60
     if outside_ok<7:
         raise RuntimeError(f"M32E_NATIVE_SCENE_OVERFLOW outside_ok={outside_ok}")
-    print(f"SD_COMPANY_M32E_REAL_PIXELS inside_changed={inside} "
+    print(f"SD_COMPANY_M32E_REAL_PIXELS maplibre_geo_present=1 "
           f"outside_unchanged={outside_ok}/8 PASS",flush=True)
 
 
