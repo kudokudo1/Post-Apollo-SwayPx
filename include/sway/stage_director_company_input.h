@@ -67,6 +67,7 @@ bool stage_director_company_scene_is_embedded_root(
     struct wlr_surface *surface);
 bool stage_director_company_scene_reject_pointer(
     struct wlr_surface *hit_surface,
+    struct wlr_surface *focused_surface,
     double global_x, double global_y, bool session_locked);
 
 #endif
