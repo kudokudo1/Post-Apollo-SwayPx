@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
-#include "sway/root.h"
+#include "sway/tree/root.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
 #include "sway/stage_director_company_native.h"
