@@ -302,7 +302,18 @@ def main():
     if not (str(compat).startswith("/nix/store/") and
             (compat / "Qt5Compat/GraphicalEffects/qmldir").is_file()):
         raise RuntimeError("BLOCKED_M30K_QT5COMPAT_NOT_PINNED")
-    tmp_home = temp / "sd-company-m30o-home"
+    # M30y executes two separate headless compositor sessions in ONE
+    # GitHub Actions job. The original unpadded session must never reuse
+    # the first session's temporary QML copy, HOME, or QML cache.
+    # Keep the original M30o/M30w naming and behavior unchanged otherwise.
+    original_m30y_session = env.get("STAGE_DIRECTOR_CI_COMPANY_M30Y") == "1"
+    if original_m30y_session and (
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" or
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1"):
+        raise RuntimeError("M30Y_ORIGINAL_SESSION_NOT_ISOLATED")
+    tmp_home = temp / (
+        "sd-company-m30y-original-home" if original_m30y_session
+        else "sd-company-m30o-home")
     for sub in ("", ".config", ".cache", ".local/share"):
         (tmp_home / sub).mkdir(parents=True, exist_ok=True, mode=0o700)
     qml_paths = str(compat) + (":" + env["QML_IMPORT_PATH"]
@@ -313,7 +324,9 @@ def main():
              "XDG_CACHE_HOME": str(tmp_home / ".cache"),
              "QML_IMPORT_PATH": qml_paths, "QML2_IMPORT_PATH": qml_paths,
              "QT_QPA_PLATFORM": "wayland", "NO_COLOR": "1"}
-    shell = real.prepare(checkout, temp / "sd-company-m30o-copy")
+    shell = real.prepare(checkout, temp / (
+        "sd-company-m30y-original-copy" if original_m30y_session
+        else "sd-company-m30o-copy"))
     qml_source = Path("tests/stage_director/ci_company_m30o_resizable_shell.qml")
     if not qml_source.is_file() or qml_source.is_symlink():
         raise RuntimeError("BLOCKED_M30K_SHELL_MISSING")
@@ -606,6 +619,35 @@ def main():
                           "fullscreen-real-geography")
         assert_clip_unchanged(fullscreen_before,fullscreen_img,
                               CANVAS["fullscreen"])
+        # M30y runs in its own second private compositor session with
+        # M30t/M30w disabled, preserving the original 1493px fullscreen
+        # source rather than calculating an imaginary baseline pitch.
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_M30Y") == "1":
+            if (env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" or
+                    env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1"):
+                raise RuntimeError("M30Y_MUST_USE_INDEPENDENT_UNPADDED_SESSION")
+            from ci_company_m30y_original_evidence import (
+                original_evidence, MARKER as ORIGINAL_MARKER)
+            original_deadline = time.monotonic() + 12
+            while time.monotonic() < original_deadline:
+                original_log = sway_log.read_text(errors="replace")
+                if ORIGINAL_MARKER in original_log:
+                    break
+                if actor.poll() is not None:
+                    raise RuntimeError("M30Y_ORIGINAL_QT_EXITED")
+                time.sleep(.15)
+            else:
+                raise RuntimeError("M30Y_ORIGINAL_NATIVE_REPORT_MISSING " +
+                                   sway_log.read_text(errors="replace")[-2000:])
+            original_details = original_evidence(original_log)
+            (temp / "sd-company-m30y-original-native-evidence.json").write_text(
+                json.dumps(original_details, sort_keys=True, indent=2) + "\n")
+            print("SD_COMPANY_M30Y_ORIGINAL_BUFFER "
+                  "actual_wlroots_import=1 selected_native_root=1 "
+                  "physical=1493x788 "
+                  f"pitch={original_details['actualPlane0PitchBytes']} "
+                  "cpu_qimage_substitution=NO "
+                  "production_scene_input=OFF PASS", flush=True)
         # M30w: read-only observation of the real wlroots-imported
         # native scene buffer, selected by the existing kernel-checked Qt
         # actor and exact Company fullscreen host. No QImage CPU pitch
