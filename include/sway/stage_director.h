@@ -18,8 +18,9 @@ struct sway_view;
  */
 void stage_director_view_mapped(struct sway_view *view);
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
-/* M32e CI-only: re-observe XDG source after its first *real* geometry commit.
- * Never exposed to ordinary SwayPX or callable via IPC/QML. */
+/* M32e CI-only: re-observe XDG after real geometry/buffer commits;
+ * defer until its entire source ancestry is actually enabled, and skip
+ * once embedded. Never exposed to ordinary SwayPX or callable via IPC/QML. */
 void stage_director_company_m32e_geometry_committed(struct sway_view *view);
 #endif
 void stage_director_view_unmapped(struct sway_view *view);
