@@ -935,6 +935,18 @@ void stage_director_view_mapped(struct sway_view *view) {
 				const struct stage_director_company_actor_pair_result
 					pair = stage_director_company_actor_pair_probe(
 						&pair_evidence);
+				/* M32e: only a disposable test binary can call the real
+				 * scene setter with synthetic CI-only authority evidence.
+				 * Ordinary compositor compilation excludes this call. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+				if (stage_director_company_scene_apply_m32e_fixture_only(
+						view, &native_host)) {
+					sway_log(SWAY_INFO,
+						"[stage-director][COMPANY_M32E][CI_ONLY] "
+						"native_scene_apply=PASS authority=FAKE_CI "
+						"production=OFF visual=UNVERIFIED");
+				}
+#endif
 				/* M32c: the real renderer backend exists in normal SwayPX,
 				 * but no compositor-issued scene/seat/popup permission exists.
 				 * Analyze current candidate only; never call the setter.
