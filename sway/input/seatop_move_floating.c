@@ -19,8 +19,7 @@ static void finalize_move(struct sway_seat *seat) {
 	(void)stage_director_social_native_move(e->con, e->sd_social_generation);
 	transaction_commit_dirty();
 
-	e->con->animation_state.seat_is_moving_float = false;
-
+	/* seatop_end invokes handle_end, including interrupted gestures. */
 	seatop_begin_default(seat);
 }
 
@@ -51,6 +50,13 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	transaction_commit_dirty();
 }
 
+static void handle_end(struct sway_seat *seat) {
+	struct seatop_move_floating_event *e = seat->seatop_data;
+	if (e->con && !e->con->node.destroying)
+		e->con->animation_state.seat_is_moving_float = false;
+	stage_director_social_native_end(e->con, e->sd_social_generation);
+}
+
 static void handle_unref(struct sway_seat *seat, struct sway_container *con) {
 	struct seatop_move_floating_event *e = seat->seatop_data;
 	if (e->con == con) {
@@ -59,6 +65,7 @@ static void handle_unref(struct sway_seat *seat, struct sway_container *con) {
 }
 
 static const struct sway_seatop_impl seatop_impl = {
+	.end = handle_end,
 	.button = handle_button,
 	.pointer_motion = handle_pointer_motion,
 	.tablet_tool_tip = handle_tablet_tool_tip,
@@ -78,7 +85,8 @@ void seatop_begin_move_floating(struct sway_seat *seat,
 	e->con = con;
 	e->dx = cursor->cursor->x - con->pending.x;
 	e->dy = cursor->cursor->y - con->pending.y;
-	(void)stage_director_social_native_begin(con, &e->sd_social_generation);
+	(void)stage_director_social_native_begin(con,
+		&e->sd_social_generation, false);
 
 	con->animation_state.seat_is_moving_float = true;
 
