@@ -412,6 +412,26 @@ def main():
         if not isinstance(reply,list) or not reply or not all(
                 item.get("success") is True for item in reply):
             raise RuntimeError("M32H_WORKSPACE_RETURN_FAILED "+str(reply))
+        # M32j: check the return *before* ending the independent Qt
+        # process. Revocation must be sticky, not undone by Sway's normal
+        # floating-container reparent/enable on the old workspace.
+        time.sleep(.65)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32J_RETURN_ACTOR_OR_COMPANY_EXITED")
+        return_image=screenshot("after-return-revoked-actor-alive")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(return_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32J_STALE_NATIVE_ACTOR_REEXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32J_REVOKED_RETURN "
+              f"real_workspace_return=1 native_actor_alive=1 "
+              f"scene_not_reexposed=1 cyan={cyan} gold={gold} PASS",
+              flush=True)
         actor.terminate()
         actor.wait(timeout=10)
         actor=None
