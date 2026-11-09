@@ -80,4 +80,14 @@ bool stage_director_company_scene_apply_ci_only(
  * Must run before actor destruction or container scene-tree deletion. */
 void stage_director_company_scene_revoke(struct sway_view *view);
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32e: disposable GitHub-only positive scene-operations probe. Its synthetic
+ * approval flags are NOT real custody or a production scene lease. The
+ * ordinary compositor never declares or calls this function. */
+struct stage_director_company_native_host;
+bool stage_director_company_scene_apply_m32e_fixture_only(
+    struct sway_view *view,
+    const struct stage_director_company_native_host *observed_host);
+#endif
+
 #endif
