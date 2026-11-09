@@ -1036,7 +1036,7 @@ void stage_director_view_mapped(struct sway_view *view) {
 /* M32e // private positive probe on an actual mapped XDG geometry commit.
  * The app ID is ONLY a disposable fixture filter. Real actor and host
  * identity must still be re-read from compositor-owned Wayland objects,
- * and stage_director_company_scene_apply_m32e_fixture_only() retains all
+ * and the private M32e fixture apply helper retains all
  * its exact-geometry, native-client and CI environment checks. */
 void stage_director_company_m32e_geometry_committed(struct sway_view *view) {
     if (!view || view->type != SWAY_VIEW_XDG_SHELL) return;
