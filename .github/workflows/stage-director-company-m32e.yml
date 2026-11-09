@@ -85,6 +85,10 @@ jobs:
           assert 'M32F_OUTSIDE_INPUT_LEAK' in test
           assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
           assert 'M32G_NATIVE_KEYBOARD_FOCUS_LEAK' in test
+          assert 'M32I_NATIVE_QT_DIED_AFTER_POPUP_DENIAL' in test
+          assert 'SD_COMPANY_M32I_NATIVE_POPUP' in test
+          assert 'real_native_xdg_popup=DENIED embedded_root=1' in Path('sway/desktop/xdg_shell.c').read_text()
+          assert 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in Path('.github/workflows/stage-director-company-m32e.yml').read_text()
           assert 'M32H_WORKSPACE_ACTOR_LEAK' in test
           assert 'M32H_WORKSPACE_RETURN_FAILED' in test
           assert 'native_workspace_deactivated=1 scene_revoke=PASS' in transaction
