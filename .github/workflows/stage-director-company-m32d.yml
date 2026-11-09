@@ -80,6 +80,29 @@ jobs:
                 'compositor_default=OFF PASS')
           PY
 
+  isolated-scene-with-input-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile real wlroots popup-preflight and Company pointer guards in private test variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32d-private-scene-input-ci"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$output/bin/sway"
+          echo "SD_COMPANY_M32D_PRIVATE_WLROOTS_SCENE "
+          echo "source_popup_preflight=COMPILED "
+          echo "production_scene=OFF real_company_visual=NOT_YET"
+
   full-normal-swaypx-input-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
