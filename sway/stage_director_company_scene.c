@@ -270,8 +270,9 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
         .native_host_client_ref = host->native_client_ref,
         .native_actor_root_surface_ref = actor.native_root_surface_ref,
     };
+    const struct stage_director_rect exact_source = {0, 0, 1493, 788};
     const struct stage_director_company_scene_plan plan =
-        stage_director_company_scene_prepare(&e, &guard, map);
+        stage_director_company_scene_prepare(&e, &guard, exact_source);
     if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
             !plan.geometry_ready || plan.can_apply_in_production) return false;
     return stage_director_company_scene_apply_ci_only(view, &e, &guard);
