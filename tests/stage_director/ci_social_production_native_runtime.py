@@ -281,7 +281,20 @@ def main():
                    b.guest_from_chassis(outer))
         command(swaymsg,ipc,env,
                 f'stage_director_social pair {hc} {new["id"]} 110 1')
-        command(swaymsg,ipc,env,"stage_director_social status")
+        # The pair IPC may succeed before the new mapped XDG guest's
+        # current workspace catches up with its pending state. Verify the
+        # same admitted pair becomes current, without retrying admission.
+        for attempt in range(40):
+            try:
+                command(swaymsg,ipc,env,"stage_director_social status")
+                break
+            except RuntimeError as exc:
+                if ("SD_SOCIAL_PRODUCTION_COMMAND_UNEXPECTED expect=True "
+                        "action=stage_director_social status" not in str(exc)):
+                    raise
+                if attempt == 39 or replacement.poll() is not None:
+                    raise
+                time.sleep(0.07)
         print("SD_SOCIAL_PRODUCTION_NATIVE_REPLACEMENT "
               "old_id=DENIED new_exact_pair=PASS",flush=True)
         log.flush()
