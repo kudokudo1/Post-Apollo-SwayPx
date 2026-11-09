@@ -264,6 +264,11 @@ jobs:
           if code.count(after)!=1 or 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in code:
               raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
           popup_code=r'''
+              qInfo().noquote() <<
+                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=" << (qgetenv("CI") == "true") <<
+                  " gha=" << (qgetenv("GITHUB_ACTIONS") == "true") <<
+                  " enabled=" <<
+                  (qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1");
               if (qgetenv("CI") == "true" && qgetenv("GITHUB_ACTIONS") == "true"
                       && qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1") {
                   const QString trigger =
@@ -287,6 +292,12 @@ jobs:
                           popup->show();
                       });
                   poll->start();
+                  qInfo().noquote() << "SD_COMPANY_M32I_QT_HOOK_ARMED";
+                  QTimer::singleShot(9000, &app, [trigger]() {
+                      qInfo().noquote() <<
+                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=" <<
+                          QFileInfo::exists(trigger);
+                  });
               }
           '''
           cpp.write_text(code.replace(after,after+popup_code,1))
@@ -303,6 +314,7 @@ jobs:
                }' \
               --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
           test -x "$app/bin/company-vector-probe"
+          grep -aFq 'SD_COMPANY_M32I_QT_HOOK_BOOT' "$app/bin/company-vector-probe"
           export STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE="$app/bin/company-vector-probe"
           qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
           if test -x "$qs/bin/quickshell"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/quickshell"
