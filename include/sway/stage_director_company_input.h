@@ -35,11 +35,14 @@ struct stage_director_company_input_result {
 };
 
 /* Half-open global logical rectangle, no rounding or implicit margins.
- * A null/foreign root is never recognized as our native actor. */
+ * Both compositor-observed hit and already-focused roots are required:
+ * pointer grabs may continue delivering to the previously focused native
+ * actor after scene hit testing has moved onto the Company host. */
 struct stage_director_company_input_result
 stage_director_company_input_pointer(
     const struct stage_director_company_input_snapshot *scene,
     uintptr_t compositor_observed_hit_root_ref,
+    uintptr_t compositor_observed_focused_root_ref,
     double global_x, double global_y, bool session_locked);
 
 /* All native XDG popups and keyboard focus from an active embedded actor
