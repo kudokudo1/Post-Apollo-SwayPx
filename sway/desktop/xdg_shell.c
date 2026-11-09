@@ -12,6 +12,7 @@
 #endif
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director_company_input.h"
+#include "sway/stage_director_company_scene.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
@@ -335,6 +336,10 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 			new_geo->y != view->geometry.y;
 
 	if (new_size) {
+		/* Original Qt native source size no longer equals the authorized
+		 * Company canvas. Hide the embedded scene before normal SwayPX
+		 * geometry/clip updates can expose an uncropped old buffer. */
+		stage_director_company_scene_revoke(view);
 		// The client changed its surface size in this commit. For floating
 		// containers, we resize the container to match. For tiling containers,
 		// we only recenter the surface.
