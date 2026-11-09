@@ -7,6 +7,7 @@ production native seatop move/resize and Stage Director group is UNMODIFIED.
 from __future__ import annotations
 import json
 import os
+import signal
 from pathlib import Path
 import shutil
 import subprocess
@@ -219,6 +220,38 @@ def main():
         b.wait_for(swaymsg,ipc,env,other_id,unrelated.pid,other)
         print("SD_SOCIAL_PRODUCTION_NATIVE_GUEST_RESIZE geometry=PASS",
               flush=True)
+
+        # Reproduce an Electron-style slow renderer instead of relying on
+        # Foot's resize-delay-ms=0. Freeze this test-owned guest process only
+        # while the native Social host leads a resize. Its old XDG content
+        # must cover the newly exposed guest area, not reveal desktop pixels.
+        # A 160px expansion makes the old/new boundary unambiguous.
+        delayed_outer=(outer[0],outer[1],outer[2]+160,outer[3]+80)
+        delayed_slot=b.guest_from_chassis(delayed_outer)
+        old_right=slot[0]+slot[2]
+        guest.send_signal(signal.SIGSTOP)
+        try:
+            def during_delayed_resize():
+                b.wait_for(swaymsg,ipc,env,host_id,host.pid,delayed_outer)
+                b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,delayed_slot)
+                b.capture(grim,runtime/"slow-guest-resize-in-flight.ppm",env,[
+                    ("slow_guest_new_edge",(old_right+80,slot[1]+180),b.GUEST_COLOR),
+                    ("slow_guest_old_area",(slot[0]+220,slot[1]+180),b.GUEST_COLOR),
+                    ("slow_guest_other_unchanged",(other[0]+125,other[1]+110),b.OTHER_COLOR),
+                ])
+                command(swaymsg,ipc,env,"stage_director_social status")
+            gesture(swaymsg,ipc,env,hc,host_id,host,"resize",160,80,
+                    during=during_delayed_resize)
+        finally:
+            # Always release the test-owned process, including assertion
+            # failures, so the isolated compositor can shut down cleanly.
+            if guest.poll() is None:
+                guest.send_signal(signal.SIGCONT)
+        outer=delayed_outer
+        slot=delayed_slot
+        b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,slot)
+        print("SD_SOCIAL_PRODUCTION_NATIVE_DELAYED_RESIZE "
+              "old_guest_frame_fills_new_edge=PASS recovery=PASS",flush=True)
 
         command(swaymsg,ipc,env,"stage_director_social clear")
         command(swaymsg,ipc,env,"stage_director_social status",False)
