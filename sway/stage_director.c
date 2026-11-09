@@ -862,12 +862,13 @@ void stage_director_view_mapped(struct sway_view *view) {
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M32A][VIEWPORT] "
 					"reported=%s epoch=%" PRIu64 " host_revision=%" PRIu64 " "
-					"rect_in_host=%d,%d %dx%d candidate_only=yes "
+					"rect_in_host=%d,%d %dx%d candidate_only=%s "
 					"scene=OFF input=OFF",
 					has_viewport ? "yes" : "no",
 					viewport.selection_epoch, viewport.host_revision,
 					viewport.map_in_host.x, viewport.map_in_host.y,
-					viewport.map_in_host.width, viewport.map_in_host.height);
+					viewport.map_in_host.width, viewport.map_in_host.height,
+					has_viewport ? "yes" : "no");
 				const long hz = sysconf(_SC_CLK_TCK);
 				const struct stage_director_company_origin_result origin =
 					stage_director_company_origin_check(
