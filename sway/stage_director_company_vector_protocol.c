@@ -217,6 +217,11 @@ static void handle_report_viewport(struct wl_client *client,
 		struct wl_resource *resource,
 		int32_t fx, int32_t fy, int32_t fw, int32_t fh,
 		int32_t mx, int32_t my, int32_t mw, int32_t mh) {
+    /* Even an invalid current viewport report kills the previous
+     * candidate; a stale/foreign reporter may not revoke a new owner. */
+    if (bound_is_current(client, resource))
+        stage_director_company_scene_lease_candidate_revoke(
+            &native_lease_candidate);
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	struct stage_director_rect host = {0};
 	uint64_t revision = 0;
@@ -229,10 +234,6 @@ static void handle_report_viewport(struct wl_client *client,
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
-	/* A fresh selected-host viewport report invalidates any old native
-     * candidate before replacing the target geometry. */
-    stage_director_company_scene_lease_candidate_revoke(
-        &native_lease_candidate);
 	/* A new geometry report *replaces* the previous map rectangle, even
 	 * when hidden or malformed. Never retain stale pixels or hit tests. */
 	b->viewport_candidate = false;
