@@ -96,6 +96,14 @@ jobs:
           assert 'SD_COMPANY_M32J_REVOKED_IPC_FOCUS' in test
           assert 'M32K_VIRTUAL_OUTPUT_REVOKE_MISSING' in test
           assert 'M32K_VIRTUAL_OUTPUT_STALE_ACTOR_EXPOSED' in test
+          assert 'M32L_NOT_EXACT_TWO_HEADLESS_OUTPUTS' in test
+          assert 'M32L_NATIVE_OVERFLOW_SECONDARY_OUTPUT' in test
+          assert 'M32L_SECONDARY_OUTPUT_NATIVE_MAP_LEAK' in test
+          assert 'M32L_OUTPUT_RESTORE_GEOMETRY_CHANGED' in test
+          smoke=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          assert 'BLOCKED_M32L_NOT_EXACT_DISPOSABLE_DUAL_CI' in smoke
+          assert 'export WLR_HEADLESS_OUTPUTS=2' in smoke
+          assert 'output HEADLESS-2 position 1920 0' in smoke
           assert 'SD_COMPANY_M32K_VIRTUAL_OUTPUT' in test
           assert 'output "+output_name+" disable' in test
           assert 'output "+output_name+" enable' in test
@@ -196,6 +204,10 @@ jobs:
   real-company-maplibre-scene:
     runs-on: ubuntu-24.04
     timeout-minutes: 85
+    strategy:
+      fail-fast: false
+      matrix:
+        headless_outputs: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -222,6 +234,9 @@ jobs:
         env:
           STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
           STAGE_DIRECTOR_CI_COMPANY_M32E_REAL: '1'
+          # One-screen regression remains unchanged. Second variant uses
+          # genuinely separate headless output surfaces, not fake pixels.
+          STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL: ${{ matrix.headless_outputs == 2 && '1' || '0' }}
           # Required by the reviewed M30h Wayland virtual-pointer binary.
           # This is scoped to the disposable positive native CI job only.
           STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
