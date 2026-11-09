@@ -318,11 +318,19 @@ if wlroots_features['libinput_backend']
 	sway_sources += 'input/libinput.c'
 endif
 
+# Compile the actual Company scene setters only in a separate disposable
+# CI derivation. Production never carries this preprocessor activation.
+company_scene_ci_args = []
+if get_option('sd-ci-company-scene-actuation')
+	company_scene_ci_args += '-DSD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION=1'
+endif
+
 executable(
 	'sway',
 	sway_sources + wl_protos_src,
 	include_directories: [sway_inc],
 	dependencies: sway_deps,
 	link_with: [lib_sway_common],
+	c_args: company_scene_ci_args,
 	install: true
 )
