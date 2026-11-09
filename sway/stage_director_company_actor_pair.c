@@ -59,7 +59,6 @@ stage_director_company_actor_pair_probe(
             !e->host.start_ticks || e->actor.pid <= 0 ||
             e->actor.uid != e->host.uid || !e->actor.start_ticks ||
             e->host.pid == e->actor.pid ||
-            e->host.start_ticks == e->actor.start_ticks ||
             e->intent.native_host_client_ref !=
                     e->host.native_client_ref) {
         return denied(SD_COMPANY_PAIR_PROCESS_NOT_PROVEN);
