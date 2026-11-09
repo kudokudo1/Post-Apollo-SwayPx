@@ -19,6 +19,9 @@
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_company_actor_pair.h"
 #include "sway/stage_director_company_scene.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director_company_input.h"
+#endif
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -1042,6 +1045,10 @@ void stage_director_company_m32e_geometry_committed(struct sway_view *view) {
     if (!view || view->type != SWAY_VIEW_XDG_SHELL) return;
     const char *app_id = view_get_app_id(view);
     if (!app_id || strcmp(app_id, "CompanyVectorProbe")) return;
+    /* After successful private embedding, skip later MapLibre frame
+     * commits; never repeat scene reparenting or move on every frame. */
+    if (stage_director_company_scene_is_embedded_root(view->surface))
+        return;
     const struct stage_director_company_native_actor actor =
         stage_director_company_native_observe_actor(view);
     if (!actor.candidate || view->geometry.x || view->geometry.y ||
