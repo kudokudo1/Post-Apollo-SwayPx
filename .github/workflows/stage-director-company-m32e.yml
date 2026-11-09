@@ -104,5 +104,7 @@ jobs:
           mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
           export STAGE_DIRECTOR_MESA_DIR="$mesa"
           export STAGE_DIRECTOR_TEST_SWAYMSG="$SD_COMPANY_M32E_PRIVATE_SWAYMSG"
-          bash tests/stage_director/headless_sway_smoke.sh "$SD_COMPANY_M32E_PRIVATE_SCENE_BINARY"
+          # Existing CI guard grants a temporary ACL to the runner uid and
+          # restores /dev/udmabuf state on success or failure. Never use on Fedora.
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_COMPANY_M32E_PRIVATE_SCENE_BINARY"
           echo 'SD_COMPANY_M32E_EMPTY_WAYLAND compositor_boot=PASS live_MapLibre=NOT_TESTED real_scene_pixels=NOT_TESTED'
