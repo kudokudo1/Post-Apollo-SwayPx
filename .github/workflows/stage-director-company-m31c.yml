@@ -185,7 +185,7 @@ jobs:
               '26200c5d9fa947a1d3b0935d3f9237229cd3e5ba')
           patch=Path('tests/stage_director/ci_company_m31c_patch_scenefx.py').read_text()
           impact=Path('tests/stage_director/ci_company_m31a_alignment_impact.py').read_text()
-          nix=Path('tests/stage_director/ci_company_m31a_alignment_compositor.nix').read_text()
+          nix=Path('tests/stage_director/ci_company_m31c_stride_aware_compositor.nix').read_text()
           runner=Path('tests/stage_director/ci_company_m30o_real_resize.py').read_text()
           shell=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
           production=Path('sway/stage_director.c').read_text()
