@@ -12,6 +12,7 @@ on:
       - 'sway/stage_director_company_digest.c'
       - '.github/workflows/stage-director-company-m32m.yml'
       - 'docs/stage-director-company-m32m-20261109.md'
+      - 'tests/stage_director/test_company_m32n_protocol_teardown.py'
   workflow_dispatch:
 
 permissions:
@@ -78,6 +79,11 @@ jobs:
                 'operator_lease=ABSENT production_scene=OFF '
                 'protocol_revoke_hides_scene_first=PASS')
           PY
+      - name: Exercise M32n actual Wayland close and destroy source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32n_protocol_teardown.py
 
   regular-and-private-build:
     runs-on: ubuntu-24.04
