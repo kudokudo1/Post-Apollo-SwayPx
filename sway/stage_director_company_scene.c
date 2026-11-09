@@ -189,14 +189,19 @@ bool stage_director_company_scene_reject_keyboard_view(
         scene.native_actor_view_ref == (uintptr_t)view;
 }
 
-bool stage_director_company_scene_reject_keyboard_surface(
+bool stage_director_company_scene_is_embedded_root(
         struct wlr_surface *surface) {
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
     struct wlr_surface *root_surface = surface ?
         wlr_surface_get_root_surface(surface) : NULL;
-    return stage_director_company_input_reject_keyboard(
-        &scene, (uintptr_t)root_surface);
+    return scene.scene_active && root_surface &&
+        scene.native_actor_root_surface_ref == (uintptr_t)root_surface;
+}
+
+bool stage_director_company_scene_reject_keyboard_surface(
+        struct wlr_surface *surface) {
+    return stage_director_company_scene_is_embedded_root(surface);
 }
 
 bool stage_director_company_scene_reject_pointer(
