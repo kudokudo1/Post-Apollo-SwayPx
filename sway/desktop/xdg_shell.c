@@ -11,6 +11,7 @@
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
 #include "sway/scene_descriptor.h"
+#include "sway/stage_director_company_input.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
@@ -30,6 +31,12 @@ static void popup_handle_new_popup(struct wl_listener *listener, void *data) {
 	struct sway_xdg_popup *popup =
 		wl_container_of(listener, popup, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
+	/* Nested MapLibre popups are independent scene nodes, not clipped
+	 * with the selected Qt root. Refuse until a popup broker exists. */
+	if (stage_director_company_scene_reject_popup(popup->view)) {
+		wlr_xdg_popup_destroy(wlr_popup);
+		return;
+	}
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Nested XDG popups also bypass the masked browser content tree.
 	 * Quarantine the exact selected CI Chrome actor before scene creation. */
@@ -384,6 +391,10 @@ static void handle_new_popup(struct wl_listener *listener, void *data) {
 	struct sway_xdg_shell_view *xdg_shell_view =
 		wl_container_of(listener, xdg_shell_view, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
+	if (stage_director_company_scene_reject_popup(&xdg_shell_view->view)) {
+		wlr_xdg_popup_destroy(wlr_popup);
+		return;
+	}
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Sway's normal root->layers.popup is outside Chrome content clipping.
 	 * There is no authorized popup broker in this isolated experiment. */
