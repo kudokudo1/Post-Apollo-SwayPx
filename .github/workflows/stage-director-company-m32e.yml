@@ -11,6 +11,10 @@ on:
       - 'sway/stage_director.c'
       - 'sway/desktop/xdg_shell.c'
       - 'include/sway/stage_director.h'
+      - 'include/sway/stage_director_company_input.h'
+      - 'include/sway/input/seat.h'
+      - 'sway/input/cursor.c'
+      - 'sway/input/seatop_down.c'
       - '.github/workflows/stage-director-company-m32e.yml'
       - 'docs/stage-director-company-m32e-20261109.md'
       - 'tests/stage_director/ci_company_m32e_real_scene.py'
@@ -64,6 +68,25 @@ jobs:
           assert 'company_scene_ci_args += \'-DSD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION=1\'' in meson
           assert 'company_m30_manifest_elf_sha256[] = ""' in digest
           assert 'stage_director_company_scene_apply_ci_only(' not in stage
+          cursor=Path('sway/input/cursor.c').read_text()
+          seatop=Path('sway/input/seatop_down.c').read_text()
+          grab_header=Path('include/sway/stage_director_company_input.h').read_text()
+          seat_header=Path('include/sway/input/seat.h').read_text()
+          for source,required in (
+              (cursor,'stage_director_company_scene_contained_native_grab('),
+              (cursor,'event->state == WL_POINTER_BUTTON_STATE_RELEASED &&'),
+              (seatop,'seat->seatop_impl != &seatop_impl'),
+              (seatop,'wlr_surface_get_root_surface(down->surface) == native_root'),
+              (scene,'stage_director_company_seatop_down_matches_root('),
+              (grab_header,'bool stage_director_company_scene_contained_native_grab('),
+              (seat_header,'bool stage_director_company_seatop_down_matches_root(')):
+              assert required in source,required
+          for source in (cursor,seatop,scene,grab_header,seat_header):
+              assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in source
+          assert 'stage_director_company_input_pointer(' in scene
+          assert '!verified.deny_event' in scene
+          print('SD_COMPANY_M32E_GRAB_SOURCE native_seatop_origin=REQUIRED '
+                'inside_crop=REQUIRED release=BOUND native_hover_not_granted PASS')
           print('SD_COMPANY_M32E_SOURCE_BOUNDARY production=OFF '
                 'real_native_scene_call=CI_ONLY fixed_geometry=PASS '
                 'fake_test_authority=EXPLICIT digest=UNPINNED PASS')
