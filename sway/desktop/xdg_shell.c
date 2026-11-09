@@ -13,6 +13,9 @@
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director_company_input.h"
 #include "sway/stage_director_company_scene.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director.h"
+#endif
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
@@ -355,6 +358,12 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 		}
 
 		view_center_and_clip_surface(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* The native Qt root is mapped before the Sway view geometry is
+		 * initialized. Run the private M32e scene setter ONLY after a
+		 * genuine mapped XDG commit updated the compositor's dimensions. */
+		stage_director_company_m32e_geometry_committed(view);
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 		stage_director_ci_scene_probe(view);
 #endif
