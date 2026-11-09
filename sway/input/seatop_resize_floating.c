@@ -24,12 +24,9 @@ static void handle_button(struct sway_seat *seat, uint32_t time_msec,
 		struct wlr_input_device *device, uint32_t button,
 		enum wl_pointer_button_state state) {
 	struct seatop_resize_floating_event *e = seat->seatop_data;
-	struct sway_container *con = e->con;
-
 	if (seat->cursor->pressed_button_count == 0) {
-		container_set_resizing(con, false);
-		arrange_container(con); // Send configure w/o resizing hint
-		transaction_commit_dirty();
+		/* The end hook clears the leader and native follower in one
+		 * final transaction, including gesture interruptions. */
 		seatop_begin_default(seat);
 	}
 }
@@ -149,6 +146,16 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	transaction_commit_dirty();
 }
 
+static void handle_end(struct sway_seat *seat) {
+	struct seatop_resize_floating_event *e = seat->seatop_data;
+	if (e->con && !e->con->node.destroying) {
+		container_set_resizing(e->con, false);
+		arrange_container(e->con); // Final configure without resize hint.
+	}
+	stage_director_social_native_end(e->con, e->sd_social_generation);
+	transaction_commit_dirty();
+}
+
 static void handle_unref(struct sway_seat *seat, struct sway_container *con) {
 	struct seatop_resize_floating_event *e = seat->seatop_data;
 	if (e->con == con) {
@@ -157,6 +164,7 @@ static void handle_unref(struct sway_seat *seat, struct sway_container *con) {
 }
 
 static const struct sway_seatop_impl seatop_impl = {
+	.end = handle_end,
 	.button = handle_button,
 	.pointer_motion = handle_pointer_motion,
 	.unref = handle_unref,
@@ -184,7 +192,8 @@ void seatop_begin_resize_floating(struct sway_seat *seat,
 	e->ref_con_ly = con->pending.y;
 	e->ref_width = con->pending.width;
 	e->ref_height = con->pending.height;
-	(void)stage_director_social_native_begin(con, &e->sd_social_generation);
+	(void)stage_director_social_native_begin(con,
+		&e->sd_social_generation, true);
 
 	seat->seatop_impl = &seatop_impl;
 	seat->seatop_data = e;
