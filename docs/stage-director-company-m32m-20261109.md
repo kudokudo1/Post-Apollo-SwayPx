@@ -24,6 +24,8 @@ No desktop action. Existing Company → COVERAGE → VECTOR VIEW behavior is unc
 
 The new `stage-director-company-m32m.yml` CI gates require the real pidfd/executable/digest checks, an explicit `OPERATOR_LEASE_ABSENT` result, no possible positive authority flags, and scene revocation ordered before protocol state cleanup. It also compiles normal and private SwayPX binaries, checking the CI-only positive scene marker stays out of the ordinary binary.
 
+**Exact-head GitHub CI:** [run 42689272075](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42689272075) passed **2/2** jobs: `fail-closed-source` and `regular-and-private-build`. Both normal and private SwayPX binaries linked successfully; the ordinary binary excludes the test-only positive scene marker. GitHub's Meta Apollo Grammar workflow also passed at the initial PR head.
+
 **Limit:** This is source/build evidence, **not** a live selected-Company protocol CLOSE runtime test and not proof of an actual production lease issuer. Previous M32l real Wayland one/two-output tests passed on parent head, but do not exercise this new protocol revoke seam.
 
 ## WATCH OUT FOR
@@ -35,7 +37,7 @@ Production digest remains unpinned by design. The read-only probe has no product
 - [x] Reuse existing native/Kernel identity and compiled manifest evidence
 - [x] Make candidate-only admission statuses explicit, with zero authority bits
 - [x] Revoke active native scene before protocol identity teardown
-- [ ] Verify exact-head M32m CI
+- [x] Verify exact-head M32m CI, 2/2 source/build jobs
 - [ ] Add real selected-client CLOSE/destroy negative test with live private Company scene
 - [ ] Implement independently authorized operator issuer, executable approval and bounded lease
 - [ ] Wire actual Company VECTOR VIEW and Fedora dual-display acceptance
