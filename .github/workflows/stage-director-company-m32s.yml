@@ -1,0 +1,93 @@
+name: Company M32s native bundle inventory preflight (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32r-inert-approval-request-20261109
+    paths:
+      - 'sway/stage_director_company_bundle_inventory.c'
+      - 'include/sway/stage_director_company_bundle_inventory.h'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_m32s_bundle_inventory.c'
+      - 'tests/stage_director/test_company_m32s_inventory_source.py'
+      - '.github/workflows/stage-director-company-m32s.yml'
+      - 'docs/stage-director-company-m32s-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-listed-files-no-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run actual M30a SHA-256 based file inventory denial tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -ffunction-sections -fdata-sections -Iinclude \
+            sway/stage_director_company_digest.c \
+            sway/stage_director_company_bundle_inventory.c \
+            tests/stage_director/test_company_m32s_bundle_inventory.c \
+            -Wl,--gc-sections \
+            -o "$RUNNER_TEMP/company-m32s-inventory"
+          "$RUNNER_TEMP/company-m32s-inventory"
+      - name: Verify no production issuer, loader closure or sidecar actuation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32s_inventory_source.py
+      - name: Preserve M32r/M32p native request/lease source regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_launch_request.c \
+            tests/stage_director/test_company_m32r_launch_request.c \
+            -o "$RUNNER_TEMP/company-m32r-request"
+          "$RUNNER_TEMP/company-m32r-request"
+          python3 -B tests/stage_director/test_company_m32r_protocol_request.py
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_scene_lease_candidate.c \
+            tests/stage_director/test_company_m32o_scene_lease_candidate.c \
+            -o "$RUNNER_TEMP/company-m32o"
+          "$RUNNER_TEMP/company-m32o"
+
+  normal-and-private-compositor-builds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary SwayPX and refuse private positive scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32S_PRIVATE_SCENE_IN_NORMAL_BINARY' >&2
+            exit 1
+          fi
+          echo 'COMPANY_M32S_NORMAL_BUILD inventory=READ_ONLY issuer=NONE scene=OFF PASS'
+      - name: Build CI-private compositor without enabling operator approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32s-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'COMPANY_M32S_PRIVATE_BUILD operator_issuer=NONE production=OFF PASS'
