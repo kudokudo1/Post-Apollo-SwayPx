@@ -143,9 +143,12 @@ mutations = [
     protocol.replace(
         "if (bound_is_current(client, resource))",
         "if (!bound_is_current(client, resource))", 1),
+    # M32r adds an independent launch-request revoke between the scene
+    # candidate revoke and the scene hide. Still delete the actual scene
+    # candidate revoke as a negative control, without assuming adjacency.
     protocol.replace(
-        "stage_director_company_scene_lease_candidate_revoke(\n        &native_lease_candidate);\n    stage_director_company_scene_revoke(NULL);",
-        "stage_director_company_scene_revoke(NULL);", 1),
+        "stage_director_company_scene_lease_candidate_revoke(\n        &native_lease_candidate);\n    stage_director_company_launch_request_revoke(",
+        "stage_director_company_launch_request_revoke(", 1),
 ]
 for index, variant in enumerate(mutations):
     assert variant != protocol, ("mutation missing", index)
