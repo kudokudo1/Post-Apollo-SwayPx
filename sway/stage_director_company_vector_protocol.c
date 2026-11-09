@@ -293,6 +293,11 @@ static void handle_close(struct wl_client *client,
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
+	/* M32n: first hide/quarantine the mapped native scene while the
+	 * selected binding, intent and process provenance are still intact.
+	 * Preserve the existing CLOSED response epoch by sending it before
+	 * protocol_revoke() clears selection_epoch. */
+	stage_director_company_scene_revoke(NULL);
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	b->launch_intent = false;
 	b->viewport_candidate = false;
@@ -310,7 +315,12 @@ static void handle_destroy(struct wl_client *client,
 }
 
 static void destroy_binding(struct wl_resource *resource) {
-	if (bound_resource == resource) bound_resource = NULL;
+	/* M32n: an actual Wayland resource destroy, including implicit client
+	 * disconnect, must revoke native scene/selection/pidfd BEFORE free.
+	 * An old inert binding cannot revoke a newer selected session. */
+	if (bound_resource == resource) {
+		stage_director_company_vector_protocol_revoke();
+	}
 	free(wl_resource_get_user_data(resource));
 }
 
