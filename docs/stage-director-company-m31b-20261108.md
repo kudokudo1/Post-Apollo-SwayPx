@@ -9,8 +9,8 @@ STAFF ROLE // NRS-2
 PROVIDER // OPEN AI // CHATGPT
 CONNECTION // EXTERNAL / HOSPITAL-COMPATIBLE, **not** confirmed live Hospital-connected
 ASSIGNMENT // Prepare a safe SceneFX production correction proposal, backed by independent multi-format OpenGL regression coverage
-PHASE // CI-only proposal and testing
-STATE // DRAFT, UNMERGED; UPSTREAM OWNER REVIEW PENDING
+PHASE // CI-only proposal and Mesa GLES matrix verified; owner review pending
+STATE // M31b NATIVE MATRIX PASS; DRAFT, UNMERGED; UPSTREAM OWNER REVIEW PENDING
 REPORT KIND // DESIGN + IMPLEMENTATION / VERIFICATION
 PERMISSIONS // Add isolated tests, CI and an owner-review document only; no upstream or production compositor modification
 PRODUCTION AUTHORITY // NONE
@@ -95,7 +95,19 @@ No menu, code activation, application installation, Quickshell reload or Fedora 
 - A failure must preserve the specific unsupported format/layout; never pass a synthetic-only result as real GL execution.
 - The source gate must verify SceneFX's pinned commit, default SwayPX production source untouched, matrix under `tests/`, no live host change.
 
-The separate review is incomplete until exact-head M31b CI succeeds, and **UPSTREAM OWNER approval remains separate even after a green check**.
+**M31b real GLES3 result:** the exact-head [Actions run #42553263976](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42553263976) passed both scope/owner isolation and actual pinned Mesa EGL/GLES3 jobs at commit `f8c2790cde5005ab521353ae4176fb9c872df729`. The [native artifact](https://github.com/kudokudo1/Post-Apollo-SwayPx/actions/runs/42553263976/artifacts/13645779873) records:
+
+| Real GLES3 negative control | Incorrect pixels |
+|---|---:|
+| RGB565 width 3, stride 6, default `GL_UNPACK_ALIGNMENT=4` | **18** |
+| RGB565 width 4, stride 8, default alignment 4 | 0 |
+| RGB888 width 5, stride 15, default alignment 4 | **27** |
+| RGBA8888 width 5, stride 20, default alignment 4 | 0 |
+| RGB888 width 5, stride 16, **blind `GL_UNPACK_ALIGNMENT=1`** | **28** |
+
+The selected row-length and GL alignment matched the source pitch and produced **zero incorrect pixels across 90 real EGL/GLES3 configurations**, including both `glTexImage2D` and `glTexSubImage2D` and restoration of prior alignment values 4/8. Unrepresentable pitches such as RGB888 width 5/stride 17 were refused. The pinned native test compiled and executed successfully; it did not replace the default SwayPX or SceneFX renderer. GitHub grammar checks may finish independently from the real GLES test.
+
+**UPSTREAM OWNER review and a production patch remain separate.** This evidence proves the row-layout algorithm in the tested Mesa GLES3 cases; the exact helper has **not** yet been integrated into SceneFX or tested on Fedora GPUs.
 
 ## WATCH OUT FOR
 
@@ -112,7 +124,7 @@ The separate review is incomplete until exact-head M31b CI succeeds, and **UPSTR
 - [x] Identify why the M31a hardcoded 1-byte alignment does not cover all row strides
 - [x] Propose format-aware, measured-pitch row-layout selection and explicit rejection
 - [x] Implement standalone real GLES3 create/update regression matrix and Nix CI
-- [ ] Pass exact-head M31b source and actual Mesa GPU-software tests
+- [x] Pass exact-head M31b scope checks and real Mesa GLES3 matrix (2/2 CI jobs passed; 90/90 matrix cases)
 - [ ] Have the responsible SceneFX/SwayPX code owners review the proposed generic contract
 - [ ] Decide staging-copy handling for inherently unrepresentable source strides
 - [ ] Prepare explicitly authorized upstream/production code change after review
@@ -121,7 +133,7 @@ The separate review is incomplete until exact-head M31b CI succeeds, and **UPSTR
 
 ## NEXT
 
-Run M31b CI, fix only test/CI defects and preserve evidence. Once green, hand the generic row-layout contract and negative-control proof to the SceneFX/SwayPX owners for an **independent code review**. If approved, prepare an actual production patch in its owning repository/branch and test before any package activation.
+The M31b exact native suite is green. Give the above results and the candidate helper to the SceneFX/SwayPX owners for independent review. Address review of unrepresentable stride staging and other format coverage **before** preparing any production code change. A follow-on isolated CI source integration test of the exact proposed helper into a separate SceneFX derivation could provide additional evidence, but cannot replace upstream owner review or an authorized physical Fedora validation.
 
 ## DECISIONS
 
