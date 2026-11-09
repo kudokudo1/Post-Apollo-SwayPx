@@ -9,6 +9,8 @@
 #include "sway/stage_director_company_digest.h"
 #include "sway/stage_director_company_actor_pair.h"
 #include "sway/stage_director_company_scene.h"
+#include "sway/stage_director_company_native.h"
+#include "sway/stage_director_company_scene_lease_candidate.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -40,6 +42,9 @@ static void *native_host_context;
 static stage_director_company_vector_native_host_probe birth_native_host_probe;
 static void *birth_native_host_context;
 static struct stage_director_company_birth_pidfd birth_held;
+/* M32p: compositor-held inert candidate. No public request or scene caller. */
+static struct stage_director_company_scene_lease_candidate
+    native_lease_candidate;
 
 struct company_binding {
 	uint64_t epoch;
@@ -224,6 +229,10 @@ static void handle_report_viewport(struct wl_client *client,
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
+	/* A fresh selected-host viewport report invalidates any old native
+     * candidate before replacing the target geometry. */
+    stage_director_company_scene_lease_candidate_revoke(
+        &native_lease_candidate);
 	/* A new geometry report *replaces* the previous map rectangle, even
 	 * when hidden or malformed. Never retain stale pixels or hit tests. */
 	b->viewport_candidate = false;
@@ -293,6 +302,8 @@ static void handle_close(struct wl_client *client,
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
+    stage_director_company_scene_lease_candidate_revoke(
+        &native_lease_candidate);
 	/* M32n: first hide/quarantine the mapped native scene while the
 	 * selected binding, intent and process provenance are still intact.
 	 * Preserve the existing CLOSED response epoch by sending it before
@@ -368,6 +379,8 @@ static void native_resource_destroyed(struct wl_listener *listener,
 void stage_director_company_vector_protocol_init(struct wl_display *display) {
 	if (!company_display) company_display = display;
 	stage_director_company_birth_pidfd_init(&birth_held);
+    stage_director_company_scene_lease_candidate_init(
+        &native_lease_candidate);
 }
 
 bool stage_director_company_vector_protocol_publish(
@@ -602,11 +615,136 @@ const char *stage_director_company_admission_status_name(
     return "INVALID";
 }
 
+/* M32p // The candidate is produced from CURRENT compositor-native source
+ * observations, not a Wayland command, app_id, PID string or cached QML
+ * rectangle. The existing M32m preflight must reach its final blocker,
+ * OPERATOR_LEASE_ABSENT. The caller can only create an inert M32o
+ * CANDIDATE, which has no renderer or seat permission.
+ */
+static uint64_t candidate_boot_ns(void) {
+    struct timespec stamp = {0};
+    if (clock_gettime(CLOCK_BOOTTIME, &stamp) != 0 ||
+            stamp.tv_sec <= 0 || stamp.tv_nsec < 0 ||
+            stamp.tv_nsec >= 1000000000L ||
+            (uint64_t)stamp.tv_sec >
+                (UINT64_MAX - (uint64_t)stamp.tv_nsec) /
+                    UINT64_C(1000000000)) return 0;
+    return (uint64_t)stamp.tv_sec * UINT64_C(1000000000) +
+        (uint64_t)stamp.tv_nsec;
+}
+
+static bool current_native_lease_observation(
+        struct sway_view *view,
+        const struct stage_director_company_lineage_result *lineage,
+        struct stage_director_company_scene_lease_identity *identity,
+        struct stage_director_company_scene_lease_conditions *conditions) {
+    if (!view || !lineage || !identity || !conditions ||
+            !selected_client || !birth_native_host_probe) return false;
+    *identity = (struct stage_director_company_scene_lease_identity){0};
+    *conditions = (struct stage_director_company_scene_lease_conditions){0};
+
+    /* Re-observe the exact mapped XDG root from the compositor's sway_view.
+     * The passed view is not a Wayland argument or user-provided address. */
+    const struct stage_director_company_native_actor actor =
+        stage_director_company_native_observe_actor(view);
+    if (!actor.candidate || actor.state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            actor.native_view_ref != (uintptr_t)view) return false;
+
+    const struct stage_director_company_admission_preflight preflight =
+        stage_director_company_vector_protocol_admission_preflight(
+            selected_client, &actor, lineage);
+    if (preflight.status != SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT ||
+            !preflight.native_pair_candidate ||
+            !preflight.current_executable_candidate ||
+            !preflight.exact_elf_digest_candidate ||
+            preflight.operator_authorized ||
+            preflight.authenticated_launch ||
+            preflight.scene_lease_issued || preflight.can_apply_scene ||
+            preflight.can_accept_input || preflight.can_focus_keyboard ||
+            preflight.can_show_popup) return false;
+
+    struct stage_director_company_intent_snapshot intent = {0};
+    struct stage_director_company_viewport_snapshot viewport = {0};
+    struct stage_director_company_native_host host = {0};
+    if (!stage_director_company_vector_protocol_intent_snapshot(
+                selected_client, &intent) ||
+            !stage_director_company_vector_protocol_viewport_snapshot(
+                selected_client, &viewport) ||
+            !birth_native_host_probe(birth_native_host_context, &host) ||
+            !host.candidate ||
+            host.state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            !viewport.candidate_only ||
+            intent.selection_epoch != viewport.selection_epoch ||
+            intent.sequence != viewport.intent_sequence ||
+            intent.host_revision != viewport.host_revision ||
+            intent.native_host_client_ref != viewport.native_host_client_ref ||
+            host.native_client_ref != intent.native_host_client_ref)
+        return false;
+
+    *identity = (struct stage_director_company_scene_lease_identity) {
+        .selection_epoch = intent.selection_epoch,
+        .intent_sequence = intent.sequence,
+        .host_revision = intent.host_revision,
+        .native_host_layer_ref = host.native_layer_ref,
+        .native_host_surface_ref = host.native_surface_ref,
+        .native_host_client_ref = host.native_client_ref,
+        .native_output_ref = host.native_output_ref,
+        .native_actor_view_ref = actor.native_view_ref,
+        .native_actor_root_surface_ref = actor.native_root_surface_ref,
+        .native_actor_client_ref = actor.native_client_ref,
+        .actor_pid = actor.pid,
+        .actor_start_ticks = actor.start_ticks,
+    };
+    *conditions = (struct stage_director_company_scene_lease_conditions) {
+        .selected_native_host = true,
+        .live_intent_and_viewport = true,
+        .current_kernel_pidfd_actor = true,
+        .executable_inode_candidate =
+            preflight.current_executable_candidate,
+        .exact_digest_candidate = preflight.exact_elf_digest_candidate,
+        .host_mapped = host.candidate,
+        .actor_mapped = actor.candidate,
+        .output_active = host.candidate,
+    };
+    return true;
+}
+
+bool stage_director_company_vector_protocol_candidate_reserve_current(
+        struct sway_view *view,
+        const struct stage_director_company_lineage_result *lineage) {
+    struct stage_director_company_scene_lease_identity identity = {0};
+    struct stage_director_company_scene_lease_conditions conditions = {0};
+    if (!current_native_lease_observation(
+            view, lineage, &identity, &conditions)) return false;
+    const uint64_t now = candidate_boot_ns();
+    return stage_director_company_scene_lease_candidate_reserve(
+        &native_lease_candidate, &identity, &conditions, now,
+        SD_COMPANY_LEASE_CANDIDATE_MAX_NS);
+}
+
+struct stage_director_company_scene_lease_receipt
+stage_director_company_vector_protocol_candidate_probe_current(
+        struct sway_view *view,
+        const struct stage_director_company_lineage_result *lineage) {
+    struct stage_director_company_scene_lease_identity identity = {0};
+    struct stage_director_company_scene_lease_conditions conditions = {0};
+    /* Failed reobservation MUST revoke an existing reservation. */
+    const bool current = current_native_lease_observation(
+        view, lineage, &identity, &conditions);
+    return stage_director_company_scene_lease_candidate_probe(
+        &native_lease_candidate,
+        current ? &identity : NULL,
+        current ? &conditions : NULL, candidate_boot_ns());
+}
+
 /* Revoking the selected Company protocol MUST hide and quarantine any
  * already-admitted native Qt actor first. The private compositor positive
  * test can have a scene; the normal compositor cannot. In both cases,
  * this operation is safe, one-way and grants no new authority. */
 void stage_director_company_vector_protocol_revoke(void) {
+    /* Drop every private candidate before scene and kernel provenance. */
+    stage_director_company_scene_lease_candidate_revoke(
+        &native_lease_candidate);
     stage_director_company_scene_revoke(NULL);
 	/* Wipe the last admitted geometry before releasing native host refs.
 	 * Already-read snapshots are not leases: consumers must re-query. */
