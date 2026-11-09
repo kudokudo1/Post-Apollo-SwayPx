@@ -631,6 +631,15 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 
 static void _arrange_container(struct sway_container *con,
 		int width, int height, int x, int y, bool title_bar, int gaps) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* M32j: once a real actor is revoked it must NEVER be made drawable
+	 * by a subsequent Sway layout transaction before native XDG unmap. */
+	if (con->view &&
+			stage_director_company_scene_m32j_quarantined(con->view)) {
+		wlr_scene_node_set_enabled(&con->scene_tree->node,false);
+		return;
+	}
+#endif
 	/* M32e: the embedded native Qt CONTAINER was already reparented
 	 * and positioned in the compositor's popup tree. Ordinary Sway
 	 * focus/floating transactions must not reset that parent position.
@@ -999,6 +1008,16 @@ static void arrange_workspace_floating(struct sway_workspace *ws) {
 		if (floater->node.destroying) {
 			continue;
 		}
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* A revoked private actor cannot be reparented back into the
+		 * ordinary floating layer on workspace return or focus. */
+		if (floater->view &&
+				stage_director_company_scene_m32j_quarantined(
+					floater->view)) {
+			wlr_scene_node_set_enabled(&floater->scene_tree->node,false);
+			continue;
+		}
+#endif
 		struct wlr_scene_tree *layer = root->layers.floating;
 
 		if (floater->current.fullscreen_mode != FULLSCREEN_NONE) {
@@ -1141,6 +1160,18 @@ static void arrange_output(struct sway_output *output, int width, int height) {
 		for (int i = 0; i < child->current.floating->length; i++) {
 			struct sway_container *floater = child->current.floating->items[i];
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			/* M32j: do not re-enable/reparent a revoked Qt actor during
+			 * any output workspace arrangement, even on workspace RETURN. */
+			if (floater->view &&
+					stage_director_company_scene_m32j_quarantined(
+						floater->view)) {
+				wlr_scene_node_set_enabled(
+					&floater->scene_tree->node,false);
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32J][CI_ONLY] "
+					"quarantine_layout_kept_hidden=1");
+				continue;
+			}
 			/* This is a SECOND ordinary Sway reparent pass after
 			 * arrange_workspace_floating(). It must not move an active
 			 * private embedded native Qt scene behind the Company layer.
