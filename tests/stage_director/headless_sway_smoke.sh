@@ -52,6 +52,19 @@ output * resolution 1920x1080
 for_window [app_id="post-apollo-weather-news"] floating enable
 EOF
 
+# M32e: only the disposable CI renderer receives no-decoration floating
+# geometry on first XDG map. The real Company QML runs as an independent
+# unmodified layer client; no production Sway config or output changes.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M32E_REAL:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${RUNNER_TEMP:-}" != /home/runner/work/_temp ]]; then
+    echo "BLOCKED_M32E_FLOATING_RULE_NOT_PRIVATE_CI" >&2
+    exit 2
+  fi
+  printf '\nfor_window [app_id="CompanyVectorProbe"] floating enable\n' >> "$config"
+  printf 'for_window [app_id="CompanyVectorProbe"] border none\n' >> "$config"
+fi
+
 # The ordinary Sway titlebar remains enabled for unrelated windows.
 # A CI-only native process/cgroup-matched Chrome actor receives a per-view
 # B_NONE policy in view_map() before its first container layout transaction.
@@ -180,6 +193,19 @@ fi
 if [[ -n "${STAGE_DIRECTOR_TEST_WATCH_LAYER_CLIENT:-}" ]]; then
   export WAYLAND_DISPLAY="${socket##*/}"
   bash tests/stage_director/ci_real_watch_layer_smoke.sh "$runtime"
+fi
+
+# Exact true-native Company+Qt M32e probe. This is disabled in every
+# ordinary compositor/session and uses the already guarded CI runner.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M32E_REAL:-}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${RUNNER_TEMP:-}" != /home/runner/work/_temp ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M32E:-}" != 1 ]]; then
+    echo "BLOCKED_M32E_REAL_NOT_DISPOSABLE_CI" >&2
+    exit 2
+  fi
+  export WAYLAND_DISPLAY="${socket##*/}"
+  python3 -B tests/stage_director/ci_company_m32e_real_scene.py
 fi
 
 kill -TERM "$child"
