@@ -254,8 +254,9 @@ jobs:
           # Only a disposable build of the pinned Qt source receives a
           # native Popup test. No modification to the original renderer.
           code=cpp.read_text()
-          after='    if (!window) {\\n        qCritical() << "UNEXPECTED_ROOT_OBJECT";\\n        return 4;\\n    }'
-          after=after.replace('\\\\n','\\n')
+          after=('    if (!window) {' + chr(10) +
+                 '        qCritical() << "UNEXPECTED_ROOT_OBJECT";' + chr(10) +
+                 '        return 4;' + chr(10) + '    }')
           if code.count(after)!=1 or 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in code:
               raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
           popup_code=r'''
