@@ -264,11 +264,11 @@ jobs:
           if code.count(after)!=1 or 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in code:
               raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
           popup_code=r'''
-              qInfo().noquote() <<
-                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=" << (qgetenv("CI") == "true") <<
-                  " gha=" << (qgetenv("GITHUB_ACTIONS") == "true") <<
-                  " enabled=" <<
-                  (qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1");
+              std::fprintf(stderr,
+                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=%d gha=%d enabled=%d\\n",
+                  qgetenv("CI") == "true", qgetenv("GITHUB_ACTIONS") == "true",
+                  qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1");
+              std::fflush(stderr);
               if (qgetenv("CI") == "true" && qgetenv("GITHUB_ACTIONS") == "true"
                       && qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1") {
                   const QString trigger =
@@ -287,16 +287,19 @@ jobs:
                           popup->setHeight(110);
                           popup->setPosition(window->position() + QPoint(1300, 80));
                           popup->setColor(QColor("#ED981A"));
-                          qInfo().noquote() <<
-                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1";
+                          std::fprintf(stderr,
+                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1\\n");
+                          std::fflush(stderr);
                           popup->show();
                       });
                   poll->start();
-                  qInfo().noquote() << "SD_COMPANY_M32I_QT_HOOK_ARMED";
+                  std::fprintf(stderr,"SD_COMPANY_M32I_QT_HOOK_ARMED\\n");
+                  std::fflush(stderr);
                   QTimer::singleShot(9000, &app, [trigger]() {
-                      qInfo().noquote() <<
-                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=" <<
-                          QFileInfo::exists(trigger);
+                      std::fprintf(stderr,
+                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=%d\\n",
+                          QFileInfo::exists(trigger));
+                      std::fflush(stderr);
                   });
               }
           '''
