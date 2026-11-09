@@ -2,6 +2,7 @@
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
 #include <stdlib.h>
 #include <string.h>
+#include "log.h"
 #endif
 #include <stdint.h>
 #include <scenefx/types/fx/blur_data.h>
@@ -35,6 +36,13 @@ static struct {
     uint64_t selection_epoch;
     struct stage_director_rect viewport;
 } ci_scene;
+
+static bool company_m32e_ci_refuse(const char *gate) {
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32E][CI_ONLY][DENIED] gate=%s",
+        gate);
+    return false;
+}
 #endif
 
 void stage_director_company_scene_revoke(struct sway_view *view) {
@@ -85,13 +93,13 @@ bool stage_director_company_scene_apply_ci_only(
             !view->container->scene_tree || !current ||
             !root || !root->layers.popup ||
             !view->wlr_xdg_toplevel || !view->wlr_xdg_toplevel->base)
-        return false;
+        return company_m32e_ci_refuse("scene-object-not-ready");
     /* Popups created BEFORE scene admission would already be independent
      * unmasked trees. Refuse the actor if its native XDG root has ANY
      * existing popup descendants. New top-level/nested popups are denied
      * by the M32d XDG hook once the actor is embedded. */
     if (!wl_list_empty(&view->wlr_xdg_toplevel->base->popups))
-        return false;
+        return company_m32e_ci_refuse("preexisting-xdg-popup");
 
     /* Do not use a client-supplied view/ID, desktop title or app-id.
      * Re-observe the actual mapped native XDG root and match every field
@@ -108,7 +116,7 @@ bool stage_director_company_scene_apply_ci_only(
             now.start_ticks != current->actor.start_ticks ||
             now.root_global.width != current->actor.root_global.width ||
             now.root_global.height != current->actor.root_global.height)
-        return false;
+        return company_m32e_ci_refuse("native-root-reobservation-changed");
 
     const struct stage_director_rect source = {
         .x = view->geometry.x, .y = view->geometry.y,
@@ -119,11 +127,19 @@ bool stage_director_company_scene_apply_ci_only(
         stage_director_company_scene_prepare(current, guard, source);
     if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
             !plan.geometry_ready || plan.can_apply_in_production ||
-            view->geometry.x != 0 || view->geometry.y != 0)
-        return false;
+            view->geometry.x != 0 || view->geometry.y != 0) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][SCENE_PLAN] "
+            "state=%d exact_source=%d,%d %dx%d actor_root=%dx%d",
+            (int)plan.state, source.x, source.y, source.width,
+            source.height, current->actor.root_global.width,
+            current->actor.root_global.height);
+        return company_m32e_ci_refuse("scene-plan-or-geometry");
+    }
     struct wlr_scene_node *node = &view->container->scene_tree->node;
     if (!node->parent || (ci_scene.view && ci_scene.view != view) ||
-            !node->enabled) return false;
+            !node->enabled)
+        return company_m32e_ci_refuse("scene-node-disabled-or-occupied");
 
     int scene_x=0,scene_y=0,content_x=0,content_y=0,parent_x=0,parent_y=0;
     if (!wlr_scene_node_coords(node,&scene_x,&scene_y) ||
@@ -131,13 +147,13 @@ bool stage_director_company_scene_apply_ci_only(
                 &content_x,&content_y) ||
             !wlr_scene_node_coords(&root->layers.popup->node,
                 &parent_x,&parent_y))
-        return false;
+        return company_m32e_ci_refuse("scene-coordinate-query");
     const int64_t x=(int64_t)plan.target_global.x -
         ((int64_t)content_x-scene_x)-parent_x;
     const int64_t y=(int64_t)plan.target_global.y -
         ((int64_t)content_y-scene_y)-parent_y;
     if (x<INT_MIN || x>INT_MAX || y<INT_MIN || y>INT_MAX)
-        return false;
+        return company_m32e_ci_refuse("scene-coordinate-overflow");
 
     if (!ci_scene.view) {
         ci_scene.view=view;
@@ -191,7 +207,8 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
     const char *temp = getenv("RUNNER_TEMP");
     if (!ci || strcmp(ci, "true") || !gha || strcmp(gha, "true") ||
             !m32e || strcmp(m32e, "1") || !temp ||
-            strcmp(temp, "/home/runner/work/_temp")) return false;
+            strcmp(temp, "/home/runner/work/_temp"))
+        return company_m32e_ci_refuse("disposable-environment");
     if (!view || !host || !host->candidate ||
             host->state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
             host->host_global.x != 0 || host->host_global.y != 0 ||
@@ -203,7 +220,8 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
             !host->native_client_ref || !host->native_surface_ref ||
             !host->native_output_ref || !host->native_layer_role_ref ||
             !host->native_layer_ref || host->pid <= 0 || !host->uid ||
-            !host->start_ticks) return false;
+            !host->start_ticks)
+        return company_m32e_ci_refuse("current-native-company-host");
     const struct stage_director_company_native_actor actor =
         stage_director_company_native_observe_actor(view);
     if (!actor.candidate ||
@@ -217,7 +235,17 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
             actor.root_global.height != 788 ||
             view->geometry.x != 0 || view->geometry.y != 0 ||
             view->geometry.width != 1493 ||
-            view->geometry.height != 788) return false;
+            view->geometry.height != 788) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][ACTOR_DIAG] "
+            "root=%d,%d %dx%d view_geo=%d,%d %dx%d actor_state=%d",
+            actor.root_global.x, actor.root_global.y,
+            actor.root_global.width, actor.root_global.height,
+            view->geometry.x, view->geometry.y,
+            view->geometry.width, view->geometry.height,
+            (int)actor.state);
+        return company_m32e_ci_refuse("current-native-qt-actor");
+    }
     /* Explicitly FAKE lineage, digest, binary and lease attestations.
      * These can only flow through this private-CI function. Production has
      * no caller and no approved executable digest. Native refs, geometry,
@@ -273,7 +301,17 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
     const struct stage_director_company_scene_plan plan =
         stage_director_company_scene_prepare(&e, &guard, exact_source);
     if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
-            !plan.geometry_ready || plan.can_apply_in_production) return false;
+            !plan.geometry_ready || plan.can_apply_in_production) {
+        const struct stage_director_company_actor_pair_result pair =
+            stage_director_company_actor_pair_probe(&e);
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][FIXTURE_PLAN] "
+            "state=%d pair_status=%d pair_target=%d,%d %dx%d",
+            (int)plan.state, (int)pair.status,
+            pair.viewport_global.x, pair.viewport_global.y,
+            pair.viewport_global.width, pair.viewport_global.height);
+        return company_m32e_ci_refuse("fixture-pair-or-scene-plan");
+    }
     return stage_director_company_scene_apply_ci_only(view, &e, &guard);
 }
 #endif
