@@ -23,12 +23,19 @@ The CI first asserts the exact source gate, then builds the normal compositor wi
 
 No user desktop steps. Keep Company → COVERAGE → VECTOR VIEW on its current separate-window behavior until actual isolated native scene pixels, input and teardown pass. Do not install the test build on Fedora.
 
+## M32e POSITIVE REAL-NATIVE TEST ADDED
+
+This branch now also includes `tests/stage_director/ci_company_m32e_real_scene.py` and a third CI job `real-company-maplibre-scene`. The job checks out the exact historical M30s test harness at `1c9e1104` and the original M30q-merged Company at `877eb00d` into separate immutable CI checkouts, patches ONLY a disposable copy of the native offline Qt MapLibre source to start at exactly 1493×788 before the first XDG map, builds it with pinned Nix Qt, and launches real Company fullscreen, a genuine MapLibre XDG, native pointer and Grim screenshot clients under the new private M32e compositor.
+
+The test requires the real M32c scene-apply marker, real Qt map readiness and output frames, changed pixels only inside Company's rectangle, real Qt press/motion/release/wheel receipts, and clearing the native map on exit. A failed assertion must stay a **failed test**, not a pass inferred from source or a CI compiler. This real-native job was in progress when the report was updated; no positive pixel/input success is claimed.
+
 ## VERIFY
 
 - Source gate verifies the normal compositor does not contain the M32e caller and that the existing trusted ELF digest stays empty.
 - Private Nix compositor compilation must resolve the actual M32c setter and M32d input paths.
 - Headless private compositor boots with no native actor, so no positive scene can be admitted.
-- **Still required:** reuse the historically verified M30s real Company/MapLibre fixture with the new private binary, start the genuine Qt native XDG source at exactly 1493×788 **before its first map event** (this M32e probe is currently invoked on XDG map, not on later resize), collect compositor screenshots, native pan/wheel receipts, outside-click receipts, popup denial, selected-host loss and actor teardown. Never mark this test run as a visual PASS from a build alone.
+- New real-native CI job exercises true Company, MapLibre, scene call, pixels, pointer events and closing; **status pending**, not a verified pass.
+- **Still required after that job:** verify any positive evidence, add explicit outside-click receipt, popup denial and selected-host-loss assertions, and run Fedora dual-display operator acceptance. Never mark visual PASS from source, compile or empty-scene smoke.
 
 ## WATCH OUT FOR
 
@@ -41,13 +48,14 @@ Fake CI source evidence must never flow into ordinary production pairing, execut
 - [x] Gate on exact disposable test environment and fixed real-company dimensions
 - [x] Add normal/private build and empty-scene CI
 - [ ] Verify this head's CI
-- [ ] Run genuine Company+MapLibre positive pixels and input against this call
+- [x] Add genuine Company+MapLibre positive pixel/input CI runner (verification pending)
+- [ ] Verify exact-head real native pixel/input/teardown run and analyze failures
 - [ ] Implement real short-lived operator-approved scene admission
 - [ ] Wire Company VECTOR VIEW embedded UI and physical Fedora acceptance
 
 ## NEXT
 
-Finish exact-head preflight CI. Then adapt the historical M30s Company+MapLibre fixture to drive the new compositor's **actual** scene setter and inspect screenshots, not the older experimental crop code. Do not activate production or merge without authorized acceptance.
+Verify the exact-head positive real-native CI job now added to this PR and fix any actual rendering/input/teardown failures. Do not use the historical crop implementation to claim a PASS for this setter. Do not activate production or merge without authorized acceptance.
 
 ## DECISIONS
 
