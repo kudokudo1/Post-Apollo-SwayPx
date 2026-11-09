@@ -450,6 +450,36 @@ bool stage_director_company_scene_reject_pointer(
             (uintptr_t)focused_root ==
                 scene.native_actor_root_surface_ref,
             session_locked, (int)verdict.verdict, verdict.deny_event);
+        /* Read-only runtime integrity check after focus/drag transactions.
+         * Do not assume CI lease visibility means scene tree is drawable.
+         * No node manipulation or input grant occurs here. */
+        if (ci_scene.view && ci_scene.view->container &&
+                ci_scene.view->container->scene_tree &&
+                ci_scene.view->scene_tree && ci_scene.view->content_tree) {
+            struct wlr_scene_node *container_node =
+                &ci_scene.view->container->scene_tree->node;
+            struct wlr_scene_node *view_node =
+                &ci_scene.view->scene_tree->node;
+            struct wlr_scene_node *content_node =
+                &ci_scene.view->content_tree->node;
+            int actual_x=0, actual_y=0;
+            const bool drawable=wlr_scene_node_coords(
+                content_node,&actual_x,&actual_y);
+            sway_log(SWAY_INFO,
+                "[stage-director][COMPANY_M32E][CI_ONLY][TREE_RUNTIME] "
+                "container_enabled=%d view_enabled=%d content_enabled=%d "
+                "parent_popup=%d parent_present=%d "
+                "drawable=%d content_global=%d,%d "
+                "container_local=%d,%d view_local=%d,%d saved=%d",
+                container_node->enabled, view_node->enabled,
+                content_node->enabled,
+                container_node->parent == root->layers.popup,
+                container_node->parent != NULL,
+                drawable, actual_x,actual_y,
+                container_node->x,container_node->y,
+                view_node->x,view_node->y,
+                ci_scene.view->saved_surface_tree != NULL);
+        }
     }
 #endif
     return verdict.deny_event;
