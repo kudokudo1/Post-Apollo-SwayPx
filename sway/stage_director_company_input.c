@@ -13,17 +13,25 @@ static bool active(const struct stage_director_company_input_snapshot *scene) {
 struct stage_director_company_input_result
 stage_director_company_input_pointer(
         const struct stage_director_company_input_snapshot *scene,
-        uintptr_t hit_root_ref, double x, double y, bool locked) {
+        uintptr_t hit_root_ref, uintptr_t focused_root_ref,
+        double x, double y, bool locked) {
     if (!scene || !scene->scene_active)
         return (struct stage_director_company_input_result) {
             .verdict = SD_COMPANY_INPUT_NO_EMBED,
         };
-    if (hit_root_ref != scene->native_actor_root_surface_ref ||
-            !hit_root_ref)
+    const bool hit_actor = hit_root_ref &&
+        hit_root_ref == scene->native_actor_root_surface_ref;
+    const bool focused_actor = focused_root_ref &&
+        focused_root_ref == scene->native_actor_root_surface_ref;
+    if (!hit_actor && !focused_actor)
         return (struct stage_director_company_input_result) {
             .verdict = SD_COMPANY_INPUT_UNRELATED_SURFACE,
         };
-    if (!active(scene) || locked || !isfinite(x) || !isfinite(y) ||
+    /* A prior implicit grab/focused actor must not receive events over
+     * Company controls or beyond the native crop, even if the current
+     * scene hit belongs to a different surface. */
+    if (!hit_actor || !active(scene) || locked ||
+            !isfinite(x) || !isfinite(y) ||
             x < (double)scene->map_global.x ||
             y < (double)scene->map_global.y ||
             x >= (double)scene->map_global.x + scene->map_global.width ||
