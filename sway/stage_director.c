@@ -1049,6 +1049,10 @@ void stage_director_company_m32e_geometry_committed(struct sway_view *view) {
      * commits; never repeat scene reparenting or move on every frame. */
     if (stage_director_company_scene_is_embedded_root(view->surface))
         return;
+    /* A still-mapped revoked actor is never eligible for automatic
+     * scene re-admission from an ordinary Qt buffer/geometry commit. */
+    if (stage_director_company_scene_m32j_quarantined(view))
+        return;
     const struct stage_director_company_native_actor actor =
         stage_director_company_native_observe_actor(view);
     if (!actor.candidate || view->geometry.x || view->geometry.y ||
@@ -1094,6 +1098,10 @@ void stage_director_view_unmapped(struct sway_view *view) {
 	/* Clear any private experimental map crop before wlroots destroys
 	 * the XDG scene tree. The ordinary compositor has none to revoke. */
 	stage_director_company_scene_revoke(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Only a native XDG unmap frees a revoked-actor quarantine slot. */
+	stage_director_company_scene_m32j_forget_unmapped(view);
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe_restore(view);
 #endif
