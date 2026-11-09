@@ -37,6 +37,7 @@ static struct {
     int original_y;
     bool visible;
     uint64_t selection_epoch;
+    uintptr_t host_layer_ref;
     struct stage_director_rect viewport;
 } ci_scene;
 
@@ -73,6 +74,7 @@ void stage_director_company_scene_revoke(struct sway_view *view) {
     ci_scene.original_parent = NULL;
     ci_scene.visible = false;
     ci_scene.selection_epoch = 0;
+    ci_scene.host_layer_ref = 0;
     ci_scene.viewport = (struct stage_director_rect){0};
 #else
     (void)view;
@@ -212,12 +214,27 @@ bool stage_director_company_scene_apply_ci_only(
     wlr_scene_node_set_enabled(node,true);
     ci_scene.viewport = plan.target_global;
     ci_scene.selection_epoch = guard->selection_epoch;
+    ci_scene.host_layer_ref = current->host.native_layer_ref;
     ci_scene.visible = true;
     return true;
 #endif
 }
 
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32f: exact mapped Company layer lifetime, observed by Sway itself.
+ * Never treat an unrelated layer or a client-provided name as host loss. */
+void stage_director_company_scene_m32f_host_lost(
+        struct sway_layer_surface *lost_layer) {
+    if (!lost_layer || !ci_scene.visible || !ci_scene.host_layer_ref ||
+            (uintptr_t)lost_layer != ci_scene.host_layer_ref) return;
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32F][CI_ONLY] "
+        "native_company_host_lost=1 scene_revoke=BEGIN");
+    stage_director_company_scene_revoke(NULL);
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32F][CI_ONLY] "
+        "native_company_host_lost=1 scene_revoke=PASS");
+}
 /*
  * M32e // positive native-scene probe for the previously observed M30s
  * fullscreen fixture only. The inputs below model test evidence; they do
