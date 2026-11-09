@@ -70,4 +70,15 @@ bool stage_director_company_scene_reject_pointer(
     struct wlr_surface *focused_surface,
     double global_x, double global_y, bool session_locked);
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+struct sway_seat;
+/* M32e CI-only: allow an already captured native drag to finish WITHIN the
+ * live map, even if the current Sway hit is a different Company surface.
+ * Requires actual native seatop-down provenance, actor pointer focus, a
+ * current scene epoch and the exact half-open map bounds. */
+bool stage_director_company_scene_contained_native_grab(
+    struct sway_seat *seat, struct wlr_surface *focused_surface,
+    double global_x, double global_y, bool session_locked);
+#endif
+
 #endif
