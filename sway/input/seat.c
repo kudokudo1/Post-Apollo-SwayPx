@@ -1140,7 +1140,16 @@ static void seat_set_workspace_focus(struct sway_seat *seat, struct sway_node *n
 	if (node && node->type == N_CONTAINER &&
 			node->sway_container && node->sway_container->view &&
 			stage_director_company_scene_reject_keyboard_view(
-				node->sway_container->view)) return;
+				node->sway_container->view)) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* M32g: native real IPC focus attempt. The denial precedes
+		 * unfocus, keyboard enter, seat state and input-method changes. */
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32G][CI_ONLY] "
+			"native_ipc_keyboard_focus=DENIED actor_embedded=1");
+#endif
+		return;
+	}
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Must run before unfocus, focus stack mutation or keyboard enter.
 	 * This also blocks IPC criteria [con_id=...] focus, not only
