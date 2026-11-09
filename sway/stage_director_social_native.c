@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_scene.h>
 
 #include "log.h"
 #include "sway/commands.h"
@@ -34,6 +35,15 @@ enum social_gesture_kind {
 	SOCIAL_GESTURE_RESIZE,
 };
 
+/* Exact client-frame backstop. This retains old *pixels*, not authority to
+ * move/focus/admit a different XDG surface. Input always passes through it.
+ */
+struct social_backstop_buffer {
+	struct social_backstop_buffer *next;
+	struct wlr_scene_buffer *scene_buffer;
+	int x, y, width, height;
+};
+
 struct social_pair {
 	struct sway_container *host;
 	struct sway_container *guest;
@@ -51,9 +61,155 @@ struct social_pair {
 	struct sway_container *gesture_leader;
 	struct sway_container *gesture_follower;
 	enum social_gesture_kind gesture_kind;
+	/* Private, one-generation visual fallback for a slow-resizing guest. */
+	struct wlr_scene_tree *guest_backstop_tree;
+	struct social_backstop_buffer *guest_backstop_buffers;
+	int guest_backstop_width, guest_backstop_height;
+	struct wl_listener guest_backstop_commit;
+	bool guest_backstop_commit_attached;
 };
 static struct social_pair pair;
 static uint64_t last_generation;
+
+/* The backing snapshot is below the real guest, so a fresh Electron frame
+ * immediately wins wherever it has painted. It is never an input target. */
+static bool backstop_reject_input(struct wlr_scene_buffer *buffer,
+		double *sx, double *sy) {
+	return false;
+}
+
+static void clear_guest_backstop(void) {
+	if (pair.guest_backstop_commit_attached) {
+		wl_list_remove(&pair.guest_backstop_commit.link);
+		pair.guest_backstop_commit_attached = false;
+	}
+	if (pair.guest_backstop_tree) {
+		wlr_scene_node_destroy(&pair.guest_backstop_tree->node);
+		pair.guest_backstop_tree = NULL;
+	}
+	while (pair.guest_backstop_buffers) {
+		struct social_backstop_buffer *next =
+			pair.guest_backstop_buffers->next;
+		free(pair.guest_backstop_buffers);
+		pair.guest_backstop_buffers = next;
+	}
+	pair.guest_backstop_width = 0;
+	pair.guest_backstop_height = 0;
+}
+
+/* Require an actual new matching guest *surface*, not merely the updated
+ * Sway container geometry. With an unresponsive client the old frame stays
+ * available until it redraws, a later gesture replaces it, or we revoke. */
+static void retire_guest_backstop_if_ready(void) {
+	if (!pair.guest_backstop_tree ||
+			pair.gesture_kind != SOCIAL_GESTURE_NONE ||
+			!pair.guest_surface || !pair.guest) return;
+	int expected_width = lround(pair.guest->pending.content_width);
+	int expected_height = lround(pair.guest->pending.content_height);
+	int painted_width = pair.guest_surface->current.width;
+	int painted_height = pair.guest_surface->current.height;
+	if (abs(painted_width - expected_width) <= 2 &&
+			abs(painted_height - expected_height) <= 2)
+		clear_guest_backstop();
+}
+
+static void guest_backstop_surface_commit(struct wl_listener *listener,
+		void *data) {
+	retire_guest_backstop_if_ready();
+}
+
+static void capture_guest_backstop_buffer(struct wlr_scene_buffer *source,
+		int x, int y, void *data) {
+	bool *failed = data;
+	if (*failed || !source->buffer ||
+			!source->dst_width || !source->dst_height) return;
+	struct social_backstop_buffer *item = calloc(1, sizeof(*item));
+	if (!item) {
+		*failed = true;
+		return;
+	}
+	struct wlr_scene_buffer *copy =
+		wlr_scene_buffer_create(pair.guest_backstop_tree, NULL);
+	if (!copy) {
+		free(item);
+		*failed = true;
+		return;
+	}
+	/* Mirror Sway's transaction saved-surface snapshot without disabling the
+	 * live content. Copy only existing compositor-owned render buffers. */
+	wlr_scene_buffer_set_dest_size(copy, source->dst_width, source->dst_height);
+	wlr_scene_buffer_set_opaque_region(copy, &source->opaque_region);
+	wlr_scene_buffer_set_opacity(copy, source->opacity);
+	wlr_scene_buffer_set_filter_mode(copy, source->filter_mode);
+	wlr_scene_buffer_set_transfer_function(copy, source->transfer_function);
+	wlr_scene_buffer_set_primaries(copy, source->primaries);
+	wlr_scene_buffer_set_source_box(copy, &source->src_box);
+	wlr_scene_node_set_position(&copy->node, x, y);
+	wlr_scene_buffer_set_transform(copy, source->transform);
+	wlr_scene_buffer_set_buffer(copy, source->buffer);
+	wlr_scene_buffer_set_corner_radii(copy, source->corners);
+	copy->point_accepts_input = backstop_reject_input;
+	item->scene_buffer = copy;
+	item->x = x;
+	item->y = y;
+	item->width = source->dst_width;
+	item->height = source->dst_height;
+	item->next = pair.guest_backstop_buffers;
+	pair.guest_backstop_buffers = item;
+}
+
+static void begin_guest_backstop(void) {
+	/* A second interactive resize owns a new baseline, never an old image. */
+	clear_guest_backstop();
+	if (!pair.guest_view || !pair.guest_view->scene_tree ||
+			!pair.guest_view->content_tree || !pair.guest_surface ||
+			!pair.guest) return;
+	int width = lround(pair.guest->pending.content_width);
+	int height = lround(pair.guest->pending.content_height);
+	if (width <= 0 || height <= 0) return;
+	pair.guest_backstop_tree =
+		wlr_scene_tree_create(pair.guest_view->scene_tree);
+	if (!pair.guest_backstop_tree) return;
+	/* Content and its transaction saved-buffer are always above the
+	 * backstop, so stale pixels only occupy otherwise exposed regions. */
+	wlr_scene_node_place_below(&pair.guest_backstop_tree->node,
+		&pair.guest_view->content_tree->node);
+	pair.guest_backstop_width = width;
+	pair.guest_backstop_height = height;
+	bool failed = false;
+	wlr_scene_node_for_each_buffer(&pair.guest_view->content_tree->node,
+		capture_guest_backstop_buffer, &failed);
+	if (failed || !pair.guest_backstop_buffers) {
+		clear_guest_backstop();
+		return;
+	}
+	pair.guest_backstop_commit.notify = guest_backstop_surface_commit;
+	wl_signal_add(&pair.guest_surface->events.commit,
+		&pair.guest_backstop_commit);
+	pair.guest_backstop_commit_attached = true;
+}
+
+static void resize_guest_backstop(void) {
+	if (!pair.guest_backstop_tree || !pair.guest_backstop_width ||
+			!pair.guest_backstop_height || !pair.guest) return;
+	double factor_x = pair.guest->pending.content_width /
+		pair.guest_backstop_width;
+	double factor_y = pair.guest->pending.content_height /
+		pair.guest_backstop_height;
+	if (!isfinite(factor_x) || !isfinite(factor_y) ||
+			factor_x <= 0 || factor_y <= 0) {
+		clear_guest_backstop();
+		return;
+	}
+	struct social_backstop_buffer *item;
+	for (item = pair.guest_backstop_buffers; item; item = item->next) {
+		wlr_scene_node_set_position(&item->scene_buffer->node,
+			lround(item->x * factor_x), lround(item->y * factor_y));
+		wlr_scene_buffer_set_dest_size(item->scene_buffer,
+			MAX(1, lround(item->width * factor_x)),
+			MAX(1, lround(item->height * factor_y)));
+	}
+}
 
 static void end_gesture(bool refresh_layout) {
 	struct sway_container *follower = pair.gesture_follower;
@@ -61,6 +217,7 @@ static void end_gesture(bool refresh_layout) {
 	pair.gesture_leader = NULL;
 	pair.gesture_follower = NULL;
 	pair.gesture_kind = SOCIAL_GESTURE_NONE;
+	if (refresh_layout) retire_guest_backstop_if_ready();
 	if (!follower || follower->node.destroying) return;
 	if (kind == SOCIAL_GESTURE_MOVE) {
 		follower->animation_state.seat_is_moving_float = false;
@@ -84,6 +241,7 @@ static void revoke(const char *why) {
 	}
 	/* view_lost calls this before the native containers are freed. */
 	end_gesture(false);
+	clear_guest_backstop();
 	memset(&pair, 0, sizeof(pair));
 }
 
@@ -281,6 +439,7 @@ bool stage_director_social_native_begin(struct sway_container *leader,
 	pair.gesture_follower = follower;
 	pair.gesture_kind = resizing ? SOCIAL_GESTURE_RESIZE : SOCIAL_GESTURE_MOVE;
 	if (resizing) {
+		begin_guest_backstop();
 		/* Match the leader's interactive resize presentation and hint. */
 		container_set_resizing(follower, true);
 	} else {
@@ -372,5 +531,6 @@ bool stage_director_social_native_resize(struct sway_container *leader,
 	other->pending.content_width += dw;
 	other->pending.content_height += dh;
 	arrange_container(other);
+	resize_guest_backstop();
 	return true;
 }
