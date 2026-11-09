@@ -144,8 +144,8 @@ mutations = [
         "if (bound_is_current(client, resource))",
         "if (!bound_is_current(client, resource))", 1),
     protocol.replace(
-        "stage_director_company_scene_lease_candidate_revoke(\n        &native_lease_candidate);\n\t/* Wipe",
-        "/* missing M32p revoke */\n\t/* Wipe", 1),
+        "stage_director_company_scene_lease_candidate_revoke(\n        &native_lease_candidate);\n    stage_director_company_scene_revoke(NULL);",
+        "stage_director_company_scene_revoke(NULL);", 1),
 ]
 for index, variant in enumerate(mutations):
     assert variant != protocol, ("mutation missing", index)
