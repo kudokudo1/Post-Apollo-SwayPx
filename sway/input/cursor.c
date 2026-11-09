@@ -334,6 +334,7 @@ void pointer_motion(struct sway_cursor *cursor, uint32_t time_msec,
 	(void)node_at_coords(cursor->seat, cursor->cursor->x,
 		cursor->cursor->y, &hit, &hit_x, &hit_y);
 	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->seat->wlr_seat->pointer_state.focused_surface,
 			cursor->cursor->x, cursor->cursor->y,
 			server.session_lock.lock != NULL)) {
 		wlr_seat_pointer_notify_clear_focus(cursor->seat->wlr_seat);
@@ -416,6 +417,7 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 		cursor->cursor->x, cursor->cursor->y,
 		&hit, &hit_x, &hit_y);
 	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->seat->wlr_seat->pointer_state.focused_surface,
 			cursor->cursor->x, cursor->cursor->y,
 			server.session_lock.lock != NULL)) return;
 	dispatch_cursor_button(cursor, &event->pointer->base,
@@ -436,6 +438,7 @@ static void handle_pointer_axis(struct wl_listener *listener, void *data) {
 	(void)node_at_coords(cursor->seat, cursor->cursor->x,
 		cursor->cursor->y, &hit, &hit_x, &hit_y);
 	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->seat->wlr_seat->pointer_state.focused_surface,
 			cursor->cursor->x, cursor->cursor->y,
 			server.session_lock.lock != NULL)) return;
 	dispatch_cursor_axis(cursor, event);
