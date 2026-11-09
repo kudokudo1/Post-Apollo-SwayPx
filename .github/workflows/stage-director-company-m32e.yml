@@ -54,7 +54,7 @@ jobs:
           transaction=Path('sway/desktop/transaction.c').read_text()
           assert 'preserved_embedded_container_position=1' in transaction
           assert 'preserved_embedded_container_parent=1' in transaction
-          assert 'preserved_embedded_live_buffer=1' in transaction
+          assert 'preserved_embedded_output_parent=1' in transaction
           assert 'stage_director_company_scene_is_embedded_root(' in transaction
           assert 'stage_director_company_m32e_geometry_committed(view);' in Path('sway/desktop/xdg_shell.c').read_text()
           assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in Path('sway/desktop/xdg_shell.c').read_text()
