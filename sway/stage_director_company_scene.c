@@ -41,6 +41,81 @@ static struct {
     struct stage_director_rect viewport;
 } ci_scene;
 
+/* M32j: bounded compositor-held mapped actor registry. A slot is reserved
+ * before scene application, so revoke can ALWAYS quarantine that actor.
+ * Slots are released only by Sway's actual XDG unmap callback, never by a
+ * workspace/output focus transition or a client-provided string. */
+#define SD_COMPANY_M32J_CI_ACTOR_CAP 16
+static struct {
+    const struct sway_view *view;
+    bool revoked;
+} ci_actor_registry[SD_COMPANY_M32J_CI_ACTOR_CAP];
+
+static bool ci_actor_reserve(const struct sway_view *view) {
+    if (!view) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (ci_actor_registry[i].view==view)
+            return !ci_actor_registry[i].revoked;
+    }
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (!ci_actor_registry[i].view) {
+            ci_actor_registry[i].view=view;
+            ci_actor_registry[i].revoked=false;
+            return true;
+        }
+    }
+    return false; /* fail closed: no revocation capacity */
+}
+
+bool stage_director_company_scene_m32j_quarantined(
+        const struct sway_view *view) {
+    if (!view) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i)
+        if (ci_actor_registry[i].view==view)
+            return ci_actor_registry[i].revoked;
+    return false;
+}
+
+static void ci_actor_quarantine(const struct sway_view *view) {
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (view && ci_actor_registry[i].view==view) {
+            ci_actor_registry[i].revoked=true;
+            sway_log(SWAY_INFO,
+                "[stage-director][COMPANY_M32J][CI_ONLY] "
+                "native_revoke_quarantine=1 until_actual_unmap=1");
+            return;
+        }
+    }
+    sway_log(SWAY_ERROR,
+        "[stage-director][COMPANY_M32J][CI_ONLY][INVARIANT] "
+        "revoked_actor_not_reserved=1");
+}
+
+void stage_director_company_scene_m32j_forget_unmapped(
+        const struct sway_view *view) {
+    if (!view) return;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (ci_actor_registry[i].view==view) {
+            ci_actor_registry[i].view=NULL;
+            ci_actor_registry[i].revoked=false;
+            return;
+        }
+    }
+}
+
+static bool ci_quarantined_root(struct wlr_surface *surface) {
+    struct wlr_surface *root_surface = surface ?
+        wlr_surface_get_root_surface(surface) : NULL;
+    if (!root_surface) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        const struct sway_view *view=ci_actor_registry[i].view;
+        if (view && ci_actor_registry[i].revoked &&
+                view->surface==root_surface)
+            return true;
+    }
+    return false;
+}
+
 static bool company_m32e_ci_refuse(const char *gate) {
     sway_log(SWAY_INFO,
         "[stage-director][COMPANY_M32E][CI_ONLY][DENIED] gate=%s",
@@ -57,6 +132,7 @@ void stage_director_company_scene_revoke(struct sway_view *view) {
      * window above the desktop. Owner must close it or explicitly restore
      * it to the normal workspace in a separately authorized operation. */
     struct sway_view *actor = ci_scene.view;
+    ci_actor_quarantine(actor);
     if (actor->container && !actor->container->node.destroying &&
             actor->container->scene_tree) {
         struct wlr_scene_node *node =
@@ -189,6 +265,8 @@ bool stage_director_company_scene_apply_ci_only(
     if (x<INT_MIN || x>INT_MAX || y<INT_MIN || y>INT_MAX)
         return company_m32e_ci_refuse("scene-coordinate-overflow");
 
+    if (!ci_actor_reserve(view))
+        return company_m32e_ci_refuse("revoked-actor-or-quarantine-capacity");
     if (!ci_scene.view) {
         ci_scene.view=view;
         ci_scene.original_parent=node->parent;
@@ -392,15 +470,23 @@ bool stage_director_company_scene_reject_popup(struct sway_view *view) {
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
     return stage_director_company_input_reject_popup(
-        &scene, (uintptr_t)view);
+        &scene, (uintptr_t)view)
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+        || stage_director_company_scene_m32j_quarantined(view)
+#endif
+        ;
 }
 
 bool stage_director_company_scene_reject_keyboard_view(
         struct sway_view *view) {
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
-    return view && scene.scene_active &&
-        scene.native_actor_view_ref == (uintptr_t)view;
+    return (view && scene.scene_active &&
+        scene.native_actor_view_ref == (uintptr_t)view)
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+        || stage_director_company_scene_m32j_quarantined(view)
+#endif
+        ;
 }
 
 bool stage_director_company_scene_is_embedded_root(
@@ -415,7 +501,11 @@ bool stage_director_company_scene_is_embedded_root(
 
 bool stage_director_company_scene_reject_keyboard_surface(
         struct wlr_surface *surface) {
-    return stage_director_company_scene_is_embedded_root(surface);
+    return stage_director_company_scene_is_embedded_root(surface)
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+        || ci_quarantined_root(surface)
+#endif
+        ;
 }
 
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
