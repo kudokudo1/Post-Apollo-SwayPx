@@ -959,17 +959,14 @@ void stage_director_view_mapped(struct sway_view *view) {
 				const struct stage_director_company_actor_pair_result
 					pair = stage_director_company_actor_pair_probe(
 						&pair_evidence);
-				/* M32e: only a disposable test binary can call the real
-				 * scene setter with synthetic CI-only authority evidence.
-				 * Ordinary compositor compilation excludes this call. */
+				/* M32e does not invoke the private setter on XDG map:
+				 * view->surface->current is valid here, but Sway may still
+				 * have view->geometry=0x0. Await its real commit. */
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
-				if (stage_director_company_scene_apply_m32e_fixture_only(
-						view, &native_host)) {
-					sway_log(SWAY_INFO,
-						"[stage-director][COMPANY_M32E][CI_ONLY] "
-						"native_scene_apply=PASS authority=FAKE_CI "
-						"production=OFF visual=UNVERIFIED");
-				}
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32E][CI_ONLY] "
+					"map_pending_geometry_commit observed_source=%dx%d",
+					company.root_global.width, company.root_global.height);
 #endif
 				/* M32c: the real renderer backend exists in normal SwayPX,
 				 * but no compositor-issued scene/seat/popup permission exists.
@@ -1034,6 +1031,53 @@ void stage_director_view_mapped(struct sway_view *view) {
 		stage_director_observe_container(view->container, "map");
 	}
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32e // private positive probe on an actual mapped XDG geometry commit.
+ * The app ID is ONLY a disposable fixture filter. Real actor and host
+ * identity must still be re-read from compositor-owned Wayland objects,
+ * and stage_director_company_scene_apply_m32e_fixture_only() retains all
+ * its exact-geometry, native-client and CI environment checks. */
+void stage_director_company_m32e_geometry_committed(struct sway_view *view) {
+    if (!view || view->type != SWAY_VIEW_XDG_SHELL) return;
+    const char *app_id = view_get_app_id(view);
+    if (!app_id || strcmp(app_id, "CompanyVectorProbe")) return;
+    const struct stage_director_company_native_actor actor =
+        stage_director_company_native_observe_actor(view);
+    if (!actor.candidate || view->geometry.x || view->geometry.y ||
+            view->geometry.width != 1493 || view->geometry.height != 788) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "geometry_not_ready native_candidate=%d source=%d,%d %dx%d",
+            actor.candidate, view->geometry.x, view->geometry.y,
+            view->geometry.width, view->geometry.height);
+        return;
+    }
+    int candidates = 0;
+    struct stage_director_company_native_host host = {0};
+    for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+        if (!layers[i].occupied || !layers[i].surface) continue;
+        const struct stage_director_company_native_host observed =
+            stage_director_company_native_observe_host(layers[i].surface);
+        if (observed.candidate) {
+            candidates++;
+            host = observed;
+        }
+    }
+    if (candidates != 1) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "unique_host_refused candidates=%d", candidates);
+        return;
+    }
+    if (stage_director_company_scene_apply_m32e_fixture_only(view, &host)) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "native_scene_apply=PASS authority=FAKE_CI "
+            "production=OFF visual=UNVERIFIED");
+    }
+}
+#endif
 
 void stage_director_view_identity_changed(struct sway_view *view) {
 	classify(view, "identity");
