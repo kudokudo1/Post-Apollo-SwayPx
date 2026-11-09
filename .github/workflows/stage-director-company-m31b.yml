@@ -79,9 +79,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mesa="$(nix eval --raw --impure --expr \
-            'let f = builtins.getFlake (toString ./.); \
-             in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
           test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
           test -d "$mesa/lib/dri"
           export __EGL_VENDOR_LIBRARY_FILENAMES="$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
