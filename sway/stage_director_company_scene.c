@@ -222,7 +222,6 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
      * These can only flow through this private-CI function. Production has
      * no caller and no approved executable digest. Native refs, geometry,
      * actual wlroots node operations and screenshots must be real. */
-    const struct stage_director_rect map = {166, 203, 1493, 788};
     const struct stage_director_company_actor_pair_evidence e = {
         .selected_native_company_host = true,
         .kernel_pidfd_actor_candidate = true,
