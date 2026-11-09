@@ -207,7 +207,11 @@ def main():
         read_until(pointer.stdout,
                    "SD_CI_COMPANY_POINTER_READY real_zwlr_virtual_pointer=1")
         initial=qt_log.read_text(errors="replace")
-        for action in ("move 500 450","press","move 610 490","release","wheel"):
+        # Native Sway button-down operation must deliver the whole
+        # in-map drag. Re-enter the known native-hit location for
+        # wheel, which is a new, non-grab pointer action.
+        for action in ("move 500 450","press","move 610 490",
+                       "release","move 500 450","wheel"):
             pointer.stdin.write(action+"\n")
             pointer.stdin.flush()
             observed=read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_ACK ",8)
