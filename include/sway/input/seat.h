@@ -346,6 +346,14 @@ void seatop_rebase(struct sway_seat *seat, uint32_t time_msec);
  */
 void seatop_end(struct sway_seat *seat);
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32e private runtime proof: the *active* Sway button-down operation must
+ * have captured this exact native XDG root. Pointer focus alone is not proof
+ * that a drag originated on the embedded Company actor. */
+bool stage_director_company_seatop_down_matches_root(
+    struct sway_seat *seat, struct wlr_surface *native_root);
+#endif
+
 /**
  * Instructs the seatop implementation to drop any references to the given
  * container (eg. because the container is destroying).
