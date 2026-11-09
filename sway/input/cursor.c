@@ -327,6 +327,19 @@ void pointer_motion(struct sway_cursor *cursor, uint32_t time_msec,
 	}
 
 	wlr_cursor_move(cursor->cursor, device, dx, dy);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* M32e: Sway's native seatop-down captured the real actor root.
+	 * Continue its existing drag within the map even when a fresh
+	 * Company QML scene hit differs. No new focus or press is minted. */
+	if (stage_director_company_scene_contained_native_grab(
+			cursor->seat,
+			cursor->seat->wlr_seat->pointer_state.focused_surface,
+			cursor->cursor->x, cursor->cursor->y,
+			server.session_lock.lock != NULL)) {
+		seatop_pointer_motion(cursor->seat, time_msec);
+		return;
+	}
+#endif
 	/* M32d: a masked Company MapLibre actor must never get motion
 	 * outside its live panel rect, or while the session is locked. */
 	struct wlr_surface *hit = NULL;
@@ -411,6 +424,21 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 	if (weather_paired || company_paired) {
 		return;
 	}
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Release the compositor-captured native button-down while the cursor
+	 * remains inside its current authorized map. This is NOT an
+	 * initial-press privilege or an outside-map release bypass. */
+	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
+			stage_director_company_scene_contained_native_grab(
+				cursor->seat,
+				cursor->seat->wlr_seat->pointer_state.focused_surface,
+				cursor->cursor->x, cursor->cursor->y,
+				server.session_lock.lock != NULL)) {
+		dispatch_cursor_button(cursor, &event->pointer->base,
+			event->time_msec, event->button, event->state);
+		return;
+	}
+#endif
 	struct wlr_surface *hit = NULL;
 	double hit_x = 0, hit_y = 0;
 	(void)node_at_coords(cursor->seat,
