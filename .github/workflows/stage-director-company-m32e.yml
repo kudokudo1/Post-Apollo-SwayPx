@@ -92,6 +92,18 @@ jobs:
           assert 'M32H_WORKSPACE_ACTOR_LEAK' in test
           assert 'M32J_STALE_NATIVE_ACTOR_REEXPOSED' in test
           assert 'SD_COMPANY_M32J_REVOKED_RETURN' in test
+          assert 'M32J_REVOKED_FOCUS_REEXPOSED' in test
+          assert 'SD_COMPANY_M32J_REVOKED_IPC_FOCUS' in test
+          assert 'revoked_native_keyboard_focus=DENIED' in scene
+          assert 'ci_actor_reserve(view)' in scene
+          assert 'ci_actor_quarantine(actor)' in scene
+          assert 'SD_COMPANY_M32J_CI_ACTOR_CAP 16' in scene
+          assert 'stage_director_company_scene_m32j_forget_unmapped(view);' in stage
+          assert 'stage_director_company_scene_m32j_quarantined(view)' in stage
+          assert 'quarantine_layout_kept_hidden=1' in transaction
+          assert 'stage_director_company_scene_m32j_quarantined(' in transaction
+          assert 'stage_director_company_scene_m32j_quarantined(' in header
+          assert 'stage_director_company_scene_m32j_forget_unmapped(' in header
           assert 'M32H_WORKSPACE_RETURN_FAILED' in test
           assert 'native_workspace_deactivated=1 scene_revoke=PASS' in transaction
           assert 'real_IPC_focus_attempt=1' in test
