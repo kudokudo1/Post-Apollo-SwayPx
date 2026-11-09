@@ -92,7 +92,7 @@ jobs:
           assert 'stage_director_company_scene_reject_keyboard_view(' in seat
           assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(view);' in scene
           assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(' in seat
-          assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(' in seat_header
+          assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(' in Path('include/sway/input/seat.h').read_text()
           assert 'wait_new_marker(' in test
           assert 'actor.poll() is not None' in test
           assert 'company.terminate()' in test
