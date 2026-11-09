@@ -204,7 +204,21 @@ def main():
     def screenshot(label):
         image_path=temp/f"sd-company-m32e-{label}.ppm"
         call(str(grim),"-t","ppm",str(image_path),timeout=25)
-        return ppm(image_path)
+        if not dual:
+            # The historical strict parser still validates exactly
+            # 1920x1080 on the ordinary one-output regression.
+            return ppm(image_path)
+        # Grim produces a single P6 framebuffer for both real Wayland
+        # outputs. Accept ONLY the exact expected 3840x1080 raw RGB
+        # header/length, never arbitrary source-dependent dimensions.
+        raw=image_path.read_bytes()
+        header=re.match(
+            rb"P6[ \t\r\n]+3840[ \t\r\n]+1080[ \t\r\n]+255[ \t\r\n]",
+            raw)
+        if not header or len(raw)-header.end()!=3840*1080*3:
+            raise RuntimeError(
+                "M32L_DUAL_PPM_EXACT_RGB_SIZE_INVALID "+str(len(raw)))
+        return 3840,1080,memoryview(raw)[header.end():]
 
     try:
         with company_log.open("w") as log:
