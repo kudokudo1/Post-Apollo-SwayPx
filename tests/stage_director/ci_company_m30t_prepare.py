@@ -65,6 +65,15 @@ def main():
         }
     }
 """
+    # M30z tests the *same pure Qt Rectangle bars* on the original 1493px
+    # baseline as well as the corrected 1494px source. The prepared source
+    # is confined to RUNNER_TEMP; the original Company Qt files stay intact.
+    # Without M30z, M30t remains byte-for-byte equivalent to its prior CI.
+    if env.get("STAGE_DIRECTOR_CI_COMPANY_M30Z") == "1":
+        probe=once(probe,
+            "visible: root.width === 1494 && root.height === 788",
+            "visible: (root.width === 1494 || root.width === 1493) "
+            "&& root.height === 788", "M30Z_TEST_ONLY_FIDUCIAL_WIDTH")
     qml.write_text(text[:-2]+probe+"}\n",encoding="utf-8")
 
     cpp=out/"main.cpp"
@@ -119,6 +128,64 @@ def main():
         }
         // M30n observes Qt's real QML MapView camera after actual input."""
     s=once(s,anchor,injection,"CXX_WINDOW_PIXEL_READBACK")
+    if env.get("STAGE_DIRECTOR_CI_COMPANY_M30Z") == "1":
+        # M30z adds a *separate* original-width Qt CPU pixel witness,
+        # gated by M30Z + M30Y only at runtime. The existing M30t 1494px
+        # path remains unchanged; never call this outside disposable CI.
+        original_grab="""        // M30z: capture unpadded original QQuickWindow source pixels BEFORE
+        // the compositor, with the same fiducials used by M30t.
+        if (qEnvironmentVariable("STAGE_DIRECTOR_CI_COMPANY_M30Z") ==
+                QStringLiteral("1") &&
+            qEnvironmentVariable("STAGE_DIRECTOR_CI_COMPANY_M30Y") ==
+                QStringLiteral("1") &&
+            qEnvironmentVariable("STAGE_DIRECTOR_CI_COMPANY_M30T") !=
+                QStringLiteral("1")) {
+            auto *originalPoll = new QTimer(&app);
+            originalPoll->setInterval(150);
+            auto originalSettled = std::make_shared<int>(0);
+            QObject::connect(originalPoll, &QTimer::timeout, &app,
+                [window,m30lRoot,originalPoll,originalSettled]() {
+                    if (!m30lRoot->property("m30lMapReady").toBool()
+                            || m30lRoot->property("m30oWindowWidth").toInt()!=1493
+                            || m30lRoot->property("m30oWindowHeight").toInt()!=788
+                            || m30lRoot->property("m30oMapWidth").toInt()!=1493
+                            || m30lRoot->property("m30oMapHeight").toInt()!=788) {
+                        *originalSettled=0;
+                        return;
+                    }
+                    if (++*originalSettled<5) return;
+                    originalPoll->stop();
+                    const QImage pixels=window->grabWindow().convertToFormat(
+                        QImage::Format_RGB888);
+                    if (pixels.width()!=1493 || pixels.height()!=788) {
+                        std::fprintf(stderr,
+                            "M30Z_ORIGINAL_QT_SOURCE_DIMENSIONS_REFUSED\\n");
+                        std::fflush(stderr);
+                        return;
+                    }
+                    const QString path=QStringLiteral(
+                        "/home/runner/work/_temp/sd-company-m30z-original-native-fullscreen.ppm");
+                    if (!pixels.save(path,"PPM")) {
+                        std::fprintf(stderr,
+                            "M30Z_ORIGINAL_QT_SOURCE_WRITE_REFUSED\\n");
+                        std::fflush(stderr);
+                        return;
+                    }
+                    std::fprintf(stdout,
+                        "SD_COMPANY_M30Z_ORIGINAL_QT_GRAB "
+                        "real_grabWindow=1 size=1493x788 "
+                        "qml_fiducials=1 offline=1 production=OFF\\n");
+                    std::fflush(stdout);
+                });
+            originalPoll->start();
+        }
+"""
+        s=once(s,
+            "        // M30n observes Qt's real QML MapView camera after actual input.",
+            original_grab+
+            "        // M30n observes Qt's real QML MapView camera after actual input.",
+            "M30Z_ORIGINAL_QT_GRAB")
+
     cpp.write_text(s,encoding="utf-8")
     print("SD_COMPANY_M30T_SOURCE_COPY original_merged_company_unchanged=1 "
           "real_maplibre_with_pure_Qt_Rectangle_fiducials=1 "

@@ -642,6 +642,33 @@ def main():
             original_details = original_evidence(original_log)
             (temp / "sd-company-m30y-original-native-evidence.json").write_text(
                 json.dumps(original_details, sort_keys=True, indent=2) + "\n")
+            # M30z runs *only* in M30y's separately isolated original
+            # 1493px session. Capture real QQuickWindow source pixels before
+            # composition and the final compositor pixel frame AFTER that
+            # source grab, with the identical M30t fiducial positions.
+            if env.get("STAGE_DIRECTOR_CI_COMPANY_M30Z") == "1":
+                qt_file = temp / "sd-company-m30z-original-native-fullscreen.ppm"
+                qt_deadline = time.monotonic() + 15
+                while time.monotonic() < qt_deadline:
+                    if (qt_file.is_file() and
+                            "SD_COMPANY_M30Z_ORIGINAL_QT_GRAB "
+                            in qt_log.read_text(errors="replace")):
+                        break
+                    if actor.poll() is not None:
+                        raise RuntimeError("M30Z_ORIGINAL_NATIVE_QT_EXITED")
+                    time.sleep(.15)
+                else:
+                    raise RuntimeError("M30Z_ORIGINAL_QT_FIDUCIAL_GRAB_MISSING " +
+                                       qt_log.read_text(errors="replace")[-1800:])
+                final_file = (temp /
+                              "sd-company-m30o-m30z-original-composited-fullscreen.ppm")
+                screenshot("m30z-original-composited-fullscreen")
+                if not final_file.is_file():
+                    raise RuntimeError("M30Z_ORIGINAL_FINAL_PPM_MISSING")
+                print("SD_COMPANY_M30Z_ORIGINAL_PIXEL_CAPTURE "
+                      "qt_grab=1493x788 final_grim=1920x1080 "
+                      "fiducials=UNMODIFIED_REFERENCE_POSITIONS "
+                      "production=OFF PASS",flush=True)
             print("SD_COMPANY_M30Y_ORIGINAL_BUFFER "
                   "actual_wlroots_import=1 selected_native_root=1 "
                   "physical=1493x788 "
