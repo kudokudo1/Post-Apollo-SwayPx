@@ -216,6 +216,10 @@ bool stage_director_company_scene_apply_ci_only(
     ci_scene.selection_epoch = guard->selection_epoch;
     ci_scene.host_layer_ref = current->host.native_layer_ref;
     ci_scene.visible = true;
+    /* The scene was admitted after Qt originally mapped. Prevent a
+     * preexisting Sway keyboard focus from surviving this transition;
+     * the M32d guards already reject all subsequent Qt focus attempts. */
+    stage_director_company_m32g_clear_admitted_actor_keyboard_focus(view);
     return true;
 #endif
 }
