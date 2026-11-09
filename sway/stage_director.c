@@ -805,6 +805,30 @@ void stage_director_view_mapped(struct sway_view *view) {
 	 * future authenticated actor selection must use exact wl_resources. */
 	if (view && view->type == SWAY_VIEW_XDG_SHELL) {
 		const char *app_id = view_get_app_id(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* Diagnostic only: make the Wayland app ID, actual XDG root and
+		 * current compositor-observed Company host eligibility visible
+		 * when the private M32e test fails BEFORE scene admission. */
+		const struct stage_director_company_native_actor ci_actor =
+			stage_director_company_native_observe_actor(view);
+		int ci_host_candidates = 0;
+		int ci_host_state = -1;
+		for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+			if (!layers[i].occupied || !layers[i].surface) continue;
+			const struct stage_director_company_native_host h =
+				stage_director_company_native_observe_host(layers[i].surface);
+			if (h.state == SD_COMPANY_NATIVE_WRONG_NAMESPACE) continue;
+			ci_host_state = (int)h.state;
+			if (h.candidate) ci_host_candidates++;
+		}
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32E][CI_ONLY][XDG_MAP] "
+			"app_id=%s actor_state=%d actor_size=%dx%d "
+			"host_state=%d host_candidates=%d",
+			app_id ? app_id : "(null)", (int)ci_actor.state,
+			ci_actor.root_global.width, ci_actor.root_global.height,
+			ci_host_state, ci_host_candidates);
+#endif
 		if (app_id && strstr(app_id, "CompanyVectorProbe")) {
 			const struct stage_director_company_native_actor company =
 				stage_director_company_native_observe_actor(view);
