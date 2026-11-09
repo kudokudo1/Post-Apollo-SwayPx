@@ -260,31 +260,31 @@ jobs:
           if code.count(after)!=1 or 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in code:
               raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
           popup_code=r'''
-    if (qgetenv("CI") == "true" && qgetenv("GITHUB_ACTIONS") == "true"
-            && qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1") {
-        const QString trigger =
-            QString::fromUtf8(qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_POPUP_TRIGGER"));
-        if (!trigger.startsWith(QStringLiteral("/home/runner/work/_temp/")))
-            qFatal("M32I_POPUP_TRIGGER_NOT_DISPOSABLE");
-        auto *poll = new QTimer(&app);
-        poll->setInterval(100);
-        QObject::connect(poll, &QTimer::timeout, &app,
-            [poll, window, trigger]() {
-                if (!QFileInfo::exists(trigger)) return;
-                poll->stop();
-                auto *popup = new QQuickWindow(window);
-                popup->setFlags(Qt::Popup);
-                popup->setWidth(160);
-                popup->setHeight(110);
-                popup->setPosition(window->position() + QPoint(1300, 80));
-                popup->setColor(QColor("#ED981A"));
-                qInfo().noquote() <<
-                    "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1";
-                popup->show();
-            });
-        poll->start();
-    }
-'''
+              if (qgetenv("CI") == "true" && qgetenv("GITHUB_ACTIONS") == "true"
+                      && qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1") {
+                  const QString trigger =
+                      QString::fromUtf8(qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_POPUP_TRIGGER"));
+                  if (!trigger.startsWith(QStringLiteral("/home/runner/work/_temp/")))
+                      qFatal("M32I_POPUP_TRIGGER_NOT_DISPOSABLE");
+                  auto *poll = new QTimer(&app);
+                  poll->setInterval(100);
+                  QObject::connect(poll, &QTimer::timeout, &app,
+                      [poll, window, trigger]() {
+                          if (!QFileInfo::exists(trigger)) return;
+                          poll->stop();
+                          auto *popup = new QQuickWindow(window);
+                          popup->setFlags(Qt::Popup);
+                          popup->setWidth(160);
+                          popup->setHeight(110);
+                          popup->setPosition(window->position() + QPoint(1300, 80));
+                          popup->setColor(QColor("#ED981A"));
+                          qInfo().noquote() <<
+                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1";
+                          popup->show();
+                      });
+                  poll->start();
+              }
+          '''
           cpp.write_text(code.replace(after,after+popup_code,1))
           print('SD_COMPANY_M32I_NATIVE_QT_POPUP disposable_copy=PASS')
           print('SD_COMPANY_M32E_NATIVE_FIRST_MAP exact_1493x788_copy=PASS '
