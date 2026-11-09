@@ -9,6 +9,10 @@
 #include "sway/config.h"
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director_company_input.h"
+#include "sway/stage_director_company_scene.h"
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
@@ -627,7 +631,31 @@ static void arrange_children(enum sway_container_layout layout, list_t *children
 
 static void _arrange_container(struct sway_container *con,
 		int width, int height, int x, int y, bool title_bar, int gaps) {
-	wlr_scene_node_set_position(&con->scene_tree->node, x, y);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* M32j: once a real actor is revoked it must NEVER be made drawable
+	 * by a subsequent Sway layout transaction before native XDG unmap. */
+	if (con->view &&
+			stage_director_company_scene_m32j_quarantined(con->view)) {
+		wlr_scene_node_set_enabled(&con->scene_tree->node,false);
+		return;
+	}
+#endif
+	/* M32e: the embedded native Qt CONTAINER was already reparented
+	 * and positioned in the compositor's popup tree. Ordinary Sway
+	 * focus/floating transactions must not reset that parent position.
+	 * The previous guard preserved only the nested view tree. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	if (!con->view ||
+			!stage_director_company_scene_is_embedded_root(con->view->surface)) {
+#endif
+		wlr_scene_node_set_position(&con->scene_tree->node, x, y);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	} else {
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+			"preserved_embedded_container_position=1");
+	}
+#endif
 
 	// this container might have previously been in the scratchpad,
 	// make sure it's enabled for viewing
@@ -793,11 +821,26 @@ static void _arrange_container(struct sway_container *con,
 			);
 		}
 
-		// make sure to reparent, it's possible that the client just came out of
-		// fullscreen mode where the parent of the surface is not the container
-		wlr_scene_node_reparent(&con->view->scene_tree->node, con->content_tree);
-		wlr_scene_node_set_position(&con->view->scene_tree->node,
-			border_left, border_top);
+		// The private Company native scene is already parented into the
+		// root popup layer with compositor-owned crop/seat containment.
+		// A later focus transaction must NOT relocate that exact view back
+		// into the workspace. Other views retain the original Sway path.
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		if (!stage_director_company_scene_is_embedded_root(con->view->surface)) {
+#endif
+			// make sure to reparent, it's possible that the client just came
+			// out of fullscreen where the parent is not the container.
+			wlr_scene_node_reparent(&con->view->scene_tree->node,
+				con->content_tree);
+			wlr_scene_node_set_position(&con->view->scene_tree->node,
+				border_left, border_top);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		} else {
+			sway_log(SWAY_INFO,
+				"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+				"preserved_embedded_native_view=1");
+		}
+#endif
 
 		wlr_scene_node_set_enabled(&con->blur->node, con->blur_enabled);
 		wlr_scene_node_set_position(&con->blur->node, border_left, border_top);
@@ -965,6 +1008,16 @@ static void arrange_workspace_floating(struct sway_workspace *ws) {
 		if (floater->node.destroying) {
 			continue;
 		}
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* A revoked private actor cannot be reparented back into the
+		 * ordinary floating layer on workspace return or focus. */
+		if (floater->view &&
+				stage_director_company_scene_m32j_quarantined(
+					floater->view)) {
+			wlr_scene_node_set_enabled(&floater->scene_tree->node,false);
+			continue;
+		}
+#endif
 		struct wlr_scene_tree *layer = root->layers.floating;
 
 		if (floater->current.fullscreen_mode != FULLSCREEN_NONE) {
@@ -987,7 +1040,23 @@ static void arrange_workspace_floating(struct sway_workspace *ws) {
 			}
 		}
 
-		wlr_scene_node_reparent(&floater->scene_tree->node, layer);
+		/* M32e: an admitted Company native Qt container belongs to the
+		 * compositor's clipped popup scene, not Sway's workspace floating
+		 * layer. A focus transaction must not reparent it back behind
+		 * Company, or subsequent pointer hits and wheel events disappear. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		if (!floater->view ||
+				!stage_director_company_scene_is_embedded_root(
+					floater->view->surface)) {
+#endif
+			wlr_scene_node_reparent(&floater->scene_tree->node, layer);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		} else {
+			sway_log(SWAY_INFO,
+				"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+				"preserved_embedded_container_parent=1");
+		}
+#endif
 		wlr_scene_node_set_enabled(&floater->scene_tree->node, true);
 		wlr_scene_node_set_enabled(&floater->shadow->node, container_has_shadow(floater) && floater->view);
 		wlr_scene_node_set_enabled(&floater->border.tree->node, true);
@@ -1090,7 +1159,49 @@ static void arrange_output(struct sway_output *output, int width, int height) {
 
 		for (int i = 0; i < child->current.floating->length; i++) {
 			struct sway_container *floater = child->current.floating->items[i];
-			wlr_scene_node_reparent(&floater->scene_tree->node, root->layers.floating);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			/* M32j: do not re-enable/reparent a revoked Qt actor during
+			 * any output workspace arrangement, even on workspace RETURN. */
+			if (floater->view &&
+					stage_director_company_scene_m32j_quarantined(
+						floater->view)) {
+				wlr_scene_node_set_enabled(
+					&floater->scene_tree->node,false);
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32J][CI_ONLY] "
+					"quarantine_layout_kept_hidden=1");
+				continue;
+			}
+			/* This is a SECOND ordinary Sway reparent pass after
+			 * arrange_workspace_floating(). It must not move an active
+			 * private embedded native Qt scene behind the Company layer.
+			 * If the workspace/output stops being active, revoke and
+			 * hide the scene rather than leaving a cross-workspace overlay. */
+			const bool embedded=floater->view &&
+				stage_director_company_scene_is_embedded_root(
+					floater->view->surface);
+			if (embedded && !activated) {
+				/* Exact compositor-observed active-output/workspace loss;
+				 * revoke before normal Sway can reparent or expose the actor. */
+				stage_director_company_scene_revoke(floater->view);
+				wlr_scene_node_set_enabled(
+					&floater->scene_tree->node,false);
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32H][CI_ONLY] "
+					"native_workspace_deactivated=1 scene_revoke=PASS");
+				continue;
+			}
+			if (!embedded) {
+#endif
+				wlr_scene_node_reparent(
+					&floater->scene_tree->node, root->layers.floating);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			} else {
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+					"preserved_embedded_output_parent=1");
+			}
+#endif
 			wlr_scene_node_set_enabled(&floater->scene_tree->node, activated || animating);
 		}
 

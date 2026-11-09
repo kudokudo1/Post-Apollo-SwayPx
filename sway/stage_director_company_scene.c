@@ -1,4 +1,9 @@
 #include <limits.h>
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include <stdlib.h>
+#include <string.h>
+#include "log.h"
+#endif
 #include <stdint.h>
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
@@ -11,6 +16,9 @@
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_scene.h"
 #include "sway/stage_director_company_input.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/input/seat.h"
+#endif
 
 /*
  * M32c // actual SwayPX/wlroots scene API backend.
@@ -29,8 +37,91 @@ static struct {
     int original_y;
     bool visible;
     uint64_t selection_epoch;
+    uintptr_t host_layer_ref;
     struct stage_director_rect viewport;
 } ci_scene;
+
+/* M32j: bounded compositor-held mapped actor registry. A slot is reserved
+ * before scene application, so revoke can ALWAYS quarantine that actor.
+ * Slots are released only by Sway's actual XDG unmap callback, never by a
+ * workspace/output focus transition or a client-provided string. */
+#define SD_COMPANY_M32J_CI_ACTOR_CAP 16
+static struct {
+    const struct sway_view *view;
+    bool revoked;
+} ci_actor_registry[SD_COMPANY_M32J_CI_ACTOR_CAP];
+
+static bool ci_actor_reserve(const struct sway_view *view) {
+    if (!view) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (ci_actor_registry[i].view==view)
+            return !ci_actor_registry[i].revoked;
+    }
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (!ci_actor_registry[i].view) {
+            ci_actor_registry[i].view=view;
+            ci_actor_registry[i].revoked=false;
+            return true;
+        }
+    }
+    return false; /* fail closed: no revocation capacity */
+}
+
+bool stage_director_company_scene_m32j_quarantined(
+        const struct sway_view *view) {
+    if (!view) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i)
+        if (ci_actor_registry[i].view==view)
+            return ci_actor_registry[i].revoked;
+    return false;
+}
+
+static void ci_actor_quarantine(const struct sway_view *view) {
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (view && ci_actor_registry[i].view==view) {
+            ci_actor_registry[i].revoked=true;
+            sway_log(SWAY_INFO,
+                "[stage-director][COMPANY_M32J][CI_ONLY] "
+                "native_revoke_quarantine=1 until_actual_unmap=1");
+            return;
+        }
+    }
+    sway_log(SWAY_ERROR,
+        "[stage-director][COMPANY_M32J][CI_ONLY][INVARIANT] "
+        "revoked_actor_not_reserved=1");
+}
+
+void stage_director_company_scene_m32j_forget_unmapped(
+        const struct sway_view *view) {
+    if (!view) return;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        if (ci_actor_registry[i].view==view) {
+            ci_actor_registry[i].view=NULL;
+            ci_actor_registry[i].revoked=false;
+            return;
+        }
+    }
+}
+
+static bool ci_quarantined_root(struct wlr_surface *surface) {
+    struct wlr_surface *root_surface = surface ?
+        wlr_surface_get_root_surface(surface) : NULL;
+    if (!root_surface) return false;
+    for (int i=0; i<SD_COMPANY_M32J_CI_ACTOR_CAP; ++i) {
+        const struct sway_view *view=ci_actor_registry[i].view;
+        if (view && ci_actor_registry[i].revoked &&
+                view->surface==root_surface)
+            return true;
+    }
+    return false;
+}
+
+static bool company_m32e_ci_refuse(const char *gate) {
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32E][CI_ONLY][DENIED] gate=%s",
+        gate);
+    return false;
+}
 #endif
 
 void stage_director_company_scene_revoke(struct sway_view *view) {
@@ -41,6 +132,7 @@ void stage_director_company_scene_revoke(struct sway_view *view) {
      * window above the desktop. Owner must close it or explicitly restore
      * it to the normal workspace in a separately authorized operation. */
     struct sway_view *actor = ci_scene.view;
+    ci_actor_quarantine(actor);
     if (actor->container && !actor->container->node.destroying &&
             actor->container->scene_tree) {
         struct wlr_scene_node *node =
@@ -58,6 +150,7 @@ void stage_director_company_scene_revoke(struct sway_view *view) {
     ci_scene.original_parent = NULL;
     ci_scene.visible = false;
     ci_scene.selection_epoch = 0;
+    ci_scene.host_layer_ref = 0;
     ci_scene.viewport = (struct stage_director_rect){0};
 #else
     (void)view;
@@ -81,13 +174,13 @@ bool stage_director_company_scene_apply_ci_only(
             !view->container->scene_tree || !current ||
             !root || !root->layers.popup ||
             !view->wlr_xdg_toplevel || !view->wlr_xdg_toplevel->base)
-        return false;
+        return company_m32e_ci_refuse("scene-object-not-ready");
     /* Popups created BEFORE scene admission would already be independent
      * unmasked trees. Refuse the actor if its native XDG root has ANY
      * existing popup descendants. New top-level/nested popups are denied
      * by the M32d XDG hook once the actor is embedded. */
     if (!wl_list_empty(&view->wlr_xdg_toplevel->base->popups))
-        return false;
+        return company_m32e_ci_refuse("preexisting-xdg-popup");
 
     /* Do not use a client-supplied view/ID, desktop title or app-id.
      * Re-observe the actual mapped native XDG root and match every field
@@ -104,7 +197,7 @@ bool stage_director_company_scene_apply_ci_only(
             now.start_ticks != current->actor.start_ticks ||
             now.root_global.width != current->actor.root_global.width ||
             now.root_global.height != current->actor.root_global.height)
-        return false;
+        return company_m32e_ci_refuse("native-root-reobservation-changed");
 
     const struct stage_director_rect source = {
         .x = view->geometry.x, .y = view->geometry.y,
@@ -115,26 +208,65 @@ bool stage_director_company_scene_apply_ci_only(
         stage_director_company_scene_prepare(current, guard, source);
     if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
             !plan.geometry_ready || plan.can_apply_in_production ||
-            view->geometry.x != 0 || view->geometry.y != 0)
-        return false;
+            view->geometry.x != 0 || view->geometry.y != 0) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][SCENE_PLAN] "
+            "state=%d exact_source=%d,%d %dx%d actor_root=%dx%d",
+            (int)plan.state, source.x, source.y, source.width,
+            source.height, current->actor.root_global.width,
+            current->actor.root_global.height);
+        return company_m32e_ci_refuse("scene-plan-or-geometry");
+    }
     struct wlr_scene_node *node = &view->container->scene_tree->node;
     if (!node->parent || (ci_scene.view && ci_scene.view != view) ||
-            !node->enabled) return false;
+            !node->enabled)
+        return company_m32e_ci_refuse("scene-node-disabled-or-occupied");
 
     int scene_x=0,scene_y=0,content_x=0,content_y=0,parent_x=0,parent_y=0;
-    if (!wlr_scene_node_coords(node,&scene_x,&scene_y) ||
-            !wlr_scene_node_coords(&view->content_tree->node,
-                &content_x,&content_y) ||
-            !wlr_scene_node_coords(&root->layers.popup->node,
-                &parent_x,&parent_y))
-        return false;
+    const bool scene_ok=wlr_scene_node_coords(node,&scene_x,&scene_y);
+    const bool content_ok=wlr_scene_node_coords(
+        &view->content_tree->node,&content_x,&content_y);
+    const bool popup_ok=wlr_scene_node_coords(
+        &root->layers.popup->node,&parent_x,&parent_y);
+    if (!scene_ok || !content_ok || !popup_ok) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][SCENE_COORDS] "
+            "scene_ok=%d content_ok=%d popup_ok=%d "
+            "node_enabled=%d content_enabled=%d popup_enabled=%d",
+            scene_ok, content_ok, popup_ok, node->enabled,
+            view->content_tree->node.enabled,
+            root->layers.popup->node.enabled);
+        /* Log compositor-owned ancestry only, never dereference a
+         * client-provided scene pointer or alter a parent to force a
+         * seemingly valid coordinate in this private test. */
+        struct wlr_scene_node *ancestors[3] = {
+            node, &view->content_tree->node, &root->layers.popup->node,
+        };
+        for (int k=0; k<3; ++k) {
+            struct wlr_scene_node *ancestor=ancestors[k];
+            for (int depth=0; ancestor && depth<9; ++depth) {
+                sway_log(SWAY_INFO,
+                    "[stage-director][COMPANY_M32E][CI_ONLY][TREE] "
+                    "which=%d depth=%d type=%d enabled=%d "
+                    "offset=%d,%d has_parent=%d",
+                    k, depth, (int)ancestor->type,
+                    ancestor->enabled, ancestor->x, ancestor->y,
+                    ancestor->parent != NULL);
+                ancestor=ancestor->parent ?
+                    &ancestor->parent->node : NULL;
+            }
+        }
+        return company_m32e_ci_refuse("scene-coordinate-query");
+    }
     const int64_t x=(int64_t)plan.target_global.x -
         ((int64_t)content_x-scene_x)-parent_x;
     const int64_t y=(int64_t)plan.target_global.y -
         ((int64_t)content_y-scene_y)-parent_y;
     if (x<INT_MIN || x>INT_MAX || y<INT_MIN || y>INT_MAX)
-        return false;
+        return company_m32e_ci_refuse("scene-coordinate-overflow");
 
+    if (!ci_actor_reserve(view))
+        return company_m32e_ci_refuse("revoked-actor-or-quarantine-capacity");
     if (!ci_scene.view) {
         ci_scene.view=view;
         ci_scene.original_parent=node->parent;
@@ -160,10 +292,160 @@ bool stage_director_company_scene_apply_ci_only(
     wlr_scene_node_set_enabled(node,true);
     ci_scene.viewport = plan.target_global;
     ci_scene.selection_epoch = guard->selection_epoch;
+    ci_scene.host_layer_ref = current->host.native_layer_ref;
     ci_scene.visible = true;
+    /* The scene was admitted after Qt originally mapped. Prevent a
+     * preexisting Sway keyboard focus from surviving this transition;
+     * the M32d guards already reject all subsequent Qt focus attempts. */
+    stage_director_company_m32g_clear_admitted_actor_keyboard_focus(view);
     return true;
 #endif
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32f: exact mapped Company layer lifetime, observed by Sway itself.
+ * Never treat an unrelated layer or a client-provided name as host loss. */
+void stage_director_company_scene_m32f_host_lost(
+        struct sway_layer_surface *lost_layer) {
+    if (!lost_layer || !ci_scene.visible || !ci_scene.host_layer_ref ||
+            (uintptr_t)lost_layer != ci_scene.host_layer_ref) return;
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32F][CI_ONLY] "
+        "native_company_host_lost=1 scene_revoke=BEGIN");
+    stage_director_company_scene_revoke(NULL);
+    sway_log(SWAY_INFO,
+        "[stage-director][COMPANY_M32F][CI_ONLY] "
+        "native_company_host_lost=1 scene_revoke=PASS");
+}
+/*
+ * M32e // positive native-scene probe for the previously observed M30s
+ * fullscreen fixture only. The inputs below model test evidence; they do
+ * NOT authenticate a launched process or approve an installed executable.
+ * This function does not exist in an ordinary compositor build. It is
+ * additionally closed outside the exact GitHub disposable session.
+ *
+ * The fixed Company rectangle (166,203,1493,788) comes from the earlier
+ * real Company Quickshell M30s source, not client-provided IPC or app-id.
+ * A true runtime PASS requires native MapLibre and captured compositor
+ * pixels: successfully compiling this function does not establish that.
+ */
+bool stage_director_company_scene_apply_m32e_fixture_only(
+        struct sway_view *view,
+        const struct stage_director_company_native_host *host) {
+    const char *ci = getenv("CI");
+    const char *gha = getenv("GITHUB_ACTIONS");
+    const char *m32e = getenv("STAGE_DIRECTOR_CI_COMPANY_M32E");
+    const char *temp = getenv("RUNNER_TEMP");
+    if (!ci || strcmp(ci, "true") || !gha || strcmp(gha, "true") ||
+            !m32e || strcmp(m32e, "1") || !temp ||
+            strcmp(temp, "/home/runner/work/_temp"))
+        return company_m32e_ci_refuse("disposable-environment");
+    if (!view || !host || !host->candidate ||
+            host->state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            host->host_global.x != 0 || host->host_global.y != 0 ||
+            host->host_global.width != 1920 ||
+            host->host_global.height != 1080 ||
+            host->output_global.x != 0 || host->output_global.y != 0 ||
+            host->output_global.width != 1920 ||
+            host->output_global.height != 1080 ||
+            !host->native_client_ref || !host->native_surface_ref ||
+            !host->native_output_ref || !host->native_layer_role_ref ||
+            !host->native_layer_ref || host->pid <= 0 || !host->uid ||
+            !host->start_ticks)
+        return company_m32e_ci_refuse("current-native-company-host");
+    const struct stage_director_company_native_actor actor =
+        stage_director_company_native_observe_actor(view);
+    if (!actor.candidate ||
+            actor.state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            !actor.native_client_ref || !actor.native_view_ref ||
+            !actor.native_root_surface_ref ||
+            actor.native_client_ref == host->native_client_ref ||
+            actor.pid <= 0 || actor.pid == host->pid ||
+            actor.uid != host->uid || !actor.start_ticks ||
+            actor.root_global.width != 1493 ||
+            actor.root_global.height != 788 ||
+            view->geometry.x != 0 || view->geometry.y != 0 ||
+            view->geometry.width != 1493 ||
+            view->geometry.height != 788) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][ACTOR_DIAG] "
+            "root=%d,%d %dx%d view_geo=%d,%d %dx%d actor_state=%d",
+            actor.root_global.x, actor.root_global.y,
+            actor.root_global.width, actor.root_global.height,
+            view->geometry.x, view->geometry.y,
+            view->geometry.width, view->geometry.height,
+            (int)actor.state);
+        return company_m32e_ci_refuse("current-native-qt-actor");
+    }
+    /* Explicitly FAKE lineage, digest, binary and lease attestations.
+     * These can only flow through this private-CI function. Production has
+     * no caller and no approved executable digest. Native refs, geometry,
+     * actual wlroots node operations and screenshots must be real. */
+    const struct stage_director_company_actor_pair_evidence e = {
+        .selected_native_company_host = true,
+        .kernel_pidfd_actor_candidate = true,
+        .host = *host,
+        .actor = actor,
+        .intent = {
+            .present = true, .selection_epoch = 1, .sequence = 1,
+            .host_revision = 1,
+            .native_host_client_ref = host->native_client_ref,
+            .mode = 0,
+        },
+        .viewport = {
+            .candidate_only = true, .selection_epoch = 1,
+            .intent_sequence = 1, .host_revision = 1,
+            .native_host_client_ref = host->native_client_ref,
+            .frame_in_host = {0, 0, 1920, 1080},
+            .map_in_frame = {166, 203, 1493, 788},
+            .map_in_host = {166, 203, 1493, 788},
+        },
+        .lineage = {
+            .status = SD_COMPANY_LINEAGE_CANDIDATE_ONLY,
+            .direct_child_candidate = true,
+        },
+        .executable = {
+            .status = SD_COMPANY_EXE_CURRENT_INSTALL_INODE_CANDIDATE,
+            .running_current_install_inode_candidate = true,
+        },
+        .digest = {
+            .status = SD_COMPANY_DIGEST_PIN_MATCH_CANDIDATE,
+            .pinned_elf_hash_candidate = true,
+        },
+    };
+    const struct stage_director_company_scene_guard guard = {
+        .operator_authorized_native_actor = true,
+        .approved_executable_and_launch = true,
+        .compositor_scene_lease_current = true,
+        .input_hit_test_guard_installed = true,
+        .keyboard_focus_guard_installed = true,
+        .popup_guard_installed = true,
+        .teardown_guard_installed = true,
+        .host_mapped = true, .actor_mapped = true,
+        .output_active = true,
+        .selection_epoch = 1, .intent_sequence = 1,
+        .host_revision = 1,
+        .native_host_client_ref = host->native_client_ref,
+        .native_actor_root_surface_ref = actor.native_root_surface_ref,
+    };
+    const struct stage_director_rect exact_source = {0, 0, 1493, 788};
+    const struct stage_director_company_scene_plan plan =
+        stage_director_company_scene_prepare(&e, &guard, exact_source);
+    if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
+            !plan.geometry_ready || plan.can_apply_in_production) {
+        const struct stage_director_company_actor_pair_result pair =
+            stage_director_company_actor_pair_probe(&e);
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][FIXTURE_PLAN] "
+            "state=%d pair_status=%d pair_target=%d,%d %dx%d",
+            (int)plan.state, (int)pair.status,
+            pair.viewport_global.x, pair.viewport_global.y,
+            pair.viewport_global.width, pair.viewport_global.height);
+        return company_m32e_ci_refuse("fixture-pair-or-scene-plan");
+    }
+    return stage_director_company_scene_apply_ci_only(view, &e, &guard);
+}
+#endif
 
 /* M32d // real cursor, popup and focus hooks consult the scene owned by
  * this compositor, not a client title/app-id. These do not enable the
@@ -188,11 +470,23 @@ bool stage_director_company_scene_reject_popup(struct sway_view *view) {
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
     return stage_director_company_input_reject_popup(
-        &scene, (uintptr_t)view);
+        &scene, (uintptr_t)view)
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+        || stage_director_company_scene_m32j_quarantined(view)
+#endif
+        ;
 }
 
 bool stage_director_company_scene_reject_keyboard_view(
         struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+    if (stage_director_company_scene_m32j_quarantined(view)) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32J][CI_ONLY] "
+            "revoked_native_keyboard_focus=DENIED");
+        return true;
+    }
+#endif
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
     return view && scene.scene_active &&
@@ -211,8 +505,40 @@ bool stage_director_company_scene_is_embedded_root(
 
 bool stage_director_company_scene_reject_keyboard_surface(
         struct wlr_surface *surface) {
-    return stage_director_company_scene_is_embedded_root(surface);
+    return stage_director_company_scene_is_embedded_root(surface)
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+        || ci_quarantined_root(surface)
+#endif
+        ;
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* A true active Sway seatop-down is necessary to maintain native drag
+ * continuity when the current scene hit is the Company QML surface. Never
+ * grant initial presses, new hover, off-map motion, locked sessions or
+ * keyboard/popup focus through this escape hatch. Production has no
+ * active scene or compiled caller. */
+bool stage_director_company_scene_contained_native_grab(
+        struct sway_seat *seat, struct wlr_surface *focused_surface,
+        double global_x, double global_y, bool session_locked) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    if (!seat || !focused_surface || !scene.scene_active) return false;
+    struct wlr_surface *root_surface =
+        wlr_surface_get_root_surface(focused_surface);
+    if (!root_surface ||
+            scene.native_actor_root_surface_ref != (uintptr_t)root_surface)
+        return false;
+    const struct stage_director_company_input_result verified =
+        stage_director_company_input_pointer(
+            &scene, (uintptr_t)root_surface,
+            (uintptr_t)root_surface,
+            global_x, global_y, session_locked);
+    return verified.verdict == SD_COMPANY_INPUT_WITHIN_MAP &&
+        !verified.deny_event &&
+        stage_director_company_seatop_down_matches_root(seat,root_surface);
+}
+#endif
 
 bool stage_director_company_scene_reject_pointer(
         struct wlr_surface *hit_surface,
@@ -224,7 +550,52 @@ bool stage_director_company_scene_reject_pointer(
         wlr_surface_get_root_surface(hit_surface) : NULL;
     struct wlr_surface *focused_root = focused_surface ?
         wlr_surface_get_root_surface(focused_surface) : NULL;
-    return stage_director_company_input_pointer(
-        &scene, (uintptr_t)hit_root, (uintptr_t)focused_root,
-        global_x, global_y, session_locked).deny_event;
+    const struct stage_director_company_input_result verdict =
+        stage_director_company_input_pointer(
+            &scene, (uintptr_t)hit_root, (uintptr_t)focused_root,
+            global_x, global_y, session_locked);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+    if (scene.scene_active) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][POINTER] "
+            "xy=%.1f,%.1f hit_native=%d focused_native=%d "
+            "session_locked=%d verdict=%d deny=%d",
+            global_x, global_y,
+            (uintptr_t)hit_root == scene.native_actor_root_surface_ref,
+            (uintptr_t)focused_root ==
+                scene.native_actor_root_surface_ref,
+            session_locked, (int)verdict.verdict, verdict.deny_event);
+        /* Read-only runtime integrity check after focus/drag transactions.
+         * Do not assume CI lease visibility means scene tree is drawable.
+         * No node manipulation or input grant occurs here. */
+        if (ci_scene.view && ci_scene.view->container &&
+                ci_scene.view->container->scene_tree &&
+                ci_scene.view->scene_tree && ci_scene.view->content_tree) {
+            struct wlr_scene_node *container_node =
+                &ci_scene.view->container->scene_tree->node;
+            struct wlr_scene_node *view_node =
+                &ci_scene.view->scene_tree->node;
+            struct wlr_scene_node *content_node =
+                &ci_scene.view->content_tree->node;
+            int actual_x=0, actual_y=0;
+            const bool drawable=wlr_scene_node_coords(
+                content_node,&actual_x,&actual_y);
+            sway_log(SWAY_INFO,
+                "[stage-director][COMPANY_M32E][CI_ONLY][TREE_RUNTIME] "
+                "container_enabled=%d view_enabled=%d content_enabled=%d "
+                "parent_popup=%d parent_present=%d "
+                "drawable=%d content_global=%d,%d "
+                "container_local=%d,%d view_local=%d,%d saved=%d",
+                container_node->enabled, view_node->enabled,
+                content_node->enabled,
+                container_node->parent == root->layers.popup,
+                container_node->parent != NULL,
+                drawable, actual_x,actual_y,
+                container_node->x,container_node->y,
+                view_node->x,view_node->y,
+                ci_scene.view->saved_surface_tree != NULL);
+        }
+    }
+#endif
+    return verdict.deny_event;
 }

@@ -1,5 +1,8 @@
 #include <float.h>
 #include <wlr/types/wlr_cursor.h>
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include <wlr/types/wlr_compositor.h>
+#endif
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_touch.h>
 #include "sway/input/cursor.h"
@@ -221,6 +224,21 @@ static const struct sway_seatop_impl seatop_impl = {
 	.end = handle_end,
 	.allow_set_cursor = true,
 };
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* This is evidence from an existing, compositor-owned Sway button-down
+ * operation, not a remembered client app ID or a guessed pointer focus.
+ * The active native root is destroyed/revalidated through Sway's seatop. */
+bool stage_director_company_seatop_down_matches_root(
+        struct sway_seat *seat, struct wlr_surface *native_root) {
+    if (!seat || !native_root ||
+            seat->seatop_impl != &seatop_impl || !seat->seatop_data)
+        return false;
+    const struct seatop_down_event *down = seat->seatop_data;
+    return down->surface && down->surface->mapped &&
+        wlr_surface_get_root_surface(down->surface) == native_root;
+}
+#endif
 
 void seatop_begin_down(struct sway_seat *seat, struct sway_container *con,
 		double sx, double sy) {

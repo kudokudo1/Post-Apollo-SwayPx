@@ -13,6 +13,9 @@
 #include "sway/scene_descriptor.h"
 #include "sway/stage_director_company_input.h"
 #include "sway/stage_director_company_scene.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director.h"
+#endif
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
@@ -372,6 +375,14 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 			view_send_frame_done(view);
 		}
 	}
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Native Qt may have an actual 1493x788 wl_surface while its
+	 * workspace/container ancestry remains disabled until the first
+	 * compositor transaction is applied. Retry the positive test on
+	 * subsequent real XDG buffer commits, never invent coordinates.
+	 * The probe itself skips an already embedded actor. */
+	stage_director_company_m32e_geometry_committed(view);
+#endif
 }
 
 static void handle_set_title(struct wl_listener *listener, void *data) {
@@ -397,6 +408,13 @@ static void handle_new_popup(struct wl_listener *listener, void *data) {
 		wl_container_of(listener, xdg_shell_view, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
 	if (stage_director_company_scene_reject_popup(&xdg_shell_view->view)) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* This real native XDG event belongs to the exact mapped Qt view,
+		 * not an app-id or synthetic popup claim. No popup scene is created. */
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32I][CI_ONLY] "
+			"real_native_xdg_popup=DENIED embedded_root=1");
+#endif
 		wlr_xdg_popup_destroy(wlr_popup);
 		return;
 	}
