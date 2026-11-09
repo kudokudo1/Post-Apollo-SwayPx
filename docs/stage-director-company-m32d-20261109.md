@@ -22,7 +22,7 @@ M32d implements real compositor interaction containment and lifecycle hooks:
 2. Native scene backend exports current compositor-observed actor root and view identity from its currently active private CI scene. Production has no active scene and normal input remains unchanged. On revoke, active input state clears.
 3. Normal cursor event handlers enforce the policy for motion, press/release and wheel following real scene hit testing, before ordinary event dispatch.
 4. Normal seat entrypoints reject keyboard focus on the embedded actor through both workspace focus and direct/subsurface focus. No live keyboard broker exists.
-5. Normal XDG popup creation rejects native MapLibre popups at both root and nested paths while the actor is embedded. XDG root size changes revoke the scene before normal SwayPX can redraw an uncropped native buffer.
+5. Normal XDG popup creation rejects native MapLibre popups at both root and nested paths while the actor is embedded. The private scene setter also refuses admission whenever the native XDG root already has popup children, preventing earlier popups from escaping its crop. XDG root size changes revoke the scene before normal SwayPX can redraw an uncropped native buffer.
 6. Company selected-host geometry or output revision revokes the scene immediately. Native source or host changes require a fresh authorized lease, never automatic restoration.
 7. Normal Meson compositor includes the new input policy. A standalone C test checks root identity, stale epochs, fractional boundaries, NaN/infinity, locked sessions, negative-coordinate displays, popups, keyboard and unrelated-client passthrough.
 
@@ -39,7 +39,7 @@ Must pass exact-head compiled production input policy tests, normal SwayPX build
 ## WATCH OUT FOR
 
 - Approved MapLibre executable SHA-256 manifest is still empty. No signed operator scene permission exists. Production scene/input activation remains OFF.
-- Popups created BEFORE activation are not refused by a new-popup hook. The eventual lease issuer must reject pre-existing popup subtrees before showing native pixels.
+- Popup trees created BEFORE activation are now explicitly refused by the private scene setter using the compositor's native XDG popup list. This is CI-source protection only; it is NOT authorization to activate a production actor lease.
 - Active embedded MapLibre keyboard focus is denied until a proper in-panel focus/keyboard broker is reviewed. Pointer pan and wheel remain candidates for confined input.
 - A revoked native XDG actor may remain hidden and must be terminated or safely restored by a separately approved lifecycle owner.
 - Physical Fedora, dual outputs, UI button mode change, SceneFX adoption and visual acceptance remain outstanding.
@@ -54,7 +54,8 @@ Must pass exact-head compiled production input policy tests, normal SwayPX build
 - [x] Strict policy negative test and full-build CI written
 - [ ] Exact-head M32d CI success
 - [ ] Real isolated Company/MapLibre execution of M32c scene setter
-- [ ] Pre-existing popup quiescence and authenticated short-lived scene lease issuer
+- [x] Pre-existing native XDG popup admission refusal (scene source; CI verification pending)
+- [ ] Independently authenticated short-lived scene lease issuer
 - [ ] In-widget Company VECTOR VIEW control and operator physical visual acceptance
 
 ## NEXT
