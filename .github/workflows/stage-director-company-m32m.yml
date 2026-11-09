@@ -1,0 +1,112 @@
+name: Company M32m native admission preflight and revoke (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32d-input-popup-focus-containment-20261109
+    paths:
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_scene.c'
+      - 'sway/stage_director_company_digest.c'
+      - '.github/workflows/stage-director-company-m32m.yml'
+      - 'docs/stage-director-company-m32m-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove no operator/lease grant can originate in M32m
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          c=Path('sway/stage_director_company_vector_protocol.c').read_text()
+          h=Path('include/sway/stage_director_company_vector_protocol.h').read_text()
+          scene=Path('sway/stage_director_company_scene.c').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          assert 'stage_director_company_scene_apply_ci_only(' in scene
+          assert '#ifndef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in scene
+          assert 'SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT' in h
+          assert 'stage_director_company_vector_protocol_admission_preflight(' in c
+          assert 'stage_director_company_vector_protocol_birth_actor_candidate(' in c
+          assert 'stage_director_company_vector_protocol_executable_evidence(' in c
+          assert 'stage_director_company_vector_protocol_digest_evidence(' in c
+          assert 'stage_director_company_actor_pair_probe(&evidence)' in c
+          assert 'birth_native_host_probe(birth_native_host_context, &host)' in c
+          start=c.index('static struct stage_director_company_admission_preflight\nadmission_status(')
+          end=c.index('struct stage_director_company_admission_preflight\nstage_director_company_vector_protocol_admission_preflight(')
+          helper=c[start:end]
+          assert '.status = state' in helper
+          assert '.native_pair_candidate = pair' in helper
+          assert '.current_executable_candidate = executable' in helper
+          assert '.exact_elf_digest_candidate = digest' in helper
+          for forbidden in (
+              '.operator_authorized = true',
+              '.authenticated_launch = true',
+              '.scene_lease_issued = true',
+              '.can_apply_scene = true',
+              '.can_accept_input = true',
+              '.can_focus_keyboard = true',
+              '.can_show_popup = true'):
+              assert forbidden not in helper, forbidden
+          assert 'SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT,\n        true,true,true' in c
+          # Refuse privileged side effects before discarding the native
+          # selection, held pidfd, client or current intent.
+          marker='void stage_director_company_vector_protocol_revoke(void) {'
+          assert c.count(marker)==1
+          tail=c.split(marker,1)[1]
+          first_effect=re.search(r'\n\s*stage_director_company_scene_revoke\(NULL\);',tail)
+          assert first_effect, 'native scene must be revoked'
+          assert first_effect.start()<tail.index('if (bound_resource)')
+          assert first_effect.start()<tail.index('wl_global_destroy(company_global)')
+          assert first_effect.start()<tail.index('stage_director_company_birth_pidfd_revoke(&birth_held)')
+          assert 'stage_director_company_vector_protocol_revoke();' in c
+          print('SD_COMPANY_M32M_SOURCE native_pidfd_executable_digest=READ_ONLY '
+                'operator_lease=ABSENT production_scene=OFF '
+                'protocol_revoke_hides_scene_first=PASS')
+          PY
+
+  regular-and-private-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Link actual normal SwayPX protocol and keep scene disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32M_PRIVATE_FIXTURE_LEAKED_TO_NORMAL_BINARY' >&2
+            exit 1
+          fi
+          echo 'SD_COMPANY_M32M_NORMAL_BINARY protocol_preflight_linked=1 scene_actuation=OFF PASS'
+      - name: Link isolated private SwayPX without enabling real admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32m-private-preflight-probe"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'SD_COMPANY_M32M_PRIVATE_BINARY normal_authority=OFF no_operator_lease=PASS'
