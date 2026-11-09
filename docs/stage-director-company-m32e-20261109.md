@@ -28,7 +28,7 @@ No user desktop steps. Keep Company → COVERAGE → VECTOR VIEW on its current 
 - Source gate verifies the normal compositor does not contain the M32e caller and that the existing trusted ELF digest stays empty.
 - Private Nix compositor compilation must resolve the actual M32c setter and M32d input paths.
 - Headless private compositor boots with no native actor, so no positive scene can be admitted.
-- **Still required:** reuse the historically verified M30s real Company/MapLibre fixture with the new private binary, resize the genuine Qt source exactly to 1493×788, collect compositor screenshots, native pan/wheel receipts, outside-click receipts, popup denial, selected-host loss and actor teardown. Never mark this test run as a visual PASS from a build alone.
+- **Still required:** reuse the historically verified M30s real Company/MapLibre fixture with the new private binary, start the genuine Qt native XDG source at exactly 1493×788 **before its first map event** (this M32e probe is currently invoked on XDG map, not on later resize), collect compositor screenshots, native pan/wheel receipts, outside-click receipts, popup denial, selected-host loss and actor teardown. Never mark this test run as a visual PASS from a build alone.
 
 ## WATCH OUT FOR
 
