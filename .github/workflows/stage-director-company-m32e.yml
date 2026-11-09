@@ -11,6 +11,8 @@ on:
       - 'sway/stage_director.c'
       - '.github/workflows/stage-director-company-m32e.yml'
       - 'docs/stage-director-company-m32e-20261109.md'
+      - 'tests/stage_director/ci_company_m32e_real_scene.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
   workflow_dispatch:
 
 permissions:
@@ -108,3 +110,114 @@ jobs:
           # restores /dev/udmabuf state on success or failure. Never use on Fedora.
           bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_COMPANY_M32E_PRIVATE_SCENE_BINARY"
           echo 'SD_COMPANY_M32E_EMPTY_WAYLAND compositor_boot=PASS live_MapLibre=NOT_TESTED real_scene_pixels=NOT_TESTED'
+
+  real-company-maplibre-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/Post-Apollo-SwayPx
+          ref: 1c9e1104fffd688e15f0b1f3b77715e812d0f0f8
+          path: legacy-m30s
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          path: company-source
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual real native MapLibre and test M32c scene in Company
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M32E_REAL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30R: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30N: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30O: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30S: '1'
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('tests/stage_director/ci_company_m32e_real_scene.py')
+          ast.parse(p.read_text())
+          assert 'SD_COMPANY_M32E_REAL_QML_FULLSCREEN' in p.read_text()
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M32E_REAL' in Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          print('SD_COMPANY_M32E_NATIVE_DRIVER_SYNTAX PASS')
+          PY
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          test "$(git -C legacy-m30s rev-parse HEAD)" = 1c9e1104fffd688e15f0b1f3b77715e812d0f0f8
+          test "$(git -C company-source rev-parse HEAD)" = 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          test -z "$(git -C legacy-m30s status --porcelain)"
+          test -z "$(git -C company-source status --porcelain)"
+          export STAGE_DIRECTOR_M32E_LEGACY="$GITHUB_WORKSPACE/legacy-m30s"
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          export STAGE_DIRECTOR_M30L_CI_SOURCE="$RUNNER_TEMP/sd-company-m30l-native-src"
+          (cd legacy-m30s && python3 -B tests/stage_director/ci_company_m30s_prepare.py)
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ["STAGE_DIRECTOR_M30L_CI_SOURCE"])/"main.qml"
+          data=p.read_text()
+          old="    width: 840\n    height: 540"
+          new="    width: 1493\n    height: 788"
+          if data.count(old)!=1 or data.count(new):
+              raise RuntimeError('M32E_QT_FIRST_MAP_SIZE_SOURCE_DRIFT')
+          p.write_text(data.replace(old,new,1))
+          print('SD_COMPANY_M32E_NATIVE_FIRST_MAP exact_1493x788_copy=PASS')
+          PY
+          app="$(nix build --impure --expr \
+              'import ./legacy-m30s/tests/stage_director/ci_company_maplibre_native.nix {
+                 source = builtins.path {
+                   path = builtins.getEnv "STAGE_DIRECTOR_M30L_CI_SOURCE";
+                   name = "company-m32e-exact-first-map-source";
+                 };
+               }' \
+              --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$app/bin/company-vector-probe"
+          export STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE="$app/bin/company-vector-probe"
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/qs"
+          else echo 'M32E_NO_REAL_QUICKSHELL' >&2; exit 1; fi
+          pointer="$(nix build --impure --expr 'import ./legacy-m30s/tests/stage_director/ci_company_virtual_pointer.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          export STAGE_DIRECTOR_TEST_COMPANY_POINTER="$pointer/bin/sd-company-m30h-pointer"
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          test -n "$module"
+          export STAGE_DIRECTOR_M30I_QML_IMPORT_PATH="$(dirname "$(dirname "$(dirname "$module")")")"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          export STAGE_DIRECTOR_TEST_GRIM="$grim/bin/grim"
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32e-real-qt-scene-ci"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway" && test -x "$private/bin/swaymsg"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          export STAGE_DIRECTOR_TEST_SWAYMSG="$private/bin/swaymsg"
+          export STAGE_DIRECTOR_MESA_DIR="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$STAGE_DIRECTOR_MESA_DIR/share/glvnd/egl_vendor.d/50_mesa.json"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$private/bin/sway"
+          test -z "$(git -C company-source status --porcelain)"
+          test -z "$(git -C legacy-m30s status --porcelain)"
+      - name: Capture disposable native pixel/input evidence on failure or pass
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m32e-real-native-maplibre
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            /home/runner/work/_temp/sd-company-m32e-*.ppm
+            /home/runner/work/_temp/sd-company-m32e-*.log
