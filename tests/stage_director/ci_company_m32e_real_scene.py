@@ -7,6 +7,7 @@ operator/launch/lease evidence exists ONLY in that private C test build.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
@@ -140,7 +141,7 @@ def main():
     sys.path.insert(0,str(legacy/"tests/stage_director"))
     import ci_company_real_quickshell as real
     import ci_company_m30r_real_source as merged
-    from ci_company_overlay_prototype import call,ppm,rgb
+    from ci_company_overlay_prototype import call,nodes,ppm,rgb
     from ci_company_input_containment import EVENT,read_until
 
     # The historical helper loads a QML shell via a relative file path.
@@ -210,6 +211,41 @@ def main():
         print("SD_COMPANY_M32E_ACTUAL_SCENE real_wlroots_apply=1 "
               "actual_Company_QML=1 real_MapLibre=1 "
               "test_authority=SYNTHETIC_CI production=OFF PASS",flush=True)
+
+        # M32g: command the *real* Sway focus path against the native Qt
+        # container. Merely reading the pure focus policy is insufficient:
+        # prove the compositor intercepts an actual IPC focus request.
+        def native_actor_node():
+            tree=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_tree"))
+            candidates=[n for n in nodes(tree)
+                        if n.get("pid")==actor.pid and
+                           n.get("shell")=="xdg_shell"]
+            if len(candidates)!=1:
+                raise RuntimeError(
+                    "M32G_NATIVE_QT_TREE_NOT_UNIQUE "+
+                    str([(n.get("id"),n.get("pid")) for n in candidates]))
+            return candidates[0]
+        native_node=native_actor_node()
+        if native_node.get("focused"):
+            raise RuntimeError("M32G_NATIVE_KEYBOARD_ALREADY_FOCUSED")
+        before_focus_log=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                              f"[con_id={native_node['id']}] focus"))
+        if not isinstance(reply,list) or not reply or not all(
+                x.get("success") is True for x in reply):
+            raise RuntimeError("M32G_IPC_FOCUS_COMMAND_REFUSED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32G][CI_ONLY] "
+            "native_ipc_keyboard_focus=DENIED actor_embedded=1",
+            before_focus_log,12,actor)
+        if native_actor_node().get("focused"):
+            raise RuntimeError("M32G_NATIVE_KEYBOARD_FOCUS_LEAK")
+        after_focus=screenshot("after-rejected-keyboard-focus")
+        compare_pixels(before,after_focus,rgb)
+        print("SD_COMPANY_M32G_NATIVE_KEYBOARD "
+              "real_IPC_focus_attempt=1 compositor_refused=1 "
+              "actor_keyboard_focused=0 scene_intact=1 PASS",flush=True)
 
         if env.get("STAGE_DIRECTOR_CI_COMPANY_INPUT")!="1":
             raise RuntimeError("BLOCKED_M32E_POINTER_REQUIRED_CI_GATE_MISSING")
