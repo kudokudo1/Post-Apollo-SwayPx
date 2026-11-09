@@ -432,6 +432,36 @@ def main():
               f"real_workspace_return=1 native_actor_alive=1 "
               f"scene_not_reexposed=1 cyan={cyan} gold={gold} PASS",
               flush=True)
+        # Even an explicit IPC focus command must not revive the same
+        # compositor-quarantined still-running mapped actor.
+        native_node=native_actor_node()
+        focus_log_start=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             f"[con_id={native_node['id']}] focus"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32J_REVOKED_FOCUS_IPC_NOT_EXECUTED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32J][CI_ONLY] "
+            "revoked_native_keyboard_focus=DENIED",
+            focus_log_start,12,actor)
+        if native_actor_node().get("focused") or actor.poll() is not None:
+            raise RuntimeError("M32J_REVOKED_ACTOR_REFOCUSED_OR_EXITED")
+        time.sleep(.35)
+        focus_image=screenshot("after-revoked-ipc-focus")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(focus_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32J_REVOKED_FOCUS_REEXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32J_REVOKED_IPC_FOCUS "
+              "real_IPC_focus_attempt=1 denied=1 actor_alive=1 "
+              f"scene_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
         actor.terminate()
         actor.wait(timeout=10)
         actor=None
