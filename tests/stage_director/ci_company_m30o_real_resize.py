@@ -311,7 +311,15 @@ def main():
             env.get("STAGE_DIRECTOR_CI_COMPANY_M30T") == "1" or
             env.get("STAGE_DIRECTOR_CI_COMPANY_M30W") == "1"):
         raise RuntimeError("M30Y_ORIGINAL_SESSION_NOT_ISOLATED")
+    # M31a needs a THIRD, separately booted compositor test. The patched
+    # SceneFX source is a Nix-only override, not a production dependency.
+    # Do not share this run's QML copy, HOME or caches with either control.
+    m31a_patched = env.get("STAGE_DIRECTOR_CI_COMPANY_M31A") == "1"
+    if m31a_patched and (not original_m30y_session or
+            env.get("STAGE_DIRECTOR_CI_COMPANY_M30Z") != "1"):
+        raise RuntimeError("M31A_MUST_FOLLOW_UNPADDED_M30Z_CI_ONLY")
     tmp_home = temp / (
+        "sd-company-m31a-patched-home" if m31a_patched else
         "sd-company-m30y-original-home" if original_m30y_session
         else "sd-company-m30o-home")
     for sub in ("", ".config", ".cache", ".local/share"):
@@ -325,6 +333,7 @@ def main():
              "QML_IMPORT_PATH": qml_paths, "QML2_IMPORT_PATH": qml_paths,
              "QT_QPA_PLATFORM": "wayland", "NO_COLOR": "1"}
     shell = real.prepare(checkout, temp / (
+        "sd-company-m31a-patched-copy" if m31a_patched else
         "sd-company-m30y-original-copy" if original_m30y_session
         else "sd-company-m30o-copy"))
     qml_source = Path("tests/stage_director/ci_company_m30o_resizable_shell.qml")
@@ -665,6 +674,24 @@ def main():
                 screenshot("m30z-original-composited-fullscreen")
                 if not final_file.is_file():
                     raise RuntimeError("M30Z_ORIGINAL_FINAL_PPM_MISSING")
+                if m31a_patched:
+                    from shutil import copyfile
+                    marker = "M31A_SCENEFX_GL_UNPACK_ALIGNMENT_CI_ONLY"
+                    if marker not in sway_log.read_text(errors="replace"):
+                        raise RuntimeError(
+                            "M31A_PATCHED_SCENEFX_WAS_NOT_ACTUALLY_USED")
+                    copyfile(qt_file, temp /
+                             "sd-company-m31a-patched-qt-source.ppm")
+                    copyfile(final_file, temp /
+                             "sd-company-m31a-patched-composited.ppm")
+                    (temp / "sd-company-m31a-patched-wlroots.json").write_text(
+                        json.dumps(original_details, sort_keys=True,
+                                   indent=2) + "\n")
+                    print("SD_COMPANY_M31A_PATCHED_SCENEFX_REAL_WAYLAND "
+                          "native_buffer=1493x788 imported_stride=2986 "
+                          "source_Qt=CAPTURED composer=CAPTURED "
+                          "scenefx_patch_marker=OBSERVED production=OFF PASS",
+                          flush=True)
                 print("SD_COMPANY_M30Z_ORIGINAL_PIXEL_CAPTURE "
                       "qt_grab=1493x788 final_grim=1920x1080 "
                       "fiducials=UNMODIFIED_REFERENCE_POSITIONS "
