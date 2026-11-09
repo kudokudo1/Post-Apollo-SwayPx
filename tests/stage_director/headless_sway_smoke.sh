@@ -65,6 +65,20 @@ if [[ "${STAGE_DIRECTOR_CI_COMPANY_M32E_REAL:-}" == 1 ]]; then
   printf 'for_window [app_id="CompanyVectorProbe"] border none\n' >> "$config"
 fi
 
+# M32l: a SECOND independent virtual screen exists only in this exact
+# disposable Company native test. Keep the normal one-screen boot unchanged.
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL:-0}" == 1 ]]; then
+  if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
+        "${RUNNER_TEMP:-}" != /home/runner/work/_temp ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M32E_REAL:-}" != 1 ||
+        "${STAGE_DIRECTOR_CI_COMPANY_M32E:-}" != 1 ]]; then
+    echo "BLOCKED_M32L_NOT_EXACT_DISPOSABLE_DUAL_CI" >&2
+    exit 2
+  fi
+  printf '\noutput HEADLESS-1 position 0 0\n' >> "$config"
+  printf 'output HEADLESS-2 position 1920 0\n' >> "$config"
+fi
+
 # The ordinary Sway titlebar remains enabled for unrelated windows.
 # A CI-only native process/cgroup-matched Chrome actor receives a per-view
 # B_NONE policy in view_map() before its first container layout transaction.
@@ -108,7 +122,11 @@ echo "SD_CI_COLD_BOOT virtual_output=$cold_size"
 export XDG_RUNTIME_DIR="$runtime"
 export XDG_SESSION_TYPE=wayland
 export WLR_BACKENDS=headless
-export WLR_HEADLESS_OUTPUTS=1
+if [[ "${STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL:-0}" == 1 ]]; then
+  export WLR_HEADLESS_OUTPUTS=2
+else
+  export WLR_HEADLESS_OUTPUTS=1
+fi
 export WLR_LIBINPUT_NO_DEVICES=1
 # This exact fallback exists in pinned SceneFX 26200c5: its
 # open_preferred_drm_fd() handles WLR_RENDERER_FORCE_SOFTWARE by bypassing
