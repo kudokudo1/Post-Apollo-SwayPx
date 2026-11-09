@@ -16,6 +16,9 @@
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_scene.h"
 #include "sway/stage_director_company_input.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/input/seat.h"
+#endif
 
 /*
  * M32c // actual SwayPX/wlroots scene API backend.
@@ -393,6 +396,34 @@ bool stage_director_company_scene_reject_keyboard_surface(
         struct wlr_surface *surface) {
     return stage_director_company_scene_is_embedded_root(surface);
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* A true active Sway seatop-down is necessary to maintain native drag
+ * continuity when the current scene hit is the Company QML surface. Never
+ * grant initial presses, new hover, off-map motion, locked sessions or
+ * keyboard/popup focus through this escape hatch. Production has no
+ * active scene or compiled caller. */
+bool stage_director_company_scene_contained_native_grab(
+        struct sway_seat *seat, struct wlr_surface *focused_surface,
+        double global_x, double global_y, bool session_locked) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    if (!seat || !focused_surface || !scene.scene_active) return false;
+    struct wlr_surface *root_surface =
+        wlr_surface_get_root_surface(focused_surface);
+    if (!root_surface ||
+            scene.native_actor_root_surface_ref != (uintptr_t)root_surface)
+        return false;
+    const struct stage_director_company_input_result verified =
+        stage_director_company_input_pointer(
+            &scene, (uintptr_t)root_surface,
+            (uintptr_t)root_surface,
+            global_x, global_y, session_locked);
+    return verified.verdict == SD_COMPANY_INPUT_WITHIN_MAP &&
+        !verified.deny_event &&
+        stage_director_company_seatop_down_matches_root(seat,root_surface);
+}
+#endif
 
 bool stage_director_company_scene_reject_pointer(
         struct wlr_surface *hit_surface,
