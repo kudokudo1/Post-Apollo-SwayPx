@@ -479,14 +479,18 @@ bool stage_director_company_scene_reject_popup(struct sway_view *view) {
 
 bool stage_director_company_scene_reject_keyboard_view(
         struct sway_view *view) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+    if (stage_director_company_scene_m32j_quarantined(view)) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32J][CI_ONLY] "
+            "revoked_native_keyboard_focus=DENIED");
+        return true;
+    }
+#endif
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
-    return (view && scene.scene_active &&
-        scene.native_actor_view_ref == (uintptr_t)view)
-#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
-        || stage_director_company_scene_m32j_quarantined(view)
-#endif
-        ;
+    return view && scene.scene_active &&
+        scene.native_actor_view_ref == (uintptr_t)view;
 }
 
 bool stage_director_company_scene_is_embedded_root(
