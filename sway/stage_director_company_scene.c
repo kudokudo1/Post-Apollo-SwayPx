@@ -404,7 +404,22 @@ bool stage_director_company_scene_reject_pointer(
         wlr_surface_get_root_surface(hit_surface) : NULL;
     struct wlr_surface *focused_root = focused_surface ?
         wlr_surface_get_root_surface(focused_surface) : NULL;
-    return stage_director_company_input_pointer(
-        &scene, (uintptr_t)hit_root, (uintptr_t)focused_root,
-        global_x, global_y, session_locked).deny_event;
+    const struct stage_director_company_input_result verdict =
+        stage_director_company_input_pointer(
+            &scene, (uintptr_t)hit_root, (uintptr_t)focused_root,
+            global_x, global_y, session_locked);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+    if (scene.scene_active) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][POINTER] "
+            "xy=%.1f,%.1f hit_native=%d focused_native=%d "
+            "session_locked=%d verdict=%d deny=%d",
+            global_x, global_y,
+            (uintptr_t)hit_root == scene.native_actor_root_surface_ref,
+            (uintptr_t)focused_root ==
+                scene.native_actor_root_surface_ref,
+            session_locked, (int)verdict.verdict, verdict.deny_event);
+    }
+#endif
+    return verdict.deny_event;
 }
