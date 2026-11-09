@@ -147,9 +147,12 @@ def compare_post_camera_pixels(before, after, rgb):
     header=count(after,(x+12,y,x+w-12,y+90))
     geographic=count(after,(x+20,y+95,x+w-30,y+h-75))
     baseline=count(before,(x+20,y+95,x+w-30,y+h-75))
+    # The wider scan includes a few cyan strokes in Company's raster
+    # baseline (24 in this pinned fixture). Require an actual native
+    # geography increase rather than assuming the baseline is empty.
     if not (header[0]>=250 and header[1]>=100 and
-            geographic[0]>=25 and geographic[1]>=8 and
-            baseline[0]<20 and baseline[1]<10):
+            geographic[0]>=max(25,baseline[0]+12) and
+            geographic[1]>=max(8,baseline[1]+8)):
         raise RuntimeError("M32L_POST_CAMERA_NATIVE_GEOGRAPHY_MISSING "+
             str((header,geographic,baseline)))
     outside=((x-20,y+120),(x-20,y+320),
