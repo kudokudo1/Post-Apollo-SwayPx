@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include "sway/stage_director_viewport.h"
+#include "sway/stage_director_company_viewport_state.h"
 
 /*
  * M23: dedicated nonauthorizing Company geometry/intent Wayland interface.
@@ -33,6 +34,16 @@ struct stage_director_company_intent_snapshot;
 bool stage_director_company_vector_protocol_intent_snapshot(
 	struct wl_client *client,
 	struct stage_director_company_intent_snapshot *out);
+
+/* M32a // The private Company Wayland viewport report is now available
+ * to compositor-native code as a revocable, client/epoch/revision-bound
+ * geometry candidate. This is the *actual production protocol* source;
+ * it has NO ability to render, clip, focus or redirect seat events.
+ * The compositor must revalidate native actor PIDFD/digest/selection
+ * separately before using the rectangle for any later scene operation. */
+bool stage_director_company_vector_protocol_viewport_snapshot(
+    struct wl_client *selected_host_client,
+    struct stage_director_company_viewport_snapshot *out);
 
 /* Bounded future compositor-only activation seam. Not called by M23. */
 bool stage_director_company_vector_protocol_publish(

@@ -43,6 +43,8 @@ struct company_binding {
 	uint64_t epoch;
 	bool launch_intent;
 	bool viewport_candidate;
+	/* M32a: retained, revocable candidate from the real Company wire. */
+	struct stage_director_company_viewport_state viewport;
 	uint64_t intent_sequence;
 	uint64_t intent_boot_ticks;
 	uint32_t mode;
@@ -144,6 +146,28 @@ bool stage_director_company_vector_protocol_intent_snapshot(
 	return true;
 }
 
+bool stage_director_company_vector_protocol_viewport_snapshot(
+        struct wl_client *client,
+        struct stage_director_company_viewport_snapshot *out) {
+    if (!out) return false;
+    *out = (struct stage_director_company_viewport_snapshot){0};
+    if (!bound_is_current(client, bound_resource)) return false;
+    const struct company_binding *binding =
+        wl_resource_get_user_data(bound_resource);
+    struct stage_director_rect host = {0};
+    uint64_t revision = 0;
+    if (!binding || !binding->launch_intent ||
+            !binding->viewport_candidate ||
+            !binding->intent_sequence || !binding->intent_boot_ticks ||
+            !fresh_native_host(&host, &revision)) return false;
+    return stage_director_company_viewport_state_snapshot(
+        &binding->viewport, selection_epoch, binding->intent_sequence,
+        revision, (uintptr_t)client, host, out);
+}
+
+/* The QML map rectangles below are only candidates. Native scene and seat
+ * operations remain prohibited until a separately authenticated production
+ * lease admits the exact compositor-observed XDG actor and selected host. */
 static void handle_launch_intent(struct wl_client *client,
 		struct wl_resource *resource, uint32_t mode) {
 	struct stage_director_rect host = {0};
@@ -175,6 +199,7 @@ static void handle_launch_intent(struct wl_client *client,
 	b->mode = mode;
 	b->launch_intent = true;
 	b->viewport_candidate = false;
+	stage_director_company_viewport_state_reset(&b->viewport);
 	/* Observed intent only. Neither online consent nor native actor birth
 	 * can be established by this request. No process is started. */
 	send_status(resource,
@@ -190,18 +215,34 @@ static void handle_report_viewport(struct wl_client *client,
 	uint64_t revision = 0;
 	if (!bound_is_current(client, resource) || !b || !b->launch_intent ||
 			!fresh_native_host(&host, &revision)) {
-		if (b) b->viewport_candidate = false;
+		if (b) {
+			b->viewport_candidate = false;
+			stage_director_company_viewport_state_reset(&b->viewport);
+		}
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
-	/* Geometry is evaluated and acknowledged, NEVER installed as clip. */
+	/* A new geometry report *replaces* the previous map rectangle, even
+	 * when hidden or malformed. Never retain stale pixels or hit tests. */
 	b->viewport_candidate = false;
+	stage_director_company_viewport_state_reset(&b->viewport);
 	const struct stage_director_company_wire_result candidate =
 		stage_director_company_wire_check(
 			true, true, host,
 			(struct stage_director_rect){fx, fy, fw, fh},
 			(struct stage_director_rect){mx, my, mw, mh});
-	b->viewport_candidate = candidate.geometry_candidate;
+	if (candidate.geometry_candidate) {
+		b->viewport_candidate = stage_director_company_viewport_state_record(
+			&b->viewport, selection_epoch, b->intent_sequence, revision,
+			(uintptr_t)client, host,
+			(struct stage_director_rect){fx, fy, fw, fh},
+			(struct stage_director_rect){mx, my, mw, mh});
+		if (!b->viewport_candidate) {
+			send_status(resource,
+				POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
+			return;
+		}
+	}
 	send_status(resource, (uint32_t)candidate.state, revision);
 }
 
@@ -253,6 +294,7 @@ static void handle_close(struct wl_client *client,
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	b->launch_intent = false;
 	b->viewport_candidate = false;
+	stage_director_company_viewport_state_reset(&b->viewport);
 	b->intent_boot_ticks = 0;
 	b->intent_sequence = 0;
 	send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_CLOSED, 0);
@@ -444,6 +486,16 @@ stage_director_company_vector_protocol_digest_evidence(
 }
 
 void stage_director_company_vector_protocol_revoke(void) {
+	/* Wipe the last admitted geometry before releasing native host refs.
+	 * Already-read snapshots are not leases: consumers must re-query. */
+	if (bound_resource) {
+		struct company_binding *binding =
+			wl_resource_get_user_data(bound_resource);
+		if (binding) {
+			binding->viewport_candidate = false;
+			stage_director_company_viewport_state_reset(&binding->viewport);
+		}
+	}
 	if (company_global) {
 		wl_global_destroy(company_global);
 		company_global = NULL;

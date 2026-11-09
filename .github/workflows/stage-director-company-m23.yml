@@ -9,6 +9,7 @@ on:
       - 'include/sway/stage_director_company_vector_protocol.h'
       - 'include/sway/stage_director_company_wire_policy.h'
       - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director_company_viewport_state.c'
       - 'sway/stage_director_company_wire_policy.c'
       - 'sway/server.c'
       - 'sway/meson.build'
@@ -48,6 +49,7 @@ jobs:
             $(pkg-config --cflags wayland-server) \
             sway/stage_director_viewport.c \
             sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_viewport_state.c \
             sway/stage_director_company_vector_protocol.c \
             sway/stage_director_company_birth_pidfd.c \
             sway/stage_director_company_executable.c \
