@@ -127,6 +127,10 @@ def main():
     env=os.environ
     temp=Path(env.get("RUNNER_TEMP","/not-ci"))
     legacy=Path(env.get("STAGE_DIRECTOR_M32E_LEGACY","/not-legacy"))
+    dual=env.get("STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL","0")
+    if dual not in ("0","1"):
+        raise RuntimeError("BLOCKED_M32L_DUAL_FLAG_NOT_BOOLEAN")
+    dual=(dual=="1")
     if not (env.get("CI")=="true" and env.get("GITHUB_ACTIONS")=="true"
             and env.get("STAGE_DIRECTOR_CI_COMPANY_M32E")=="1"
             and env.get("STAGE_DIRECTOR_CI_COMPANY_M32E_REAL")=="1"
@@ -149,6 +153,26 @@ def main():
     os.chdir(legacy)
     real.PIN=merged.COMPANY_MERGED_SHA
     e,temp,runtime,checkout,qs,swaymsg,grim,ipc=real.guard()
+    output_snapshot=json.loads(
+        call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+    active=[o for o in output_snapshot if o.get("active") is True]
+    if dual:
+        positions={(str(o.get("name")),o.get("rect",{}).get("x"),
+                    o.get("rect",{}).get("y"),
+                    o.get("rect",{}).get("width"),
+                    o.get("rect",{}).get("height"))
+                   for o in active}
+        expected_positions={
+            ("HEADLESS-1",0,0,1920,1080),
+            ("HEADLESS-2",1920,0,1920,1080)}
+        if positions!=expected_positions:
+            raise RuntimeError(
+                "M32L_NOT_EXACT_TWO_HEADLESS_OUTPUTS "+str(sorted(positions)))
+        print("SD_COMPANY_M32L_OUTPUTS independent_virtual_outputs=2 "
+              "primary=0,0 secondary=1920,0 "
+              "both_1920x1080=1 PASS",flush=True)
+    elif len(active)!=1:
+        raise RuntimeError("M32E_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
     qt=Path(env.get("STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE","/missing"))
     pointer_bin=Path(env.get("STAGE_DIRECTOR_TEST_COMPANY_POINTER","/missing"))
     compat=Path(env.get("STAGE_DIRECTOR_M30I_QML_IMPORT_PATH","/missing"))
@@ -211,6 +235,23 @@ def main():
         time.sleep(.8)
         after=screenshot("embedded-maplibre")
         compare_pixels(before,after,rgb)
+        if dual:
+            x,y,w,h=CANVAS
+            # Do not accept a native Qt source in a corresponding map
+            # rectangle on the second independent virtual output.
+            sample_points=(
+                (1920+x+20,y+42),(1920+x+190,y+64),
+                (1920+x+420,y+100),(1920+x+500,y+450),
+                (1920+x+900,y+390),(1920+x+1300,y+660))
+            unchanged=sum(int(sum(abs(a-b) for a,b in zip(
+                rgb(before,px,py),rgb(after,px,py)))<60)
+                for px,py in sample_points)
+            if unchanged!=len(sample_points):
+                raise RuntimeError(
+                    "M32L_NATIVE_OVERFLOW_SECONDARY_OUTPUT "+
+                    str(unchanged)+"/"+str(len(sample_points)))
+            print("SD_COMPANY_M32L_SECONDARY_CLIP "
+                  "unrelated_output_samples_unchanged=6/6 PASS",flush=True)
         print("SD_COMPANY_M32E_ACTUAL_SCENE real_wlroots_apply=1 "
               "actual_Company_QML=1 real_MapLibre=1 "
               "test_authority=SYNTHETIC_CI production=OFF PASS",flush=True)
@@ -548,10 +589,17 @@ def main():
         compare_pixels(before,screenshot("before-virtual-output-disable"),rgb)
         outputs=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
         active_outputs=[v for v in outputs if v.get("active") is True]
-        if len(active_outputs)!=1 or not str(
-                active_outputs[0].get("name","")).startswith("HEADLESS-"):
-            raise RuntimeError("M32K_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
-        output_name=active_outputs[0]["name"]
+        if dual:
+            if (len(active_outputs)!=2 or
+                    {v.get("name") for v in active_outputs} !=
+                    {"HEADLESS-1","HEADLESS-2"}):
+                raise RuntimeError("M32L_OUTPUT_SET_CHANGED_BEFORE_DISABLE")
+            output_name="HEADLESS-1"
+        else:
+            if len(active_outputs)!=1 or not str(
+                    active_outputs[0].get("name","")).startswith("HEADLESS-"):
+                raise RuntimeError("M32K_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
+            output_name=active_outputs[0]["name"]
         disable_start=len(sway_log.read_text(errors="replace"))
         reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
                              "output "+output_name+" disable"))
@@ -577,6 +625,9 @@ def main():
         if any(v.get("name")==output_name and v.get("active") is True
                for v in outputs):
             raise RuntimeError("M32K_HEADLESS_OUTPUT_STILL_ACTIVE")
+        if dual and not any(v.get("name")=="HEADLESS-2" and
+                            v.get("active") is True for v in outputs):
+            raise RuntimeError("M32L_SECONDARY_OUTPUT_WENT_INACTIVE")
         if actor.poll() is not None or company.poll() is not None:
             raise RuntimeError("M32K_PROCESS_DIED_WITH_OUTPUT")
         reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
@@ -596,6 +647,14 @@ def main():
         time.sleep(.7)
         if actor.poll() is not None or company.poll() is not None:
             raise RuntimeError("M32K_PROCESS_DIED_AFTER_OUTPUT_RESTORE")
+        if dual:
+            active_after=[
+                (o.get("name"),o.get("rect",{}).get("x"))
+                for o in outputs if o.get("active") is True]
+            if set(active_after)!={("HEADLESS-1",0),("HEADLESS-2",1920)}:
+                raise RuntimeError(
+                    "M32L_OUTPUT_RESTORE_GEOMETRY_CHANGED "+
+                    str(active_after))
         restored_output=screenshot("after-virtual-output-restore")
         cyan=gold=0
         for py in range(y+4,y+88,3):
@@ -610,6 +669,22 @@ def main():
               f"real_headless_output_disable=1 revoked_via={deactivate_receipt} "
               f"re_enabled=1 actor_alive=1 company_alive=1 "
               f"native_pixels_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        if dual:
+            sx=1920+x
+            secondary_cyan=secondary_gold=0
+            for py in range(y+4,y+88,3):
+                for px in range(sx+16,sx+w-16,3):
+                    rr,gg,bb=rgb(restored_output,px,py)
+                    secondary_cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                    secondary_gold+=int(rr>130 and gg>70 and bb<150)
+            if secondary_cyan>=65 or secondary_gold>=65:
+                raise RuntimeError(
+                    "M32L_SECONDARY_OUTPUT_NATIVE_MAP_LEAK "+
+                    str((secondary_cyan,secondary_gold)))
+            print("SD_COMPANY_M32L_DUAL_OUTPUT_RESTORE "
+                  "primary_disabled_restored=1 secondary_stayed_active=1 "
+                  "native_actor_alive=1 secondary_no_native_map=1 PASS",
+                  flush=True)
         actor.terminate()
         actor.wait(timeout=10)
         actor=None
