@@ -93,6 +93,14 @@ bool stage_director_company_scene_apply_m32e_fixture_only(
 struct sway_layer_surface;
 void stage_director_company_scene_m32f_host_lost(
     struct sway_layer_surface *lost_layer);
+
+/* M32j, private CI only: a revoked but still mapped native Qt actor is
+ * quarantined until the compositor actually observes its XDG unmap.
+ * This is a membership check only; never an authorization to reapply. */
+bool stage_director_company_scene_m32j_quarantined(
+    const struct sway_view *view);
+void stage_director_company_scene_m32j_forget_unmapped(
+    const struct sway_view *view);
 #endif
 
 #endif
