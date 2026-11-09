@@ -128,6 +128,45 @@ def compare_pixels(before, after, rgb):
           f"outside_unchanged={outside_ok}/8 PASS",flush=True)
 
 
+def compare_post_camera_pixels(before, after, rgb):
+    # After real pan + wheel, the native camera is intentionally not at its
+    # initial lat/lon/zoom. A geographically fixed sample box can become
+    # empty while MapLibre remains fully functional. Require the exact
+    # source's cyan/gold header AND live colored geometry ANYWHERE inside
+    # the bounded canvas; never permit pixels in the outside samples.
+    x,y,w,h=CANVAS
+    def count(im, region):
+        x0,y0,x1,y1=region
+        cyan=gold=0
+        for py in range(y0,y1,2):
+            for px in range(x0,x1,2):
+                r,g,b=rgb(im,px,py)
+                cyan+=int(g>120 and b>110 and 10*g>13*r)
+                gold+=int(r>130 and g>70 and b<150)
+        return cyan,gold
+    header=count(after,(x+12,y,x+w-12,y+90))
+    geographic=count(after,(x+20,y+95,x+w-30,y+h-75))
+    baseline=count(before,(x+20,y+95,x+w-30,y+h-75))
+    if not (header[0]>=250 and header[1]>=100 and
+            geographic[0]>=25 and geographic[1]>=8 and
+            baseline[0]<20 and baseline[1]<10):
+        raise RuntimeError("M32L_POST_CAMERA_NATIVE_GEOGRAPHY_MISSING "+
+            str((header,geographic,baseline)))
+    outside=((x-20,y+120),(x-20,y+320),
+             (x+w+20,y+120),(x+w+20,y+320),
+             (x+100,y-18),(x+300,y-18),
+             (x+100,y+h+18),(x+300,y+h+18))
+    preserved=sum(int(sum(abs(a-b) for a,b in
+                  zip(rgb(before,px,py),rgb(after,px,py)))<60)
+                  for px,py in outside)
+    if preserved<7:
+        raise RuntimeError("M32L_POST_CAMERA_OUTSIDE_OVERFLOW "+str(preserved))
+    print("SD_COMPANY_M32L_POST_CAMERA "
+          f"broader_geometry={geographic[0]},{geographic[1]} "
+          f"source_header={header[0]},{header[1]} "
+          f"outside_unchanged={preserved}/8 PASS",flush=True)
+
+
 def main():
     env=os.environ
     temp=Path(env.get("RUNNER_TEMP","/not-ci"))
@@ -335,7 +374,7 @@ def main():
         # transaction. Require the native map to remain in the same
         # original Company map slot afterward, not only before input.
         after_drag=screenshot("after-native-drag")
-        compare_pixels(before,after_drag,rgb)
+        compare_post_camera_pixels(before,after_drag,rgb)
         print("SD_COMPANY_M32E_POST_DRAG_SCENE "
               "native_map_still_in_company_canvas=PASS",flush=True)
         diff=qt_log.read_text(errors="replace")[len(initial):]
@@ -366,7 +405,7 @@ def main():
         if actor.poll() is not None:
             raise RuntimeError("M32I_NATIVE_QT_DIED_AFTER_POPUP_DENIAL")
         after_popup=screenshot("after-rejected-native-popup")
-        compare_pixels(before,after_popup,rgb)
+        compare_post_camera_pixels(before,after_popup,rgb)
         print("SD_COMPANY_M32I_NATIVE_POPUP "
               "real_Qt_Popup_request=1 compositor_xdg_reject=1 "
               "actor_alive=1 map_stable=1 PASS",flush=True)
