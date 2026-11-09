@@ -15,6 +15,7 @@ on:
       - 'include/sway/stage_director_company_input.h'
       - 'include/sway/input/seat.h'
       - 'sway/input/cursor.c'
+      - 'sway/input/seat.c'
       - 'sway/input/seatop_down.c'
       - '.github/workflows/stage-director-company-m32e.yml'
       - 'docs/stage-director-company-m32e-20261109.md'
@@ -83,6 +84,11 @@ jobs:
           test=Path('tests/stage_director/ci_company_m32e_real_scene.py').read_text()
           assert 'M32F_OUTSIDE_INPUT_LEAK' in test
           assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
+          assert 'M32G_NATIVE_KEYBOARD_FOCUS_LEAK' in test
+          assert 'real_IPC_focus_attempt=1' in test
+          seat=Path('sway/input/seat.c').read_text()
+          assert 'native_ipc_keyboard_focus=DENIED actor_embedded=1' in seat
+          assert 'stage_director_company_scene_reject_keyboard_view(' in seat
           assert 'wait_new_marker(' in test
           assert 'actor.poll() is not None' in test
           assert 'company.terminate()' in test
