@@ -61,6 +61,20 @@ def wait_file(path: Path, marker: str, seconds: float, process=None):
     raise RuntimeError("M32E_MARKER_TIMEOUT "+marker+" "+tail)
 
 
+def wait_new_marker(path: Path, marker: str, before_chars: int,
+                    seconds: float, process=None):
+    end=time.monotonic()+seconds
+    while time.monotonic()<end:
+        data=path.read_text(errors="replace") if path.is_file() else ""
+        if marker in data[before_chars:]:
+            return data[before_chars:]
+        if process is not None and process.poll() is not None:
+            raise RuntimeError("M32F_PROCESS_EXITED_BEFORE_NEW_MARKER "+data[-2400:])
+        time.sleep(.15)
+    tail=path.read_text(errors="replace")[-5000:] if path.is_file() else ""
+    raise RuntimeError("M32F_NEW_MARKER_TIMEOUT "+marker+" "+tail)
+
+
 def compare_pixels(before, after, rgb):
     x,y,w,h=CANVAS
     # Positive proof of *this exact pinned* MapLibre offline source:
@@ -233,6 +247,26 @@ def main():
         print("SD_COMPANY_M32E_REAL_INPUT actual_qt_press_drag_release_wheel=PASS",
               flush=True)
 
+        # Negative input boundary: a press entirely outside the current
+        # map must not reach the native Qt actor even after a valid drag
+        # established pointer focus. The coordinates are outside both
+        # axes of Company's 166,203..1659,991 half-open map rectangle.
+        outside_start=len(qt_log.read_text(errors="replace"))
+        for action in ("move 1810 1040","press","release"):
+            pointer.stdin.write(action+"\n")
+            pointer.stdin.flush()
+            observed=read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_ACK ",8)
+            if observed!="SD_CI_COMPANY_POINTER_ACK "+action:
+                raise RuntimeError("M32F_OUTSIDE_POINTER_ACK_INVALID "+observed)
+            time.sleep(.15)
+        outside_log=qt_log.read_text(errors="replace")[outside_start:]
+        outside_events=[m.group(2) for line in outside_log.splitlines()
+                        if (m:=EVENT.search(line))]
+        if any(event in ("press","release","wheel") for event in outside_events):
+            raise RuntimeError("M32F_OUTSIDE_INPUT_LEAK "+str(outside_events))
+        print("SD_COMPANY_M32F_OUTSIDE_POINTER native_click_leak=0 "
+              "outside_map=1810,1040 PASS",flush=True)
+
         pointer.stdin.write("quit\n")
         pointer.stdin.flush()
         read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_STOP ",8)
@@ -256,6 +290,59 @@ def main():
             raise RuntimeError("M32E_NATIVE_MAP_NOT_CLEARED "+str(restored))
         print(f"SD_COMPANY_M32E_REAL_TEARDOWN restored_samples={restored} "
               "embedded_native_actor_hidden=PASS",flush=True)
+
+        # M32f host-loss scenario: start another real native MapLibre actor
+        # after the first was normally closed, but now terminate Company
+        # WHILE the independent Qt process is still alive. The compositor
+        # must revoke on the actual native Company layer unmap/destroy and
+        # must not expose the former actor as a floating desktop window.
+        prior_scene_log=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,prior_scene_log,35,actor)
+        time.sleep(.8)
+        before_host_loss=screenshot("before-host-loss")
+        compare_pixels(before,before_host_loss,rgb)
+        if actor.poll() is not None:
+            raise RuntimeError("M32F_NATIVE_ACTOR_DIED_BEFORE_HOST_LOSS")
+        prior_host_log=len(sway_log.read_text(errors="replace"))
+        company.terminate()
+        company.wait(timeout=10)
+        company=None
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32F][CI_ONLY] "
+            "native_company_host_lost=1 scene_revoke=PASS",
+            prior_host_log,20,actor)
+        if actor.poll() is not None:
+            raise RuntimeError("M32F_NATIVE_ACTOR_DIED_WITH_HOST")
+        time.sleep(.8)
+        lost_image=screenshot("after-host-loss")
+        x,y,w,h=CANVAS
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(lost_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS "
+                f"cyan={cyan} gold={gold}")
+        print(f"SD_COMPANY_M32F_HOST_LOSS "
+              f"host_native_unmap=OBSERVED actor_still_running=1 "
+              f"map_pixels_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
     finally:
         if pointer is not None:
             if pointer.stdin:
