@@ -1,0 +1,95 @@
+name: Stage Director Company M32a actual production viewport state (no scene authority)
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'include/sway/stage_director_company_viewport_state.h'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_viewport_state.c'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_viewport_state_m32a.c'
+      - '.github/workflows/stage-director-company-m32a.yml'
+      - 'docs/stage-director-company-m32a-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-company-protocol-viewport-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and execute actual production viewport state and wire policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -O2 -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_viewport_state.c \
+            tests/stage_director/test_company_viewport_state_m32a.c \
+            -o "$RUNNER_TEMP/test_company_viewport_state_m32a"
+          "$RUNNER_TEMP/test_company_viewport_state_m32a"
+      - name: Assert new state is connected to real production Wayland protocol
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          protocol=Path('sway/stage_director_company_vector_protocol.c').read_text()
+          header=Path('include/sway/stage_director_company_vector_protocol.h').read_text()
+          state=Path('sway/stage_director_company_viewport_state.c').read_text()
+          adapter=Path('sway/stage_director.c').read_text()
+          build=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          assert "stage_director_company_viewport_state.c" in build
+          assert "stage_director_company_vector_protocol_viewport_snapshot(" in header
+          assert "stage_director_company_vector_protocol_viewport_snapshot(" in protocol
+          assert "stage_director_company_vector_protocol_viewport_snapshot(" in adapter
+          assert "stage_director_company_viewport_state_record(" in protocol
+          assert protocol.count("stage_director_company_viewport_state_reset(") >= 4
+          assert "stage_director_company_viewport_state_snapshot(" in protocol
+          assert "stage_director_company_wire_check(" in state
+          assert "SD_COMPANY_WIRE_VIEWPORT_CANDIDATE" in state
+          assert "candidate_only = true" in state
+          assert "COMPANY_M32A" in adapter
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          for source in (state,protocol):
+              assert "wlr_scene_node_reparent(" not in source
+              assert "wlr_seat_pointer_notify_button(" not in source
+          print("SD_COMPANY_M32A_PRODUCTION_SOURCE "
+                "actual_wayland_report_stored=1 "
+                "compositor_snapshot_consumed=1 "
+                "digest_unpinned=1 scene=OFF input=OFF PASS")
+          PY
+
+  full-normal-swaypx-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile normal production SwayPX source with new viewport connector
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(nix build .#swayfx-unwrapped-git \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$output/bin/sway"
+          test -x "$output/bin/swaymsg"
+          echo "SD_COMPANY_M32A_NORMAL_SWAYPX_BUILD binary=$output/bin/sway "
+          echo "status=PASS no_user_host_install=1 production_activation=OFF"
