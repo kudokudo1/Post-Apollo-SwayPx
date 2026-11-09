@@ -135,6 +135,26 @@ stage_director_company_vector_protocol_admission_preflight(
 const char *stage_director_company_admission_status_name(
     enum stage_director_company_admission_status status);
 
+/* M32p // Internal compositor-only bridge to M32o's inert candidate.
+ * Caller supplies a LIVE sway_view object; the protocol re-observes the
+ * native XDG actor, physically selected Company host, M28b kernel pidfd,
+ * installed ELF and approved digest on every reserve or probe.
+ *
+ * Existing compiled digest is empty, so the reserve path cannot succeed
+ * on the normal operator build. Even a future candidate-only match has
+ * ZERO operator, launch, scene, pointer, focus or popup authority.
+ * Neither function is a Wayland request handler or public IPC.
+ */
+struct sway_view;
+struct stage_director_company_scene_lease_receipt;
+bool stage_director_company_vector_protocol_candidate_reserve_current(
+    struct sway_view *native_view,
+    const struct stage_director_company_lineage_result *native_lineage);
+struct stage_director_company_scene_lease_receipt
+stage_director_company_vector_protocol_candidate_probe_current(
+    struct sway_view *native_view,
+    const struct stage_director_company_lineage_result *native_lineage);
+
 /* All revocation paths (explicit CLOSE, native role/host destruction,
  * replacement, shutdown) remove any scene BEFORE resetting selection,
  * intent, viewport or held kernel actor identity. */
