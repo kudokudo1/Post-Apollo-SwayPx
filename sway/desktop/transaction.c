@@ -1139,7 +1139,32 @@ static void arrange_output(struct sway_output *output, int width, int height) {
 
 		for (int i = 0; i < child->current.floating->length; i++) {
 			struct sway_container *floater = child->current.floating->items[i];
-			wlr_scene_node_reparent(&floater->scene_tree->node, root->layers.floating);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			/* This is a SECOND ordinary Sway reparent pass after
+			 * arrange_workspace_floating(). It must not move an active
+			 * private embedded native Qt scene behind the Company layer.
+			 * If the workspace/output stops being active, revoke and
+			 * hide the scene rather than leaving a cross-workspace overlay. */
+			const bool embedded=floater->view &&
+				stage_director_company_scene_is_embedded_root(
+					floater->view->surface);
+			if (embedded && !activated) {
+				stage_director_company_scene_revoke(floater->view);
+				wlr_scene_node_set_enabled(
+					&floater->scene_tree->node,false);
+				continue;
+			}
+			if (!embedded) {
+#endif
+				wlr_scene_node_reparent(
+					&floater->scene_tree->node, root->layers.floating);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			} else {
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+					"preserved_embedded_output_parent=1");
+			}
+#endif
 			wlr_scene_node_set_enabled(&floater->scene_tree->node, activated || animating);
 		}
 
