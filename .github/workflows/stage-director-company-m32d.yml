@@ -54,6 +54,9 @@ jobs:
           digest=Path('sway/stage_director_company_digest.c').read_text()
           assert "'stage_director_company_input.c'" in meson
           assert cursor.count('stage_director_company_scene_reject_pointer(')>=3
+          assert 'stage_director_company_scene_is_embedded_root(' in cursor
+          assert 'pointer_state.focused_surface' in cursor
+          assert 'stage_director_company_scene_is_embedded_root(' in scene
           assert 'wlr_surface_get_root_surface(' in scene
           assert 'stage_director_company_scene_reject_keyboard_view(' in seat
           assert 'stage_director_company_scene_reject_keyboard_surface(' in seat
