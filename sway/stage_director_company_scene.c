@@ -1,4 +1,8 @@
 #include <limits.h>
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include <stdlib.h>
+#include <string.h>
+#endif
 #include <stdint.h>
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
@@ -164,6 +168,115 @@ bool stage_director_company_scene_apply_ci_only(
     return true;
 #endif
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/*
+ * M32e // positive native-scene probe for the previously observed M30s
+ * fullscreen fixture only. The inputs below model test evidence; they do
+ * NOT authenticate a launched process or approve an installed executable.
+ * This function does not exist in an ordinary compositor build. It is
+ * additionally closed outside the exact GitHub disposable session.
+ *
+ * The fixed Company rectangle (166,203,1493,788) comes from the earlier
+ * real Company Quickshell M30s source, not client-provided IPC or app-id.
+ * A true runtime PASS requires native MapLibre and captured compositor
+ * pixels: successfully compiling this function does not establish that.
+ */
+bool stage_director_company_scene_apply_m32e_fixture_only(
+        struct sway_view *view,
+        const struct stage_director_company_native_host *host) {
+    const char *ci = getenv("CI");
+    const char *gha = getenv("GITHUB_ACTIONS");
+    const char *m32e = getenv("STAGE_DIRECTOR_CI_COMPANY_M32E");
+    const char *temp = getenv("RUNNER_TEMP");
+    if (!ci || strcmp(ci, "true") || !gha || strcmp(gha, "true") ||
+            !m32e || strcmp(m32e, "1") || !temp ||
+            strcmp(temp, "/home/runner/work/_temp")) return false;
+    if (!view || !host || !host->candidate ||
+            host->state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            host->host_global.x != 0 || host->host_global.y != 0 ||
+            host->host_global.width != 1920 ||
+            host->host_global.height != 1080 ||
+            host->output_global.x != 0 || host->output_global.y != 0 ||
+            host->output_global.width != 1920 ||
+            host->output_global.height != 1080 ||
+            !host->native_client_ref || !host->native_surface_ref ||
+            !host->native_output_ref || !host->native_layer_role_ref ||
+            !host->native_layer_ref || host->pid <= 0 || !host->uid ||
+            !host->start_ticks) return false;
+    const struct stage_director_company_native_actor actor =
+        stage_director_company_native_observe_actor(view);
+    if (!actor.candidate ||
+            actor.state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            !actor.native_client_ref || !actor.native_view_ref ||
+            !actor.native_root_surface_ref ||
+            actor.native_client_ref == host->native_client_ref ||
+            actor.pid <= 0 || actor.pid == host->pid ||
+            actor.uid != host->uid || !actor.start_ticks ||
+            actor.root_global.width != 1493 ||
+            actor.root_global.height != 788 ||
+            view->geometry.x != 0 || view->geometry.y != 0 ||
+            view->geometry.width != 1493 ||
+            view->geometry.height != 788) return false;
+    /* Explicitly FAKE lineage, digest, binary and lease attestations.
+     * These can only flow through this private-CI function. Production has
+     * no caller and no approved executable digest. Native refs, geometry,
+     * actual wlroots node operations and screenshots must be real. */
+    const struct stage_director_rect map = {166, 203, 1493, 788};
+    const struct stage_director_company_actor_pair_evidence e = {
+        .selected_native_company_host = true,
+        .kernel_pidfd_actor_candidate = true,
+        .host = *host,
+        .actor = actor,
+        .intent = {
+            .present = true, .selection_epoch = 1, .sequence = 1,
+            .host_revision = 1,
+            .native_host_client_ref = host->native_client_ref,
+            .mode = 0,
+        },
+        .viewport = {
+            .candidate_only = true, .selection_epoch = 1,
+            .intent_sequence = 1, .host_revision = 1,
+            .native_host_client_ref = host->native_client_ref,
+            .frame_in_host = {0, 0, 1920, 1080},
+            .map_in_frame = {166, 203, 1493, 788},
+            .map_in_host = {166, 203, 1493, 788},
+        },
+        .lineage = {
+            .status = SD_COMPANY_LINEAGE_CANDIDATE_ONLY,
+            .direct_child_candidate = true,
+        },
+        .executable = {
+            .status = SD_COMPANY_EXE_CURRENT_INSTALL_INODE_CANDIDATE,
+            .running_current_install_inode_candidate = true,
+        },
+        .digest = {
+            .status = SD_COMPANY_DIGEST_PIN_MATCH_CANDIDATE,
+            .pinned_elf_hash_candidate = true,
+        },
+    };
+    const struct stage_director_company_scene_guard guard = {
+        .operator_authorized_native_actor = true,
+        .approved_executable_and_launch = true,
+        .compositor_scene_lease_current = true,
+        .input_hit_test_guard_installed = true,
+        .keyboard_focus_guard_installed = true,
+        .popup_guard_installed = true,
+        .teardown_guard_installed = true,
+        .host_mapped = true, .actor_mapped = true,
+        .output_active = true,
+        .selection_epoch = 1, .intent_sequence = 1,
+        .host_revision = 1,
+        .native_host_client_ref = host->native_client_ref,
+        .native_actor_root_surface_ref = actor.native_root_surface_ref,
+    };
+    const struct stage_director_company_scene_plan plan =
+        stage_director_company_scene_prepare(&e, &guard, map);
+    if (plan.state != SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY ||
+            !plan.geometry_ready || plan.can_apply_in_production) return false;
+    return stage_director_company_scene_apply_ci_only(view, &e, &guard);
+}
+#endif
 
 /* M32d // real cursor, popup and focus hooks consult the scene owned by
  * this compositor, not a client title/app-id. These do not enable the
