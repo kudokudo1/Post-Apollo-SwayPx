@@ -23,7 +23,6 @@ struct seatop_resize_floating_event {
 static void handle_button(struct sway_seat *seat, uint32_t time_msec,
 		struct wlr_input_device *device, uint32_t button,
 		enum wl_pointer_button_state state) {
-	struct seatop_resize_floating_event *e = seat->seatop_data;
 	if (seat->cursor->pressed_button_count == 0) {
 		/* The end hook clears the leader and native follower in one
 		 * final transaction, including gesture interruptions. */
