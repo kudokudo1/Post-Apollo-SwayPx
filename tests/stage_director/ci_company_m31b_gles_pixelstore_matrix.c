@@ -4,10 +4,10 @@
  * actual GPU/llvmpipe texture pixels via an FBO.
  *
  * Test both CPU upload paths used by SceneFX: glTexImage2D and
- * glTexSubImage2D. For each, simulate save/set(GL_UNPACK_ALIGNMENT=1)/
- * restore, retain GL_UNPACK_ROW_LENGTH and SKIP settings from the upstream
- * code and verify all output pixels. Also demonstrate an unpatched
- * GL_UNPACK_ALIGNMENT=4 negative control for a 3px RGB565 row.
+ * glTexSubImage2D. Select a row-length/alignment pair reproducing actual
+ * source stride, then restore previous GL alignment and skip state. Test
+ * tight, full-pixel-padded, and byte-aligned rows. Blind alignment=1 is
+ * NOT safe for three-byte RGB888 rows padded to four-byte boundaries.
  */
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -34,6 +34,25 @@ static const struct format_case formats[] = {
 };
 static const int widths[] = {3, 4, 5, 7, 8, 13};
 static int cases_passed = 0;
+struct row_plan { GLint row_length; GLint alignment; };
+static int try_plan(int width, int bpp, int stride, struct row_plan *plan) {
+    if (!plan || width<=0 || bpp<=0 || stride<width*bpp)
+        return 0;
+    int rowlen=stride/bpp;
+    if (rowlen<width) return 0;
+    const int alignments[]={1,2,4,8};
+    for (int i=0;i<4;i++) {
+        int a=alignments[i];
+        int bytes=rowlen*bpp;
+        int rounded=((bytes+a-1)/a)*a;
+        if (rounded==stride) {
+            plan->row_length=rowlen;
+            plan->alignment=a;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 static void die(const char *what, const struct format_case *f, int width,
         int padded) {
@@ -68,10 +87,10 @@ static void store_pixel(unsigned char *dst, const struct format_case *f,
 }
 static unsigned char *make_buffer(const struct format_case *f, int width,
         int padded, int phase, int *stride_out) {
-    int stride = (width + padded) * f->bytes_per_pixel;
-    if (stride <= 0 || stride % f->bytes_per_pixel != 0) {
-        die("NONREPRESENTABLE_ROW_LENGTH", f, width, padded);
-    }
+    int stride = (width + (padded==1 ? 1 : 0)) * f->bytes_per_pixel;
+    if (padded==2) stride=(stride+3)&~3;
+    if (stride <= 0 || padded<0 || padded>2)
+        die("INVALID_ROW_STRIDE_MODE", f, width, padded);
     /* Extra initialized guards allow the negative-control misalignment to
      * read wrong pixels without leaving allocated memory. */
     size_t size = (size_t)stride * H + 128;
@@ -143,9 +162,12 @@ static void run_case(const struct format_case *f, int width, int padded,
     if (prior != expected_initial_alignment)
         die("PRIOR_ALIGNMENT_INVALID", f, width, padded);
 
-    /* SceneFX proposed create path: save / set 1 / upload / restore. */
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, stride / f->bytes_per_pixel);
+    /* M31b candidate: save / choose actual byte pitch / upload / restore. */
+    struct row_plan upload={0};
+    if (!try_plan(width,f->bytes_per_pixel,stride,&upload))
+        die("CREATE_UNREPRESENTABLE_SOURCE_STRIDE",f,width,padded);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, upload.alignment);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, upload.row_length);
     glTexImage2D(GL_TEXTURE_2D,0,(GLint)f->gl_format,width,H,0,
             f->gl_format,f->gl_type,data);
     glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
@@ -162,8 +184,11 @@ static void run_case(const struct format_case *f, int width, int padded,
     int update_stride=0;
     unsigned char *update_data=make_buffer(f,width,padded,1,&update_stride);
     glGetIntegerv(GL_UNPACK_ALIGNMENT,&prior);
-    glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH,update_stride/f->bytes_per_pixel);
+    struct row_plan update={0};
+    if (!try_plan(width,f->bytes_per_pixel,update_stride,&update))
+        die("UPDATE_UNREPRESENTABLE_SOURCE_STRIDE",f,width,padded);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,update.alignment);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH,update.row_length);
     glPixelStorei(GL_UNPACK_SKIP_PIXELS,1);
     glPixelStorei(GL_UNPACK_SKIP_ROWS,2);
     glTexSubImage2D(GL_TEXTURE_2D,0,1,2,width-2,H-3,
@@ -207,6 +232,48 @@ static void require_negative_control(const struct format_case *f,
     glDeleteTextures(1,&tex);
     free(data);
 }
+static void refuse_blind_alignment_one_for_rgb888_padded(void) {
+    const struct format_case *f=&formats[3]; /* 3-byte RGB888 */
+    const int width=5;
+    int stride=0;
+    unsigned char *data=make_buffer(f,width,2,0,&stride);
+    if (stride!=16)die("BAD_PADDED_RGB888_TEST",f,width,2);
+    struct row_plan valid={0};
+    if (!try_plan(width,3,stride,&valid) ||
+            valid.alignment==1 || valid.row_length!=5)
+        die("VALID_PADDED_RGB888_LAYOUT_NOT_DISCOVERED",f,width,2);
+    GLuint tex=0;
+    glGenTextures(1,&tex);
+    glBindTexture(GL_TEXTURE_2D,tex);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH,stride/3);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,width,H,0,
+            GL_RGB,GL_UNSIGNED_BYTE,data);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
+    if (glGetError()!=GL_NO_ERROR)
+        die("BLIND_ALIGNMENT_ONE_NEGATIVE_GL_ERROR",f,width,2);
+    int wrong=mismatches(tex,f,width,2,0,0);
+    if (wrong<=0)
+        die("BLIND_ALIGNMENT_ONE_FALSE_ACCEPT",f,width,2);
+    printf("M31B_BLIND_ALIGNMENT_ONE_NEGATIVE "
+           "format=RGB888 width=5 source_pitch=16 "
+           "naive_row_pitch=15 wrong_pixels=%d "
+           "selected_unpack_alignment=%d PASS\n",
+           wrong,valid.alignment);
+    glDeleteTextures(1,&tex);
+    free(data);
+}
+static void invalid_stride_contract(void) {
+    struct row_plan p={0};
+    if (try_plan(5,3,17,&p) || try_plan(5,3,14,&p) ||
+            try_plan(5,3,-1,&p) || try_plan(0,3,16,&p) ||
+            try_plan(5,0,16,&p)) {
+        fprintf(stderr,"M31B_UNREPRESENTABLE_STRIDE_FALSE_ACCEPT\n");
+        exit(2);
+    }
+}
 int main(void) {
     if (sizeof(formats)/sizeof(formats[0])!=5)
         return 2;
@@ -239,7 +306,7 @@ int main(void) {
     const int formats_len=(int)(sizeof(formats)/sizeof(formats[0]));
     for (int f=0;f<formats_len;f++) {
         for (int w=0;w<widths_len;w++) {
-            for (int padded=0;padded<=1;padded++) {
+            for (int padded=0;padded<=2;padded++) {
                 run_case(&formats[f],widths[w],padded,
                          ((w+f+padded)&1)?4:8);
             }
@@ -250,15 +317,17 @@ int main(void) {
     require_negative_control(&formats[0],4,0);
     require_negative_control(&formats[3],5,1);
     require_negative_control(&formats[4],5,0);
+    refuse_blind_alignment_one_for_rgb888_padded();
+    invalid_stride_contract();
     printf("SD_COMPANY_M31B_REAL_GLES_PIXELSTORE_MATRIX "
-           "formats=%d widths=%d stride_variants=2 "
+           "formats=%d widths=%d stride_variants=3 "
            "create_update_cases=%d native_GLES3=1 "
-           "prior_alignment_restored=1 negative_controls=4 "
+           "prior_alignment_restored=1 negative_controls=5 nonrepresentable_stride=REFUSED "
            "production_scenefx=UNMODIFIED PASS\n",
            formats_len,widths_len,cases_passed);
     eglMakeCurrent(display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
     eglDestroyContext(display,ctx);
     eglDestroySurface(display,surface);
     eglTerminate(display);
-    return cases_passed==60 ? 0 : 2;
+    return cases_passed==90 ? 0 : 2;
 }
