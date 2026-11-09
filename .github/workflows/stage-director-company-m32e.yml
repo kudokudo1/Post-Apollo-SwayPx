@@ -9,6 +9,8 @@ on:
       - 'include/sway/stage_director_company_scene.h'
       - 'sway/stage_director_company_scene.c'
       - 'sway/stage_director.c'
+      - 'sway/desktop/xdg_shell.c'
+      - 'include/sway/stage_director.h'
       - '.github/workflows/stage-director-company-m32e.yml'
       - 'docs/stage-director-company-m32e-20261109.md'
       - 'tests/stage_director/ci_company_m32e_real_scene.py'
@@ -42,7 +44,10 @@ jobs:
           exact_one(stage,'stage_director_company_scene_apply_m32e_fixture_only(')
           exact_one(scene,'bool stage_director_company_scene_apply_m32e_fixture_only(')
           exact_one(header,'bool stage_director_company_scene_apply_m32e_fixture_only(')
-          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n\t\t\t\tif (stage_director_company_scene_apply_m32e_fixture_only(' in stage
+          assert 'void stage_director_company_m32e_geometry_committed(struct sway_view *view)' in stage
+          assert 'if (stage_director_company_scene_apply_m32e_fixture_only(view, &host))' in stage
+          assert 'stage_director_company_m32e_geometry_committed(view);' in Path('sway/desktop/xdg_shell.c').read_text()
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in Path('sway/desktop/xdg_shell.c').read_text()
           assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n/*\n * M32e' in scene
           for needed in ('getenv("CI")','getenv("GITHUB_ACTIONS")',
                          'getenv("STAGE_DIRECTOR_CI_COMPANY_M32E")',
