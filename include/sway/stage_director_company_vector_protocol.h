@@ -6,6 +6,7 @@
 #include <wayland-server-core.h>
 #include "sway/stage_director_viewport.h"
 #include "sway/stage_director_company_viewport_state.h"
+#include "sway/stage_director_company_launch_request.h"
 
 /*
  * M23: dedicated nonauthorizing Company geometry/intent Wayland interface.
@@ -154,6 +155,13 @@ struct stage_director_company_scene_lease_receipt
 stage_director_company_vector_protocol_candidate_probe_current(
     struct sway_view *native_view,
     const struct stage_director_company_lineage_result *native_lineage);
+
+/* M32r: returns a fresh compositor-only request context, never approval.
+ * A generation is generated and retained by the compositor; future trusted
+ * input may compare it but public Wayland/IPC cannot issue authority. */
+struct stage_director_company_launch_request_receipt
+stage_director_company_vector_protocol_launch_request_probe_current(
+    uint64_t compositor_generation);
 
 /* All revocation paths (explicit CLOSE, native role/host destruction,
  * replacement, shutdown) remove any scene BEFORE resetting selection,
