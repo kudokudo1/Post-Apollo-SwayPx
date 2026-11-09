@@ -197,6 +197,8 @@ def main():
               "actual_Company_QML=1 real_MapLibre=1 "
               "test_authority=SYNTHETIC_CI production=OFF PASS",flush=True)
 
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_INPUT")!="1":
+            raise RuntimeError("BLOCKED_M32E_POINTER_REQUIRED_CI_GATE_MISSING")
         with (runtime/"sd-company-m32e-pointer.log").open("w") as ptrlog:
             pointer=subprocess.Popen([str(pointer_bin)],
                 stdin=subprocess.PIPE,stdout=subprocess.PIPE,
@@ -259,7 +261,8 @@ def main():
             try: company.wait(timeout=8)
             except subprocess.TimeoutExpired: company.kill();company.wait()
         for name,path in (("company",company_log),("maplibre",qt_log),
-                          ("sway",sway_log)):
+                          ("sway",sway_log),
+                          ("pointer",runtime/"sd-company-m32e-pointer.log")):
             if path.is_file():
                 (temp/f"sd-company-m32e-{name}.log").write_text(
                     path.read_text(errors="replace")[-65000:],
