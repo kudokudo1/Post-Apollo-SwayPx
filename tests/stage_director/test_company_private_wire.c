@@ -131,6 +131,20 @@ static void test_protected_publishing_and_lifetime(void) {
 		f.role, f.surface, observe_native_host, &f));
 	assert(stage_director_company_vector_protocol_selected_client(f.host));
 	assert(!stage_director_company_vector_protocol_selected_client(f.foreign));
+	/* M32a: selection alone is not a valid Company map rectangle. The
+	 * viewport requires the same client's bound protocol, a live intent,
+	 * and its explicit, validated report. Foreign and unbound callers
+	 * must see zeroed snapshots, never stale renderer geometry. */
+	struct stage_director_company_viewport_snapshot viewport = {
+		.candidate_only = true,
+	};
+	assert(!stage_director_company_vector_protocol_viewport_snapshot(
+		f.host, &viewport));
+	assert(!viewport.candidate_only && !viewport.map_in_host.width);
+	viewport.candidate_only = true;
+	assert(!stage_director_company_vector_protocol_viewport_snapshot(
+		f.foreign, &viewport));
+	assert(!viewport.candidate_only && !viewport.map_in_host.width);
 	assert(!stage_director_company_vector_protocol_publish(
 		f.role, f.surface, observe_native_host, &f));
 	/* Destroy exact host wl_surface. Revocation must occur before reused
@@ -147,6 +161,10 @@ static void test_protected_publishing_and_lifetime(void) {
 		f.role, f.surface, observe_native_host, &f));
 	stage_director_company_vector_protocol_revoke();
 	assert(!stage_director_company_vector_protocol_selected_client(f.host));
+	viewport.candidate_only = true;
+	assert(!stage_director_company_vector_protocol_viewport_snapshot(
+		f.host, &viewport));
+	assert(!viewport.candidate_only && !viewport.map_in_host.width);
 	stage_director_company_vector_protocol_revoke();
 	finish(&f);
 }
