@@ -11,3 +11,5 @@ option('sd-bus-provider', type: 'combo', choices: ['auto', 'libsystemd', 'libelo
 option('sd-ci-news-scene-probe', type: 'boolean', value: false, description: 'CI ONLY: probe wlroots NEWS actor scene clip and hit testing')
 
 option('sd-ci-real-weather-watch-layer', type: 'boolean', value: false, description: 'CI ONLY: select real mapped Weather layer through scene hit-test; never production')
+
+option('sd-ci-company-scene-actuation', type: 'boolean', value: false, description: 'PRIVATE CI ONLY: compile Company MapLibre wlroots scene setter; no production caller or authorization')

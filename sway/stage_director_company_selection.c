@@ -9,6 +9,7 @@
 #include "sway/stage_director.h"
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_vector_protocol.h"
+#include "sway/stage_director_company_scene.h"
 #include "sway/input/cursor.h"
 #include "sway/input/seat.h"
 
@@ -99,6 +100,9 @@ static bool probe_paired_birth_host(void *context,
 }
 
 void stage_director_company_pairing_clear_host(void) {
+	/* Any previous native map actor must be hidden before revoking the
+	 * selected Company Wayland host. Never leave an overlay after loss. */
+	stage_director_company_scene_revoke(NULL);
 	/* Clear local native references before destroying the published global.
 	 * Any remaining bound resource is unusable until the next native epoch. */
 	memset(&company_selection, 0, sizeof(company_selection));

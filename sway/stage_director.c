@@ -18,6 +18,7 @@
 #include "sway/stage_director_company_digest.h"
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_company_actor_pair.h"
+#include "sway/stage_director_company_scene.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -934,6 +935,30 @@ void stage_director_view_mapped(struct sway_view *view) {
 				const struct stage_director_company_actor_pair_result
 					pair = stage_director_company_actor_pair_probe(
 						&pair_evidence);
+				/* M32c: the real renderer backend exists in normal SwayPX,
+				 * but no compositor-issued scene/seat/popup permission exists.
+				 * Analyze current candidate only; never call the setter.
+				 * The source must match Company canvas without rescaling. */
+				const struct stage_director_company_scene_guard
+					scene_guards = {0};
+				const struct stage_director_company_scene_plan
+					scene_plan = stage_director_company_scene_prepare(
+						&pair_evidence, &scene_guards,
+						(struct stage_director_rect) {
+							.x = 0, .y = 0,
+							.width = company.root_global.width,
+							.height = company.root_global.height,
+						});
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M32C][SCENE] "
+					"status=%s target=%d,%d %dx%d "
+					"lease=NONE scene=OFF clip=OFF input=OFF",
+					stage_director_company_scene_state_name(
+						scene_plan.state),
+					scene_plan.target_global.x,
+					scene_plan.target_global.y,
+					scene_plan.target_global.width,
+					scene_plan.target_global.height);
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M32B][ACTOR_TARGET] "
 					"status=%s native_process=%s viewport=%s "
@@ -979,6 +1004,9 @@ void stage_director_view_identity_changed(struct sway_view *view) {
 }
 
 void stage_director_view_unmapped(struct sway_view *view) {
+	/* Clear any private experimental map crop before wlroots destroys
+	 * the XDG scene tree. The ordinary compositor has none to revoke. */
+	stage_director_company_scene_revoke(view);
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe_restore(view);
 #endif

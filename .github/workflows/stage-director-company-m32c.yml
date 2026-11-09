@@ -1,0 +1,128 @@
+name: Stage Director Company M32c guarded scene placement source (production OFF)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_scene.h'
+      - 'sway/stage_director_company_scene_plan.c'
+      - 'sway/stage_director_company_scene.c'
+      - 'sway/stage_director.c'
+      - 'sway/stage_director_company_selection.c'
+      - 'sway/meson.build'
+      - 'meson_options.txt'
+      - 'tests/stage_director/test_company_scene_plan_m32c.c'
+      - '.github/workflows/stage-director-company-m32c.yml'
+      - 'docs/stage-director-company-m32c-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-plan-and-revocation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run M32c real production geometry and authority plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_actor_pair.c \
+            sway/stage_director_company_scene_plan.c \
+            tests/stage_director/test_company_scene_plan_m32c.c \
+            -o "$RUNNER_TEMP/test_company_scene_plan_m32c"
+          "$RUNNER_TEMP/test_company_scene_plan_m32c"
+      - name: Confirm actual wlroots backend and hard-closed production gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          h=Path('include/sway/stage_director_company_scene.h').read_text()
+          p=Path('sway/stage_director_company_scene_plan.c').read_text()
+          a=Path('sway/stage_director_company_scene.c').read_text()
+          stage=Path('sway/stage_director.c').read_text()
+          select=Path('sway/stage_director_company_selection.c').read_text()
+          meson=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          for source in ('stage_director_company_scene_plan.c',
+                         'stage_director_company_scene.c'):
+              assert "'"+source+"'" in meson,source
+          for opname in ('wlr_scene_node_reparent(',
+                         'wlr_scene_node_set_position(',
+                         'wlr_scene_subsurface_tree_set_clip(',
+                         'wlr_scene_node_set_enabled(',
+                         'wlr_scene_node_raise_to_top('):
+              assert opname in a,opname
+          assert '#ifndef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in a
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in a
+          assert 'SD_COMPANY_SCENE_READY_FOR_PRIVATE_CI_ONLY' in p
+          assert 'can_apply_in_production = false' in p
+          for field in ('input_hit_test_guard_installed',
+                        'keyboard_focus_guard_installed',
+                        'popup_guard_installed',
+                        'teardown_guard_installed'):
+              assert field in h and field in p
+          assert 'stage_director_company_scene_prepare(' in stage
+          assert 'stage_director_company_scene_apply_ci_only(' not in stage
+          assert 'stage_director_company_scene_revoke(view)' in stage
+          assert 'stage_director_company_scene_revoke(NULL)' in select
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          print('SD_COMPANY_M32C_PRODUCTION_BACKEND '
+                'real_wlroots_ops=IMPLEMENTED normal_build_actuation=OFF '
+                'unmap_and_selection_revoke=WIRED approved_digest=UNPINNED PASS')
+          PY
+
+  isolated-native-scene-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build private CI-only SwayPX with the actual wlroots scene operations compiled
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32c-scene-private-ci"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$output/bin/sway"
+          test -x "$output/bin/swaymsg"
+          echo "SD_COMPANY_M32C_ISOLATED_SCENE_BACKEND "
+          echo "physical_wlroots_ops=COMPILED production_default=OFF "
+          echo "real_MapLibre_visual_verification=NOT_YET"
+
+  normal-compiled-swaypx-backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build default SwayPX with scene backend but no scene permission
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$out/bin/sway"
+          test -x "$out/bin/swaymsg"
+          echo "SD_COMPANY_M32C_NORMAL_SWAYPX_BUILD status=PASS "
+          echo "native_backend=COMPILED production_actuation=OFF no_user_install=1"
