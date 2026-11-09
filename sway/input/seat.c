@@ -1340,6 +1340,44 @@ void seat_set_focus_surface(struct sway_seat *seat,
 	seat_tablet_pads_set_focus(seat, surface);
 }
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* Before M32e scene admission, ordinary Sway may already have put the
+ * future Qt actor on a seat focus stack or sent it keyboard enter. The
+ * M32d focus guard only rejects NEW attempts. Inspect compositor-owned
+ * seats and revoke any preexisting actor focus now that the scene is
+ * admitted. Do not alter seats focused on unrelated views/layers. */
+void stage_director_company_m32g_clear_admitted_actor_keyboard_focus(
+        struct sway_view *actor) {
+	if (!actor || !actor->surface || !actor->container || !server.input)
+		return;
+	struct sway_seat *seat;
+	wl_list_for_each(seat, &server.input->seats, link) {
+		if (!seat->wlr_seat) continue;
+		struct sway_node *focus=seat_get_focus(seat);
+		const bool actor_node=focus && focus->type==N_CONTAINER &&
+			focus->sway_container==actor->container;
+		struct wlr_surface *keyboard=
+			seat->wlr_seat->keyboard_state.focused_surface;
+		const bool actor_surface=keyboard &&
+			wlr_surface_get_root_surface(keyboard)==actor->surface;
+		if (!actor_node && !actor_surface) continue;
+		if (actor_node) seat_set_focus(seat,NULL);
+		/* seat_set_focus(NULL) can restore a Company layer in an
+		 * exclusive-layer seat. Only clear the keyboard again if it
+		 * STILL points to our native Qt root after that operation. */
+		keyboard=seat->wlr_seat->keyboard_state.focused_surface;
+		if (keyboard &&
+				wlr_surface_get_root_surface(keyboard)==actor->surface)
+			seat_set_focus_surface(seat,NULL,false);
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32G][CI_ONLY] "
+			"admission_keyboard_focus_cleared=1 "
+			"actor_sway_focus=%d actor_wayland_focus=%d",
+			actor_node,actor_surface);
+	}
+}
+#endif
+
 void seat_set_focus_layer(struct sway_seat *seat,
 		struct wlr_layer_surface_v1 *layer) {
 	if (!layer && seat->focused_layer) {
