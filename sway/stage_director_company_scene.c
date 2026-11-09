@@ -142,12 +142,41 @@ bool stage_director_company_scene_apply_ci_only(
         return company_m32e_ci_refuse("scene-node-disabled-or-occupied");
 
     int scene_x=0,scene_y=0,content_x=0,content_y=0,parent_x=0,parent_y=0;
-    if (!wlr_scene_node_coords(node,&scene_x,&scene_y) ||
-            !wlr_scene_node_coords(&view->content_tree->node,
-                &content_x,&content_y) ||
-            !wlr_scene_node_coords(&root->layers.popup->node,
-                &parent_x,&parent_y))
+    const bool scene_ok=wlr_scene_node_coords(node,&scene_x,&scene_y);
+    const bool content_ok=wlr_scene_node_coords(
+        &view->content_tree->node,&content_x,&content_y);
+    const bool popup_ok=wlr_scene_node_coords(
+        &root->layers.popup->node,&parent_x,&parent_y);
+    if (!scene_ok || !content_ok || !popup_ok) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY][SCENE_COORDS] "
+            "scene_ok=%d content_ok=%d popup_ok=%d "
+            "node_enabled=%d content_enabled=%d popup_enabled=%d",
+            scene_ok, content_ok, popup_ok, node->enabled,
+            view->content_tree->node.enabled,
+            root->layers.popup->node.enabled);
+        /* Log compositor-owned ancestry only, never dereference a
+         * client-provided scene pointer or alter a parent to force a
+         * seemingly valid coordinate in this private test. */
+        struct wlr_scene_node *ancestors[3] = {
+            node, &view->content_tree->node, &root->layers.popup->node,
+        };
+        for (int k=0; k<3; ++k) {
+            struct wlr_scene_node *ancestor=ancestors[k];
+            for (int depth=0; ancestor && depth<9; ++depth) {
+                sway_log(SWAY_INFO,
+                    "[stage-director][COMPANY_M32E][CI_ONLY][TREE] "
+                    "which=%d depth=%d type=%d enabled=%d "
+                    "offset=%d,%d has_parent=%d",
+                    k, depth, (int)ancestor->type,
+                    ancestor->enabled, ancestor->x, ancestor->y,
+                    ancestor->parent != NULL);
+                ancestor=ancestor->parent ?
+                    &ancestor->parent->node : NULL;
+            }
+        }
         return company_m32e_ci_refuse("scene-coordinate-query");
+    }
     const int64_t x=(int64_t)plan.target_global.x -
         ((int64_t)content_x-scene_x)-parent_x;
     const int64_t y=(int64_t)plan.target_global.y -
