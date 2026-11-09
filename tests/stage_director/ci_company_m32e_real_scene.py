@@ -327,6 +327,67 @@ def main():
         print(f"SD_COMPANY_M32E_REAL_TEARDOWN restored_samples={restored} "
               "embedded_native_actor_hidden=PASS",flush=True)
 
+        # M32h: change the active Sway workspace while native MapLibre
+        # is still mapped in the original Company viewport. This is a real
+        # compositor output-arrangement transition, not a pure policy test.
+        workspaces=json.loads(call(str(swaymsg),"-s",ipc,
+                                   "-r","-t","get_workspaces"))
+        focused=[ws for ws in workspaces if ws.get("focused")]
+        if len(focused)!=1 or not focused[0].get("name"):
+            raise RuntimeError("M32H_ORIGINAL_WORKSPACE_NOT_UNIQUE")
+        original_workspace=focused[0]["name"]
+        second_map_log=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,second_map_log,35,actor)
+        time.sleep(.6)
+        compare_pixels(before,screenshot("before-workspace-loss"),rgb)
+        before_switch=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "workspace SD-CI-Company-Other"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32H_WORKSPACE_SWITCH_FAILED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32H][CI_ONLY] "
+            "native_workspace_deactivated=1 scene_revoke=PASS",
+            before_switch,20,actor)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32H_ACTOR_OR_COMPANY_EXITED_ON_SWITCH")
+        time.sleep(.5)
+        workspace_image=screenshot("inactive-workspace")
+        x,y,w,h=CANVAS
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(workspace_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32H_WORKSPACE_ACTOR_LEAK cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32H_WORKSPACE_LOSS "
+              f"real_workspace_switch=1 native_actor_alive=1 "
+              f"scene_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "workspace "+original_workspace))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32H_WORKSPACE_RETURN_FAILED "+str(reply))
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+        time.sleep(.4)
+
         # M32f host-loss scenario: start another real native MapLibre actor
         # after the first was normally closed, but now terminate Company
         # WHILE the independent Qt process is still alive. The compositor
