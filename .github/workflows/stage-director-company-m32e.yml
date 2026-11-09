@@ -74,6 +74,17 @@ jobs:
           assert 'company_scene_ci_args += \'-DSD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION=1\'' in meson
           assert 'company_m30_manifest_elf_sha256[] = ""' in digest
           assert 'stage_director_company_scene_apply_ci_only(' not in stage
+          assert 'stage_director_company_scene_m32f_host_lost(' in stage
+          assert 'native_company_host_lost=1 scene_revoke=PASS' in scene
+          assert 'ci_scene.host_layer_ref = current->host.native_layer_ref' in scene
+          assert 'ci_scene.host_layer_ref = 0' in scene
+          assert 'native_layer_ref != ci_scene.host_layer_ref' in scene
+          test=Path('tests/stage_director/ci_company_m32e_real_scene.py').read_text()
+          assert 'M32F_OUTSIDE_INPUT_LEAK' in test
+          assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
+          assert 'wait_new_marker(' in test
+          assert 'actor.poll() is not None' in test
+          assert 'company.terminate()' in test
           cursor=Path('sway/input/cursor.c').read_text()
           seatop=Path('sway/input/seatop_down.c').read_text()
           grab_header=Path('include/sway/stage_director_company_input.h').read_text()
