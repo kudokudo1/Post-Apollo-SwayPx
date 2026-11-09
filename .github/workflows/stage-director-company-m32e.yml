@@ -176,7 +176,21 @@ jobs:
           if data.count(old)!=1 or data.count(new):
               raise RuntimeError('M32E_QT_FIRST_MAP_SIZE_SOURCE_DRIFT')
           p.write_text(data.replace(old,new,1))
-          print('SD_COMPANY_M32E_NATIVE_FIRST_MAP exact_1493x788_copy=PASS')
+          # The pinned Qt app uses "PostApolloCompanyVectorProbe" as the
+          # application name, which did not match the exact CI floating rule.
+          # Set the disposable copy's Wayland desktop-file identity BEFORE
+          # QML creates its first native XDG surface. This is a diagnostic
+          # selector only, never ownership evidence or production authority.
+          cpp=p.with_name("main.cpp")
+          code=cpp.read_text()
+          anchor='    app.setApplicationName("PostApolloCompanyVectorProbe");'
+          if code.count(anchor)!=1 or 'setDesktopFileName(' in code:
+              raise RuntimeError('M32E_QT_APP_ID_SOURCE_DRIFT')
+          cpp.write_text(code.replace(anchor,anchor+
+              '\n    QGuiApplication::setDesktopFileName('+
+              'QStringLiteral("CompanyVectorProbe"));',1))
+          print('SD_COMPANY_M32E_NATIVE_FIRST_MAP exact_1493x788_copy=PASS '
+                'desktop_id=CI_ONLY_CompanyVectorProbe')
           PY
           app="$(nix build --impure --expr \
               'import ./legacy-m30s/tests/stage_director/ci_company_maplibre_native.nix {
