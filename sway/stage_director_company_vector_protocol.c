@@ -219,9 +219,10 @@ static void handle_report_viewport(struct wl_client *client,
 		int32_t mx, int32_t my, int32_t mw, int32_t mh) {
     /* Even an invalid current viewport report kills the previous
      * candidate; a stale/foreign reporter may not revoke a new owner. */
-    if (bound_is_current(client, resource))
+    if (bound_is_current(client, resource)) {
         stage_director_company_scene_lease_candidate_revoke(
             &native_lease_candidate);
+    }
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	struct stage_director_rect host = {0};
 	uint64_t revision = 0;
