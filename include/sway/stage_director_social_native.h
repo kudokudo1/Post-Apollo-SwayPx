@@ -13,8 +13,14 @@ struct sway_view;
  * identity, workspace and already-docked geometry. Never accept app_id alone.
  * This is a local desktop feature, NOT a cross-UID security privilege.
  */
+/* A native gesture temporarily gives the follower the same immediate
+ * presentation mode as its cursor-driven leader. The lease is generation-
+ * scoped and MUST be ended on release, cancel or view loss.
+ */
 bool stage_director_social_native_begin(struct sway_container *leader,
-		uint64_t *generation);
+		uint64_t *generation, bool resizing);
+void stage_director_social_native_end(struct sway_container *leader,
+		uint64_t generation);
 bool stage_director_social_native_move(struct sway_container *leader,
 		uint64_t generation);
 bool stage_director_social_native_resize(struct sway_container *leader,

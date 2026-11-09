@@ -28,6 +28,12 @@
  * Sway pointers, wl_clients, root surfaces, workspace, and a generation.
  * Destroy/unmap callbacks invalidate it BEFORE either pointer is freed.
  */
+enum social_gesture_kind {
+	SOCIAL_GESTURE_NONE,
+	SOCIAL_GESTURE_MOVE,
+	SOCIAL_GESTURE_RESIZE,
+};
+
 struct social_pair {
 	struct sway_container *host;
 	struct sway_container *guest;
@@ -41,9 +47,34 @@ struct social_pair {
 	uint64_t generation;
 	int rail;
 	int inset;
+	/* Gesture state is generation-scoped, not a permanent view property. */
+	struct sway_container *gesture_leader;
+	struct sway_container *gesture_follower;
+	enum social_gesture_kind gesture_kind;
 };
 static struct social_pair pair;
 static uint64_t last_generation;
+
+static void end_gesture(bool refresh_layout) {
+	struct sway_container *follower = pair.gesture_follower;
+	enum social_gesture_kind kind = pair.gesture_kind;
+	pair.gesture_leader = NULL;
+	pair.gesture_follower = NULL;
+	pair.gesture_kind = SOCIAL_GESTURE_NONE;
+	if (!follower || follower->node.destroying) return;
+	if (kind == SOCIAL_GESTURE_MOVE) {
+		follower->animation_state.seat_is_moving_float = false;
+	} else if (kind == SOCIAL_GESTURE_RESIZE) {
+		/* Unmapped XDG views must not receive another configure. */
+		if (!follower->view || !follower->view->surface ||
+				!view_is_visible(follower->view)) {
+			follower->animation_state.seat_is_resizing = false;
+		} else {
+			container_set_resizing(follower, false);
+			if (refresh_layout) arrange_container(follower);
+		}
+	}
+}
 
 static void revoke(const char *why) {
 	if (pair.generation) {
@@ -51,6 +82,8 @@ static void revoke(const char *why) {
 			"[stage-director][social-native] revoked generation=%" PRIu64
 			" reason=%s", pair.generation, why);
 	}
+	/* view_lost calls this before the native containers are freed. */
+	end_gesture(false);
 	memset(&pair, 0, sizeof(pair));
 }
 
@@ -231,7 +264,7 @@ struct cmd_results *cmd_stage_director_social(int argc, char **argv) {
 }
 
 bool stage_director_social_native_begin(struct sway_container *leader,
-		uint64_t *generation) {
+		uint64_t *generation, bool resizing) {
 	if (generation) *generation = 0;
 	if (!leader || !pair.generation ||
 			(leader != pair.host && leader != pair.guest))
@@ -240,8 +273,30 @@ bool stage_director_social_native_begin(struct sway_container *leader,
 		revoke("gesture-identity-lost");
 		return false;
 	}
+	/* Never let two seats claim the same follower at once. */
+	if (pair.gesture_follower) return false;
+	struct sway_container *follower =
+		leader == pair.host ? pair.guest : pair.host;
+	pair.gesture_leader = leader;
+	pair.gesture_follower = follower;
+	pair.gesture_kind = resizing ? SOCIAL_GESTURE_RESIZE : SOCIAL_GESTURE_MOVE;
+	if (resizing) {
+		/* Match the leader's interactive resize presentation and hint. */
+		container_set_resizing(follower, true);
+	} else {
+		/* Otherwise scene animation makes the same-transaction peer
+		 * appear to lag even though both pending boxes are correct. */
+		follower->animation_state.seat_is_moving_float = true;
+	}
 	if (generation) *generation = pair.generation;
 	return true;
+}
+
+void stage_director_social_native_end(struct sway_container *leader,
+		uint64_t generation) {
+	if (generation && generation == pair.generation &&
+			leader == pair.gesture_leader)
+		end_gesture(true);
 }
 
 void stage_director_social_native_guest_above(struct sway_container *leader,
@@ -254,7 +309,8 @@ void stage_director_social_native_guest_above(struct sway_container *leader,
 bool stage_director_social_native_move(struct sway_container *leader,
 		uint64_t generation) {
 	if (!generation || generation != pair.generation ||
-			(leader != pair.host && leader != pair.guest))
+			leader != pair.gesture_leader ||
+			pair.gesture_kind != SOCIAL_GESTURE_MOVE)
 		return false;
 	if (!identity_current()) {
 		revoke("move-identity-lost");
@@ -275,7 +331,8 @@ bool stage_director_social_native_move(struct sway_container *leader,
 bool stage_director_social_native_resize(struct sway_container *leader,
 		uint64_t generation) {
 	if (!generation || generation != pair.generation ||
-			(leader != pair.host && leader != pair.guest))
+			leader != pair.gesture_leader ||
+			pair.gesture_kind != SOCIAL_GESTURE_RESIZE)
 		return false;
 	if (!identity_current()) {
 		revoke("resize-identity-lost");
