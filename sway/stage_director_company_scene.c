@@ -2,11 +2,13 @@
 #include <stdint.h>
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_compositor.h>
 #include "sway/tree/root.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_scene.h"
+#include "sway/stage_director_company_input.h"
 
 /*
  * M32c // actual SwayPX/wlroots scene API backend.
@@ -23,6 +25,9 @@ static struct {
     struct wlr_scene_tree *original_parent;
     int original_x;
     int original_y;
+    bool visible;
+    uint64_t selection_epoch;
+    struct stage_director_rect viewport;
 } ci_scene;
 #endif
 
@@ -39,17 +44,19 @@ void stage_director_company_scene_revoke(struct sway_view *view) {
         struct wlr_scene_node *node =
             &actor->container->scene_tree->node;
         wlr_scene_node_set_enabled(node, false);
-        if (ci_scene.original_parent) {
-            wlr_scene_node_reparent(node, ci_scene.original_parent);
-            wlr_scene_node_set_position(node,
-                ci_scene.original_x, ci_scene.original_y);
-        }
+        /* One-way safety: after a selected-host loss the former parent
+         * may belong to an output being destroyed. Leave the actor hidden,
+         * rather than dereferencing a possibly stale original parent or
+         * exposing the MapLibre window as a floating desktop surface. */
         if (actor->content_tree && actor->surface) {
             view_center_and_clip_surface(actor);
         }
     }
     ci_scene.view = NULL;
     ci_scene.original_parent = NULL;
+    ci_scene.visible = false;
+    ci_scene.selection_epoch = 0;
+    ci_scene.viewport = (struct stage_director_rect){0};
 #else
     (void)view;
 #endif
@@ -141,6 +148,65 @@ bool stage_director_company_scene_apply_ci_only(
         &view->content_tree->node,&clip);
     wlr_scene_node_raise_to_top(node);
     wlr_scene_node_set_enabled(node,true);
+    ci_scene.viewport = plan.target_global;
+    ci_scene.selection_epoch = guard->selection_epoch;
+    ci_scene.visible = true;
     return true;
 #endif
+}
+
+/* M32d // real cursor, popup and focus hooks consult the scene owned by
+ * this compositor, not a client title/app-id. These do not enable the
+ * scene. When the test-only actor is absent all hooks pass through. */
+static struct stage_director_company_input_snapshot
+current_company_input_scene(void) {
+    struct stage_director_company_input_snapshot out = {0};
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+    if (ci_scene.visible && ci_scene.view && ci_scene.view->surface) {
+        out.scene_active = true;
+        out.selection_epoch = ci_scene.selection_epoch;
+        out.native_actor_view_ref = (uintptr_t)ci_scene.view;
+        out.native_actor_root_surface_ref =
+            (uintptr_t)ci_scene.view->surface;
+        out.map_global = ci_scene.viewport;
+    }
+#endif
+    return out;
+}
+
+bool stage_director_company_scene_reject_popup(struct sway_view *view) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    return stage_director_company_input_reject_popup(
+        &scene, (uintptr_t)view);
+}
+
+bool stage_director_company_scene_reject_keyboard_view(
+        struct sway_view *view) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    return view && scene.scene_active &&
+        scene.native_actor_view_ref == (uintptr_t)view;
+}
+
+bool stage_director_company_scene_reject_keyboard_surface(
+        struct wlr_surface *surface) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    struct wlr_surface *root_surface = surface ?
+        wlr_surface_get_root_surface(surface) : NULL;
+    return stage_director_company_input_reject_keyboard(
+        &scene, (uintptr_t)root_surface);
+}
+
+bool stage_director_company_scene_reject_pointer(
+        struct wlr_surface *hit_surface,
+        double global_x, double global_y, bool session_locked) {
+    const struct stage_director_company_input_snapshot scene =
+        current_company_input_scene();
+    struct wlr_surface *root_surface = hit_surface ?
+        wlr_surface_get_root_surface(hit_surface) : NULL;
+    return stage_director_company_input_pointer(
+        &scene, (uintptr_t)root_surface,
+        global_x, global_y, session_locked).deny_event;
 }
