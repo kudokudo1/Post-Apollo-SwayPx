@@ -216,12 +216,15 @@ bool stage_director_company_scene_reject_keyboard_surface(
 
 bool stage_director_company_scene_reject_pointer(
         struct wlr_surface *hit_surface,
+        struct wlr_surface *focused_surface,
         double global_x, double global_y, bool session_locked) {
     const struct stage_director_company_input_snapshot scene =
         current_company_input_scene();
-    struct wlr_surface *root_surface = hit_surface ?
+    struct wlr_surface *hit_root = hit_surface ?
         wlr_surface_get_root_surface(hit_surface) : NULL;
+    struct wlr_surface *focused_root = focused_surface ?
+        wlr_surface_get_root_surface(focused_surface) : NULL;
     return stage_director_company_input_pointer(
-        &scene, (uintptr_t)root_surface,
+        &scene, (uintptr_t)hit_root, (uintptr_t)focused_root,
         global_x, global_y, session_locked).deny_event;
 }
