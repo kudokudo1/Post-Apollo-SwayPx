@@ -25,6 +25,7 @@
 #include "sway/layers.h"
 #include "sway/stage_director_news_pairing.h"
 #include "sway/stage_director_company_pairing.h"
+#include "sway/stage_director_company_input.h"
 #include "sway/output.h"
 #include "sway/scene_descriptor.h"
 #include "sway/server.h"
@@ -319,7 +320,18 @@ void pointer_motion(struct sway_cursor *cursor, uint32_t time_msec,
 	}
 
 	wlr_cursor_move(cursor->cursor, device, dx, dy);
-
+	/* M32d: a masked Company MapLibre actor must never get motion
+	 * outside its live panel rect, or while the session is locked. */
+	struct wlr_surface *hit = NULL;
+	double hit_x = 0, hit_y = 0;
+	(void)node_at_coords(cursor->seat, cursor->cursor->x,
+		cursor->cursor->y, &hit, &hit_x, &hit_y);
+	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->cursor->x, cursor->cursor->y,
+			server.session_lock.lock != NULL)) {
+		wlr_seat_pointer_notify_clear_focus(cursor->seat->wlr_seat);
+		return;
+	}
 	seatop_pointer_motion(cursor->seat, time_msec);
 }
 
@@ -391,6 +403,14 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 	if (weather_paired || company_paired) {
 		return;
 	}
+	struct wlr_surface *hit = NULL;
+	double hit_x = 0, hit_y = 0;
+	(void)node_at_coords(cursor->seat,
+		cursor->cursor->x, cursor->cursor->y,
+		&hit, &hit_x, &hit_y);
+	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->cursor->x, cursor->cursor->y,
+			server.session_lock.lock != NULL)) return;
 	dispatch_cursor_button(cursor, &event->pointer->base,
 			event->time_msec, event->button, event->state);
 }
@@ -404,6 +424,13 @@ static void handle_pointer_axis(struct wl_listener *listener, void *data) {
 	struct sway_cursor *cursor = wl_container_of(listener, cursor, axis);
 	struct wlr_pointer_axis_event *event = data;
 	cursor_handle_activity_from_device(cursor, &event->pointer->base);
+	struct wlr_surface *hit = NULL;
+	double hit_x = 0, hit_y = 0;
+	(void)node_at_coords(cursor->seat, cursor->cursor->x,
+		cursor->cursor->y, &hit, &hit_x, &hit_y);
+	if (stage_director_company_scene_reject_pointer(hit,
+			cursor->cursor->x, cursor->cursor->y,
+			server.session_lock.lock != NULL)) return;
 	dispatch_cursor_axis(cursor, event);
 }
 
