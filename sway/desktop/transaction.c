@@ -11,6 +11,7 @@
 #include "sway/stage_director.h"
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
 #include "sway/stage_director_company_input.h"
+#include "sway/stage_director_company_scene.h"
 #endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include "sway/stage_director_ci_scene_probe.h"
