@@ -27,6 +27,11 @@ ShellRoot {
     id: proof
     CompanyNetworkW {
         id: company
+        // In the two-headless CI variant Quickshell otherwise defaults to
+        // HEADLESS-2 (confirmed by actual native Sway layer observation).
+        // Fix the disposable test host to the known first output. This is
+        // NOT a production screen override or client authority signal.
+        screen: Quickshell.screens.find(s => s.name === "HEADLESS-1")
         menuOpen: true
         coverageLoaded: true
         chassisLevel: "fullscreen"
