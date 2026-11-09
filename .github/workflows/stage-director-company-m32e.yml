@@ -94,6 +94,11 @@ jobs:
           assert 'SD_COMPANY_M32J_REVOKED_RETURN' in test
           assert 'M32J_REVOKED_FOCUS_REEXPOSED' in test
           assert 'SD_COMPANY_M32J_REVOKED_IPC_FOCUS' in test
+          assert 'M32K_VIRTUAL_OUTPUT_REVOKE_MISSING' in test
+          assert 'M32K_VIRTUAL_OUTPUT_STALE_ACTOR_EXPOSED' in test
+          assert 'SD_COMPANY_M32K_VIRTUAL_OUTPUT' in test
+          assert 'output "+output_name+" disable' in test
+          assert 'output "+output_name+" enable' in test
           assert 'revoked_native_keyboard_focus=DENIED' in scene
           assert 'ci_actor_reserve(view)' in scene
           assert 'ci_actor_quarantine(actor)' in scene
