@@ -17,6 +17,7 @@
 #include "sway/stage_director_company_executable.h"
 #include "sway/stage_director_company_digest.h"
 #include "sway/stage_director_company_vector_protocol.h"
+#include "sway/stage_director_company_actor_pair.h"
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -911,6 +912,40 @@ void stage_director_view_mapped(struct sway_view *view) {
 					"scene=OFF input=OFF",
 					stage_director_company_digest_status_name(digest.status),
 					digest.pinned_elf_hash_candidate ? "candidate" : "no");
+				/* M32b joins real native observations with the private
+				 * Company map rectangle. The Qt actor's current desktop
+				 * position is not assumed to match its future map target.
+				 * This creates NO scene/clip/focus/input authority and is
+				 * never cached as an actor lease. */
+				const struct stage_director_company_actor_pair_evidence
+					pair_evidence = {
+					.selected_native_company_host =
+						stage_director_company_vector_protocol_selected_client(
+							(struct wl_client *)native_host.native_client_ref),
+					.kernel_pidfd_actor_candidate = pidfd_candidate,
+					.host = native_host,
+					.actor = company,
+					.intent = intent,
+					.viewport = viewport,
+					.lineage = parentage,
+					.executable = executable_evidence,
+					.digest = digest,
+				};
+				const struct stage_director_company_actor_pair_result
+					pair = stage_director_company_actor_pair_probe(
+						&pair_evidence);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M32B][ACTOR_TARGET] "
+					"status=%s native_process=%s viewport=%s "
+					"global=%d,%d %dx%d digest=%s "
+					"lease=NONE scene=OFF input=OFF",
+					stage_director_company_actor_pair_status_name(
+						pair.status),
+					pair.native_process_candidate ? "candidate" : "no",
+					pair.target_geometry_candidate ? "candidate" : "no",
+					pair.viewport_global.x, pair.viewport_global.y,
+					pair.viewport_global.width, pair.viewport_global.height,
+					pair.exact_elf_digest_candidate ? "candidate" : "no");
 				sway_log(SWAY_DEBUG,
 					"[stage-director][COMPANY_M28B][PIDFD_ACTOR] "
 					"kernel_candidate=%s exact_executable=no "
