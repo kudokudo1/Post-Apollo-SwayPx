@@ -1280,6 +1280,10 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Revoke before the mapped Company's native scene node disappears. */
+	stage_director_company_scene_m32f_host_lost(surface);
+#endif
 	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {
@@ -1302,6 +1306,10 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Idempotent if the normal unmap callback already revoked. */
+	stage_director_company_scene_m32f_host_lost(surface);
+#endif
 	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {
