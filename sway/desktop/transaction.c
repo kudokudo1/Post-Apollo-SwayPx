@@ -1419,7 +1419,24 @@ static void transaction_commit(struct sway_transaction *transaction) {
 		}
 		if (!hidden && node_is_view(node) &&
 				!node->sway_container->view->saved_surface_tree) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+			/* The native Company map is already composited and clipped
+			 * above the Company layer. Sway's ordinary transaction buffer
+			 * snapshot disables its live content tree, making the raster
+			 * Company map reappear after the first click. Keep the live
+			 * native buffer and let the transaction finish normally. No
+			 * other view receives this exception or a scene lease. */
+			if (stage_director_company_scene_is_embedded_root(
+						node->sway_container->view->surface)) {
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+					"preserved_embedded_live_buffer=1");
+			} else {
+				view_save_buffer(node->sway_container->view);
+			}
+#else
 			view_save_buffer(node->sway_container->view);
+#endif
 		}
 		node->instruction = instruction;
 	}
