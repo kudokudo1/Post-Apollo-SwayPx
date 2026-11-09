@@ -1020,7 +1020,23 @@ static void arrange_workspace_floating(struct sway_workspace *ws) {
 			}
 		}
 
-		wlr_scene_node_reparent(&floater->scene_tree->node, layer);
+		/* M32e: an admitted Company native Qt container belongs to the
+		 * compositor's clipped popup scene, not Sway's workspace floating
+		 * layer. A focus transaction must not reparent it back behind
+		 * Company, or subsequent pointer hits and wheel events disappear. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		if (!floater->view ||
+				!stage_director_company_scene_is_embedded_root(
+					floater->view->surface)) {
+#endif
+			wlr_scene_node_reparent(&floater->scene_tree->node, layer);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		} else {
+			sway_log(SWAY_INFO,
+				"[stage-director][COMPANY_M32E][CI_ONLY][LAYOUT] "
+				"preserved_embedded_container_parent=1");
+		}
+#endif
 		wlr_scene_node_set_enabled(&floater->scene_tree->node, true);
 		wlr_scene_node_set_enabled(&floater->shadow->node, container_has_shadow(floater) && floater->view);
 		wlr_scene_node_set_enabled(&floater->border.tree->node, true);
