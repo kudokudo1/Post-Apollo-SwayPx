@@ -1150,9 +1150,14 @@ static void arrange_output(struct sway_output *output, int width, int height) {
 				stage_director_company_scene_is_embedded_root(
 					floater->view->surface);
 			if (embedded && !activated) {
+				/* Exact compositor-observed active-output/workspace loss;
+				 * revoke before normal Sway can reparent or expose the actor. */
 				stage_director_company_scene_revoke(floater->view);
 				wlr_scene_node_set_enabled(
 					&floater->scene_tree->node,false);
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32H][CI_ONLY] "
+					"native_workspace_deactivated=1 scene_revoke=PASS");
 				continue;
 			}
 			if (!embedded) {
