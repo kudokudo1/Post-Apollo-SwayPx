@@ -218,6 +218,13 @@ def main():
             if observed!="SD_CI_COMPANY_POINTER_ACK "+action:
                 raise RuntimeError("M32E_POINTER_ACK_INVALID "+observed)
             time.sleep(.15)
+        # Clicking and dragging can trigger a Sway focus/arrange
+        # transaction. Require the native map to remain in the same
+        # original Company map slot afterward, not only before input.
+        after_drag=screenshot("after-native-drag")
+        compare_pixels(before,after_drag,rgb)
+        print("SD_COMPANY_M32E_POST_DRAG_SCENE "
+              "native_map_still_in_company_canvas=PASS",flush=True)
         diff=qt_log.read_text(errors="replace")[len(initial):]
         receipts=[m.group(2) for line in diff.splitlines()
                   if (m:=EVENT.search(line))]
