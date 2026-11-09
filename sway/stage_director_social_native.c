@@ -6,6 +6,7 @@
 #include <string.h>
 #include <wayland-server-core.h>
 #include <scenefx/types/wlr_scene.h>
+#include <wlr/types/wlr_buffer.h>
 
 #include "log.h"
 #include "sway/commands.h"
@@ -121,8 +122,14 @@ static void guest_backstop_surface_commit(struct wl_listener *listener,
 static void capture_guest_backstop_buffer(struct wlr_scene_buffer *source,
 		int x, int y, void *data) {
 	bool *failed = data;
-	if (*failed || !source->buffer ||
-			!source->dst_width || !source->dst_height) return;
+	if (*failed || !source->buffer) return;
+	/* A zero scene destination size means use the buffer's natural size.
+	 * Never skip valid XDG scene surfaces for that common case. */
+	int source_width = source->dst_width > 0 ?
+		source->dst_width : source->buffer->width;
+	int source_height = source->dst_height > 0 ?
+		source->dst_height : source->buffer->height;
+	if (source_width <= 0 || source_height <= 0) return;
 	struct social_backstop_buffer *item = calloc(1, sizeof(*item));
 	if (!item) {
 		*failed = true;
@@ -137,7 +144,7 @@ static void capture_guest_backstop_buffer(struct wlr_scene_buffer *source,
 	}
 	/* Mirror Sway's transaction saved-surface snapshot without disabling the
 	 * live content. Copy only existing compositor-owned render buffers. */
-	wlr_scene_buffer_set_dest_size(copy, source->dst_width, source->dst_height);
+	wlr_scene_buffer_set_dest_size(copy, source_width, source_height);
 	wlr_scene_buffer_set_opaque_region(copy, &source->opaque_region);
 	wlr_scene_buffer_set_opacity(copy, source->opacity);
 	wlr_scene_buffer_set_filter_mode(copy, source->filter_mode);
@@ -152,8 +159,8 @@ static void capture_guest_backstop_buffer(struct wlr_scene_buffer *source,
 	item->scene_buffer = copy;
 	item->x = x;
 	item->y = y;
-	item->width = source->dst_width;
-	item->height = source->dst_height;
+	item->width = source_width;
+	item->height = source_height;
 	item->next = pair.guest_backstop_buffers;
 	pair.guest_backstop_buffers = item;
 }
