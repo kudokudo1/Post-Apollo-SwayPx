@@ -1,0 +1,99 @@
+name: Stage Director Company M32b native actor viewport pairing (production source, no scene)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_actor_pair.h'
+      - 'sway/stage_director_company_actor_pair.c'
+      - 'sway/stage_director.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_actor_pair_m32b.c'
+      - '.github/workflows/stage-director-company-m32b.yml'
+      - 'docs/stage-director-company-m32b-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-production-pairing-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and execute native actor/viewport pairing source (not mock implementation)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_wire_policy.c \
+            sway/stage_director_company_actor_pair.c \
+            tests/stage_director/test_company_actor_pair_m32b.c \
+            -o "$RUNNER_TEMP/test_company_actor_pair_m32b"
+          "$RUNNER_TEMP/test_company_actor_pair_m32b"
+      - name: Assert live compositor observation, strict ELF gate and zero authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          h=Path('include/sway/stage_director_company_actor_pair.h').read_text()
+          impl=Path('sway/stage_director_company_actor_pair.c').read_text()
+          stage=Path('sway/stage_director.c').read_text()
+          meson=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          protocol=Path('sway/stage_director_company_vector_protocol.c').read_text()
+          assert "'stage_director_company_actor_pair.c'" in meson
+          for name in ("stage_director_company_actor_pair_probe(",
+                       "COMPANY_M32B", "pair_evidence =",
+                       "stage_director_company_vector_protocol_selected_client(",
+                       "stage_director_company_vector_protocol_viewport_snapshot(",
+                       "stage_director_company_vector_protocol_birth_actor_candidate(",
+                       "stage_director_company_vector_protocol_digest_evidence("):
+              assert name in stage,name
+          for name in ("SD_COMPANY_PAIR_PROCESS_NOT_PROVEN",
+                       "SD_COMPANY_PAIR_DIGEST_UNPINNED",
+                       "SD_COMPANY_PAIR_EXACT_ELF_CANDIDATE_ONLY",
+                       "kernel_pidfd_actor_candidate",
+                       "stage_director_company_wire_check("):
+              assert name in impl,name
+          for name in ("bool can_position;", "bool can_render;",
+                       "bool can_accept_input;", "bool can_clip;"):
+              assert name in h,name
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          assert "stage_director_company_viewport_state_record(" in protocol
+          for forbidden in ("wlr_scene_node_set_", "wlr_scene_node_reparent(",
+                            "wlr_seat_", "swaymsg", "posix_spawn(",
+                            "execve(", "fork(", "owner_verified = true"):
+              assert forbidden not in impl,forbidden
+          assert "scene=OFF input=OFF" in stage
+          print("SD_COMPANY_M32B_PRODUCTION_SOURCE "
+                "native_kernel_actor_linked=1 viewport_target=1 "
+                "digest_unpinned=1 scene=OFF input=OFF PASS")
+          PY
+
+  normal-swaypx-with-actor-pair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build regular SwayPX with real native actor target implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          built="$(nix build .#swayfx-unwrapped-git \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$built/bin/sway"
+          echo "SD_COMPANY_M32B_NORMAL_SWAYPX_BUILD binary=$built/bin/sway "
+          echo "status=PASS no_user_host_install=1 production_scene=OFF"
