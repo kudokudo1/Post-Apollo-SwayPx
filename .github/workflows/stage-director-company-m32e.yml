@@ -281,7 +281,11 @@ jobs:
                       [poll, window, trigger]() {
                           if (!QFileInfo::exists(trigger)) return;
                           poll->stop();
-                          auto *popup = new QQuickWindow(window);
+                          /* Parent-child QWindows may become wl_subsurface.
+                           * Require xdg_popup: an independent Qt::Popup
+                           * with explicit transient parent is not a child. */
+                          auto *popup = new QQuickWindow();
+                          popup->setTransientParent(window);
                           popup->setFlags(Qt::Popup);
                           popup->setWidth(160);
                           popup->setHeight(110);
