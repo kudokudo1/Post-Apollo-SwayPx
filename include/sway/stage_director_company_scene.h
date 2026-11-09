@@ -88,6 +88,11 @@ struct stage_director_company_native_host;
 bool stage_director_company_scene_apply_m32e_fixture_only(
     struct sway_view *view,
     const struct stage_director_company_native_host *observed_host);
+/* M32f: host-loss event is compositor-owned layer lifecycle, not a QML
+ * message or synthetic app ID. The private scene retains native layer ref. */
+struct sway_layer_surface;
+void stage_director_company_scene_m32f_host_lost(
+    struct sway_layer_surface *lost_layer);
 #endif
 
 #endif
