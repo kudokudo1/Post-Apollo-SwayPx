@@ -59,6 +59,7 @@ struct stage_director_company_scene_lease_conditions {
 };
 
 struct stage_director_company_scene_lease_candidate {
+    bool initialized; /* Init once; cannot reset replay floor by reinit. */
     enum stage_director_company_scene_lease_candidate_state state;
     uint64_t last_epoch; /* Persistent high-water mark across revocations. */
     uint64_t reserved_at_ns;
