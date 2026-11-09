@@ -408,6 +408,13 @@ static void handle_new_popup(struct wl_listener *listener, void *data) {
 		wl_container_of(listener, xdg_shell_view, new_popup);
 	struct wlr_xdg_popup *wlr_popup = data;
 	if (stage_director_company_scene_reject_popup(&xdg_shell_view->view)) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* This real native XDG event belongs to the exact mapped Qt view,
+		 * not an app-id or synthetic popup claim. No popup scene is created. */
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32I][CI_ONLY] "
+			"real_native_xdg_popup=DENIED embedded_root=1");
+#endif
 		wlr_xdg_popup_destroy(wlr_popup);
 		return;
 	}
