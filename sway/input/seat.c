@@ -37,6 +37,7 @@
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include <wlr/util/log.h>
 #include "sway/stage_director_ci_scene_probe.h"
+#include "sway/stage_director_company_input.h"
 #endif
 #include "sway/tree/workspace.h"
 
@@ -1133,6 +1134,13 @@ void seat_set_raw_focus(struct sway_seat *seat, struct sway_node *node) {
 }
 
 static void seat_set_workspace_focus(struct sway_seat *seat, struct sway_node *node) {
+	/* M32d: embedded native MapLibre receives pointer events only. Never
+	 * let ordinary workspace, IPC criteria or initial XDG focus switch
+	 * the keyboard away from the Company layer into its captive actor. */
+	if (node && node->type == N_CONTAINER &&
+			node->sway_container && node->sway_container->view &&
+			stage_director_company_scene_reject_keyboard_view(
+				node->sway_container->view)) return;
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Must run before unfocus, focus stack mutation or keyboard enter.
 	 * This also blocks IPC criteria [con_id=...] focus, not only
@@ -1296,6 +1304,10 @@ void seat_set_focus_workspace(struct sway_seat *seat,
 
 void seat_set_focus_surface(struct sway_seat *seat,
 		struct wlr_surface *surface, bool unfocus) {
+	/* Refuse direct or subsurface focus before modifying the old
+	 * keyboard focus, input-method relay or tablet-pad association. */
+	if (stage_director_company_scene_reject_keyboard_surface(surface))
+		return;
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Independent direct-root-surface entry, still before prior unfocus.
 	 * Subsurfaces need a separate parent-chain ownership test. */
