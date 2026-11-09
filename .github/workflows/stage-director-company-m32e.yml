@@ -85,6 +85,9 @@ jobs:
           assert 'M32F_OUTSIDE_INPUT_LEAK' in test
           assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
           assert 'M32G_NATIVE_KEYBOARD_FOCUS_LEAK' in test
+          assert 'M32H_WORKSPACE_ACTOR_LEAK' in test
+          assert 'M32H_WORKSPACE_RETURN_FAILED' in test
+          assert 'native_workspace_deactivated=1 scene_revoke=PASS' in transaction
           assert 'real_IPC_focus_attempt=1' in test
           seat=Path('sway/input/seat.c').read_text()
           assert 'native_ipc_keyboard_focus=DENIED actor_embedded=1' in seat
