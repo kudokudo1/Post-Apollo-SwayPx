@@ -3,6 +3,8 @@
 #include <scenefx/types/fx/blur_data.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wayland-util.h>
 #include "sway/tree/root.h"
 #include "sway/tree/container.h"
 #include "sway/tree/view.h"
@@ -77,7 +79,15 @@ bool stage_director_company_scene_apply_ci_only(
     if (!view || !view->surface || !view->content_tree ||
             !view->container || view->container->node.destroying ||
             !view->container->scene_tree || !current ||
-            !root || !root->layers.popup) return false;
+            !root || !root->layers.popup ||
+            !view->wlr_xdg_toplevel || !view->wlr_xdg_toplevel->base)
+        return false;
+    /* Popups created BEFORE scene admission would already be independent
+     * unmasked trees. Refuse the actor if its native XDG root has ANY
+     * existing popup descendants. New top-level/nested popups are denied
+     * by the M32d XDG hook once the actor is embedded. */
+    if (!wl_list_empty(&view->wlr_xdg_toplevel->base->popups))
+        return false;
 
     /* Do not use a client-supplied view/ID, desktop title or app-id.
      * Re-observe the actual mapped native XDG root and match every field
