@@ -58,7 +58,8 @@ jobs:
           assert 'stage_director_company_scene_is_embedded_root(' in transaction
           assert 'stage_director_company_m32e_geometry_committed(view);' in Path('sway/desktop/xdg_shell.c').read_text()
           assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in Path('sway/desktop/xdg_shell.c').read_text()
-          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n/*\n * M32e' in scene
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n/* M32f:' in scene
+          assert 'M32e // positive native-scene probe' in scene
           for needed in ('getenv("CI")','getenv("GITHUB_ACTIONS")',
                          'getenv("STAGE_DIRECTOR_CI_COMPANY_M32E")',
                          'getenv("RUNNER_TEMP")',
@@ -78,7 +79,7 @@ jobs:
           assert 'native_company_host_lost=1 scene_revoke=PASS' in scene
           assert 'ci_scene.host_layer_ref = current->host.native_layer_ref' in scene
           assert 'ci_scene.host_layer_ref = 0' in scene
-          assert 'native_layer_ref != ci_scene.host_layer_ref' in scene
+          assert '(uintptr_t)lost_layer != ci_scene.host_layer_ref' in scene
           test=Path('tests/stage_director/ci_company_m32e_real_scene.py').read_text()
           assert 'M32F_OUTSIDE_INPUT_LEAK' in test
           assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
