@@ -347,6 +347,12 @@ void seatop_rebase(struct sway_seat *seat, uint32_t time_msec);
 void seatop_end(struct sway_seat *seat);
 
 #ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32g: remove any Qt focus obtained before the private compositor scene
+ * admitted this real actor. Never grant a new focus or modify other seats. */
+struct sway_view;
+void stage_director_company_m32g_clear_admitted_actor_keyboard_focus(
+    struct sway_view *actor);
+
 /* M32e private runtime proof: the *active* Sway button-down operation must
  * have captured this exact native XDG root. Pointer focus alone is not proof
  * that a drag originated on the embedded Company actor. */
