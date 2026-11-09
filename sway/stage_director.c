@@ -849,6 +849,25 @@ void stage_director_view_mapped(struct sway_view *view) {
 					stage_director_company_vector_protocol_intent_snapshot(
 						(struct wl_client *)native_host.native_client_ref,
 						&intent);
+				/* M32a: consume the *real* Company Wayland viewport report,
+				 * not a fixed M30o test rectangle or an XDG title. Geometry
+				 * is retained in the private selected-client binding and must
+				 * be revalidated on every future scene/input operation. Here
+				 * we only observe it; digest and actor custody remain denied. */
+				struct stage_director_company_viewport_snapshot viewport = {0};
+				const bool has_viewport =
+					stage_director_company_vector_protocol_viewport_snapshot(
+						(struct wl_client *)native_host.native_client_ref,
+						&viewport);
+				sway_log(SWAY_DEBUG,
+					"[stage-director][COMPANY_M32A][VIEWPORT] "
+					"reported=%s epoch=%" PRIu64 " host_revision=%" PRIu64 " "
+					"rect_in_host=%d,%d %dx%d candidate_only=yes "
+					"scene=OFF input=OFF",
+					has_viewport ? "yes" : "no",
+					viewport.selection_epoch, viewport.host_revision,
+					viewport.map_in_host.x, viewport.map_in_host.y,
+					viewport.map_in_host.width, viewport.map_in_host.height);
 				const long hz = sysconf(_SC_CLK_TCK);
 				const struct stage_director_company_origin_result origin =
 					stage_director_company_origin_check(
