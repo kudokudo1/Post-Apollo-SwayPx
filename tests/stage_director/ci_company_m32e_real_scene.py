@@ -519,6 +519,103 @@ def main():
         actor.terminate()
         actor.wait(timeout=10)
         actor=None
+
+        # M32k: CI-only virtual OUTPUT disable/enable, not a claim that
+        # an actual Fedora/DRM monitor was physically unplugged.
+        # Relaunch a real Company host, then another native MapLibre actor
+        # and revoke while BOTH processes remain alive. On restoration
+        # the same revoked actor must not leak as an ordinary floating Qt
+        # window or be re-admitted by a new MapLibre frame.
+        qml_start=len(company_log.read_text(errors="replace"))
+        with company_log.open("a") as log:
+            company=subprocess.Popen(
+                [str(qs),"--no-color","-p",str(shell)],
+                env=qsenv,stdout=log,stderr=subprocess.STDOUT)
+        wait_new_marker(company_log,QML_MARKER,qml_start,35,company)
+        scene_start=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,scene_start,35,actor)
+        time.sleep(.6)
+        compare_pixels(before,screenshot("before-virtual-output-disable"),rgb)
+        outputs=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+        active_outputs=[v for v in outputs if v.get("active") is True]
+        if len(active_outputs)!=1 or not str(
+                active_outputs[0].get("name","")).startswith("HEADLESS-"):
+            raise RuntimeError("M32K_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
+        output_name=active_outputs[0]["name"]
+        disable_start=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "output "+output_name+" disable"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_DISABLE_FAILED "+str(reply))
+        deactivate_receipt=None
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            new=sway_log.read_text(errors="replace")[disable_start:]
+            if ("native_workspace_deactivated=1 scene_revoke=PASS" in new):
+                deactivate_receipt="workspace"
+                break
+            if ("native_company_host_lost=1 scene_revoke=PASS" in new):
+                deactivate_receipt="host-unmap"
+                break
+            if actor.poll() is not None or company.poll() is not None:
+                raise RuntimeError("M32K_NATIVE_PROCESS_EXITED_ON_DISABLE")
+            time.sleep(.15)
+        if not deactivate_receipt:
+            raise RuntimeError("M32K_VIRTUAL_OUTPUT_REVOKE_MISSING")
+        outputs=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+        if any(v.get("name")==output_name and v.get("active") is True
+               for v in outputs):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_STILL_ACTIVE")
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32K_PROCESS_DIED_WITH_OUTPUT")
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "output "+output_name+" enable"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_ENABLE_FAILED "+str(reply))
+        for _ in range(65):
+            outputs=json.loads(call(str(swaymsg),"-s",ipc,
+                                    "-r","-t","get_outputs"))
+            if any(v.get("name")==output_name and v.get("active") is True
+                   for v in outputs):
+                break
+            time.sleep(.15)
+        else:
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_NOT_RESTORED")
+        time.sleep(.7)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32K_PROCESS_DIED_AFTER_OUTPUT_RESTORE")
+        restored_output=screenshot("after-virtual-output-restore")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(restored_output,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32K_VIRTUAL_OUTPUT_STALE_ACTOR_EXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32K_VIRTUAL_OUTPUT "
+              f"real_headless_output_disable=1 revoked_via={deactivate_receipt} "
+              f"re_enabled=1 actor_alive=1 company_alive=1 "
+              f"native_pixels_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+        company.terminate()
+        company.wait(timeout=10)
+        company=None
     finally:
         if pointer is not None:
             if pointer.stdin:
