@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
-#include <wlr/types/wlr_scene.h>
+#include <scenefx/types/wlr_scene.h>
 
 #include "log.h"
 #include "sway/commands.h"
