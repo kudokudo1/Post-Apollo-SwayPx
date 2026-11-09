@@ -1,0 +1,122 @@
+name: Stage Director M31b SceneFX GL unpack row-layout review matrix (CI only)
+
+on:
+  pull_request:
+    branches:
+      - stage-director/company-m31a-pinned-scenefx-alignment-ci-20261108
+    paths:
+      - 'tests/stage_director/ci_company_m31b_gles_pixelstore_matrix.c'
+      - 'tests/stage_director/ci_company_m31b_gles_pixelstore_matrix.nix'
+      - '.github/workflows/stage-director-company-m31b.yml'
+      - 'docs/stage-director-company-m31b-20261108.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review-scope-and-row-stride-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify only CI source & proposal, pin, and production defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json
+          from pathlib import Path
+          lock=json.loads(Path("flake.lock").read_text())
+          assert lock["nodes"]["scenefx"]["locked"]["rev"] == (
+              "26200c5d9fa947a1d3b0935d3f9237229cd3e5ba")
+          test=Path("tests/stage_director/ci_company_m31b_gles_pixelstore_matrix.c").read_text()
+          nix=Path("tests/stage_director/ci_company_m31b_gles_pixelstore_matrix.nix").read_text()
+          proposal=Path("docs/stage-director-company-m31b-20261108.md").read_text()
+          production=Path("sway/stage_director.c").read_text()
+          assert "GL_UNPACK_ALIGNMENT" not in production
+          assert "M31B" not in production
+          for flag in ("GL_UNPACK_ROW_LENGTH","GL_UNPACK_SKIP_PIXELS",
+                       "GL_UNPACK_SKIP_ROWS","glTexImage2D","glTexSubImage2D",
+                       "refuse_blind_alignment_one_for_rgb888_padded",
+                       "invalid_stride_contract","RGBA4444","RGBA5551",
+                       "RGB565","RGB888","RGBA8888"):
+              assert flag in test,flag
+          assert "try_plan" in test and "return cases_passed==90" in test
+          assert "libGL" in nix and "mesa" in nix and "dontUnpack = true" in nix
+          for clause in ("UNMERGED", "UPSTREAM OWNER", "UNREPRESENTABLE",
+                         "PRODUCTION AUTHORITY // NONE"):
+              assert clause in proposal,clause
+          print("SD_COMPANY_M31B_SOURCE_GATE five_formats=1 "
+                "three_stride_modes=1 original_SceneFX_pin=1 "
+                "production_SwayPX=UNMODIFIED PASS")
+          PY
+
+  real-pinned-mesa-gles-pixelstore-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build isolated GLES3 texture upload matrix using pinned Nixpkgs
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(nix build --impure --expr \
+            'import ./tests/stage_director/ci_company_m31b_gles_pixelstore_matrix.nix' \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$matrix/bin/company-m31b-gles-pixelstore-matrix"
+          echo "M31B_MATRIX_BINARY=$matrix/bin/company-m31b-gles-pixelstore-matrix" >> "$GITHUB_ENV"
+      - name: Run real EGL/GLES3 surface, pixel reads and update rectangles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr \
+            'let f = builtins.getFlake (toString ./.); \
+             in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          export __EGL_VENDOR_LIBRARY_FILENAMES="$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          export LIBGL_DRIVERS_PATH="$mesa/lib/dri"
+          export LD_LIBRARY_PATH="$mesa/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export EGL_PLATFORM=surfaceless
+          export LIBGL_ALWAYS_SOFTWARE=1
+          "$M31B_MATRIX_BINARY" | tee "$RUNNER_TEMP/sd-company-m31b-real-gles-matrix.txt"
+          grep -Fq 'create_update_cases=90 native_GLES3=1' \
+            "$RUNNER_TEMP/sd-company-m31b-real-gles-matrix.txt"
+          grep -Fq 'M31B_BLIND_ALIGNMENT_ONE_NEGATIVE' \
+            "$RUNNER_TEMP/sd-company-m31b-real-gles-matrix.txt"
+          grep -Fq 'negative_controls=5 nonrepresentable_stride=REFUSED' \
+            "$RUNNER_TEMP/sd-company-m31b-real-gles-matrix.txt"
+      - name: Retain actual GLES/Mesa matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m31b-real-gles-row-stride-matrix
+          if-no-files-found: warn
+          retention-days: 7
+          path: ${{ runner.temp }}/sd-company-m31b-real-gles-matrix.txt
+      - name: Report review-only evidence boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## M31b review-only GLES row stride matrix'
+            echo 'Separate pinned Mesa GLES3 runtime. No production SceneFX.'
+            echo 'Formats: RGB565 RGBA4444 RGBA5551 RGB888 RGBA8888.'
+            echo 'Widths: 3 4 5 7 8 13.'
+            echo 'Strides: tight, whole-pixel-padded, and 4-byte-aligned.'
+            echo 'Both initial glTexImage2D and glTexSubImage2D with skip rects.'
+            echo 'GL previous unpack alignment must be restored after each.'
+            echo 'Reject strides not representable by row length and alignment.'
+            echo 'Negative controls include blind alignment=1 on RGB888 padded rows.'
+            echo 'No upstream patch, production actuation, or user hardware test.'
+          } >> "$GITHUB_STEP_SUMMARY"
