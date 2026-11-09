@@ -314,7 +314,9 @@ jobs:
                }' \
               --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
           test -x "$app/bin/company-vector-probe"
-          grep -aFq 'SD_COMPANY_M32I_QT_HOOK_BOOT' "$app/bin/company-vector-probe"
+          # qtWrapperHook installs a launcher shell script, not the ELF.
+          test -x "$app/bin/.company-vector-probe-wrapped"
+          grep -aFq 'SD_COMPANY_M32I_QT_HOOK_BOOT' "$app/bin/.company-vector-probe-wrapped"
           export STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE="$app/bin/company-vector-probe"
           qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
           if test -x "$qs/bin/quickshell"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/quickshell"
