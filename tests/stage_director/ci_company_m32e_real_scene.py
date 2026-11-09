@@ -201,7 +201,10 @@ def main():
                      "LIBGL_ALWAYS_SOFTWARE":"1",
                      "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
                      "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
-                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M32I_POPUP_TRIGGER":
+                         str(runtime/"sd-company-m32i-popup-trigger")})
         wait_file(sway_log,MARKER,35,actor)
         wait_file(qt_log,"SD_COMPANY_M30L_MAP_READY real_maplibre=1",35,actor)
         wait_file(qt_log,"SD_COMPANY_M30L_FRAME_SWAPPED count=",15,actor)
@@ -282,6 +285,32 @@ def main():
             raise RuntimeError("M32E_ACTUAL_MAP_INPUT_MISSING "+str(receipts))
         print("SD_COMPANY_M32E_REAL_INPUT actual_qt_press_drag_release_wheel=PASS",
               flush=True)
+
+        # M32i: request an actual Qt::Popup from the already admitted
+        # native XDG root. This is a new real Wayland protocol attempt,
+        # and the compositor must deny it before creating its popup scene.
+        popup_trigger=runtime/"sd-company-m32i-popup-trigger"
+        qt_before=len(qt_log.read_text(errors="replace"))
+        sway_before=len(sway_log.read_text(errors="replace"))
+        popup_trigger.write_text("create-one-real-Qt-Popup\n",encoding="utf-8")
+        wait_new_marker(
+            qt_log,
+            "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1",
+            qt_before,15,actor)
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32I][CI_ONLY] "
+            "real_native_xdg_popup=DENIED embedded_root=1",
+            sway_before,15,actor)
+        time.sleep(.5)
+        if actor.poll() is not None:
+            raise RuntimeError("M32I_NATIVE_QT_DIED_AFTER_POPUP_DENIAL")
+        after_popup=screenshot("after-rejected-native-popup")
+        compare_pixels(before,after_popup,rgb)
+        print("SD_COMPANY_M32I_NATIVE_POPUP "
+              "real_Qt_Popup_request=1 compositor_xdg_reject=1 "
+              "actor_alive=1 map_stable=1 PASS",flush=True)
+        popup_trigger.unlink(missing_ok=True)
 
         # Negative input boundary: a press entirely outside the current
         # map must not reach the native Qt actor even after a valid drag
