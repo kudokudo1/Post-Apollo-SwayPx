@@ -145,6 +145,9 @@ jobs:
         env:
           STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
           STAGE_DIRECTOR_CI_COMPANY_M32E_REAL: '1'
+          # Required by the reviewed M30h Wayland virtual-pointer binary.
+          # This is scoped to the disposable positive native CI job only.
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
           STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
           STAGE_DIRECTOR_CI_COMPANY_M30R: '1'
           STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
