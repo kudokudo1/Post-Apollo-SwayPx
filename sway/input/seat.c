@@ -37,8 +37,8 @@
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 #include <wlr/util/log.h>
 #include "sway/stage_director_ci_scene_probe.h"
-#include "sway/stage_director_company_input.h"
 #endif
+#include "sway/stage_director_company_input.h"
 #include "sway/tree/workspace.h"
 
 static void seat_device_destroy(struct sway_seat_device *seat_device) {
