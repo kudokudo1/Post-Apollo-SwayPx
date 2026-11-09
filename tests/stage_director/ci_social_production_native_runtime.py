@@ -35,7 +35,7 @@ def command(swaymsg,ipc,env,action,success=True):
     return passed
 
 
-def gesture(swaymsg,ipc,env,leader_id,leader_app,proc,kind,dx,dy):
+def gesture(swaymsg,ipc,env,leader_id,leader_app,proc,kind,dx,dy,during=None):
     c=f'[con_id="{leader_id}"]'
     command(swaymsg,ipc,env,f"{c} focus")
     node=b.select(b.read_tree(swaymsg,ipc,env),leader_app,proc.pid)
@@ -48,6 +48,8 @@ def gesture(swaymsg,ipc,env,leader_id,leader_app,proc,kind,dx,dy):
     command(swaymsg,ipc,env,"seat - cursor ci-social-start-"+kind+" 1")
     try:
         command(swaymsg,ipc,env,f"seat - cursor ci-social-step {dx} {dy}")
+        if during is not None:
+            during()  # Assert actual pixels while the pointer is still held.
     finally:
         command(swaymsg,ipc,env,"seat - cursor ci-social-end 1")
 
@@ -139,10 +141,28 @@ def main():
         print("SD_SOCIAL_PRODUCTION_NATIVE_PAIR accepted=1 "
               "exact_mapped_XDG=1 distinct_clients=1",flush=True)
 
-        # Move HOST through the REAL production seatop, not two IPC moves.
-        gesture(swaymsg,ipc,env,hc,host_id,host,"start-move" if False else "move",35,20)
-        outer=(outer[0]+35,outer[1]+20,*outer[2:])
-        slot=b.guest_from_chassis(outer)
+        # The previous test only sampled the FINAL settled frame, which
+        # cannot distinguish a trailing follower animation from native motion.
+        # Deliberately enable slow scene animations, then inspect the new-only
+        # leading-edge pixels with the button still down. Both pair members
+        # must render at their shared committed geometry during the gesture.
+        command(swaymsg,ipc,env,"animation_duration_ms 3000")
+        old_guest_right=slot[0]+slot[2]
+        moved_outer=(outer[0]+160,outer[1]+20,*outer[2:])
+        moved_slot=b.guest_from_chassis(moved_outer)
+        def during_host_move():
+            b.wait_for(swaymsg,ipc,env,host_id,host.pid,moved_outer)
+            b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,moved_slot)
+            b.capture(grim,runtime/"host-move-in-flight.ppm",env,[
+                ("moving_rail",(moved_outer[0]+25,moved_outer[1]+140),b.HOST_COLOR),
+                ("no_guest_move_trail",(old_guest_right+90,moved_slot[1]+140),b.GUEST_COLOR),
+            ])
+            command(swaymsg,ipc,env,"stage_director_social status")
+        gesture(swaymsg,ipc,env,hc,host_id,host,"move",160,20,
+                during=during_host_move)
+        command(swaymsg,ipc,env,"animation_duration_ms 0")
+        outer=moved_outer
+        slot=moved_slot
         b.wait_for(swaymsg,ipc,env,host_id,host.pid,outer)
         b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,slot)
         b.wait_for(swaymsg,ipc,env,other_id,unrelated.pid,other)
@@ -153,7 +173,7 @@ def main():
             ("background",(25,25),(0,0,0)),
         ])
         print("SD_SOCIAL_PRODUCTION_NATIVE_HOST_MOVE "
-              "geometry=PASS pixels=PASS",flush=True)
+              "geometry=PASS pixels=PASS in_motion_no_trail=PASS",flush=True)
 
         gesture(swaymsg,ipc,env,gc,guest_id,guest,"move",-15,12)
         outer=(outer[0]-15,outer[1]+12,*outer[2:])
@@ -163,9 +183,23 @@ def main():
         print("SD_SOCIAL_PRODUCTION_NATIVE_GUEST_MOVE geometry=PASS",
               flush=True)
 
-        gesture(swaymsg,ipc,env,hc,host_id,host,"resize",45,25)
-        outer=(outer[0],outer[1],outer[2]+45,outer[3]+25)
-        slot=b.guest_from_chassis(outer)
+        command(swaymsg,ipc,env,"animation_duration_ms 3000")
+        old_guest_right=slot[0]+slot[2]
+        resized_outer=(outer[0],outer[1],outer[2]+160,outer[3]+80)
+        resized_slot=b.guest_from_chassis(resized_outer)
+        def during_host_resize():
+            b.wait_for(swaymsg,ipc,env,host_id,host.pid,resized_outer)
+            b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,resized_slot)
+            b.capture(grim,runtime/"host-resize-in-flight.ppm",env,[
+                ("resizing_rail",(resized_outer[0]+25,resized_outer[1]+140),b.HOST_COLOR),
+                ("no_guest_resize_trail",(old_guest_right+90,resized_slot[1]+140),b.GUEST_COLOR),
+            ])
+            command(swaymsg,ipc,env,"stage_director_social status")
+        gesture(swaymsg,ipc,env,hc,host_id,host,"resize",160,80,
+                during=during_host_resize)
+        command(swaymsg,ipc,env,"animation_duration_ms 0")
+        outer=resized_outer
+        slot=resized_slot
         b.wait_for(swaymsg,ipc,env,host_id,host.pid,outer)
         b.wait_for(swaymsg,ipc,env,guest_id,guest.pid,slot)
         b.capture(grim,runtime/"host-resize.ppm",env,[
@@ -175,7 +209,7 @@ def main():
             ("background",(25,25),(0,0,0)),
         ])
         print("SD_SOCIAL_PRODUCTION_NATIVE_HOST_RESIZE "
-              "geometry=PASS pixels=PASS",flush=True)
+              "geometry=PASS pixels=PASS in_motion_no_trail=PASS",flush=True)
 
         gesture(swaymsg,ipc,env,gc,guest_id,guest,"resize",-20,-15)
         outer=(outer[0],outer[1],outer[2]-20,outer[3]-15)
