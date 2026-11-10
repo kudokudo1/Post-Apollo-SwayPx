@@ -87,6 +87,8 @@ def main() -> None:
         objects = (
             ("bin/company-vector-probe", True),
             ("lib64/libQt6Location.so.6", False),
+            ("lib64/libQMapLibre.so.3.0.0", False),
+            ("lib64/libQMapLibreLocation.so.3.0.0", False),
             ("qml/QtLocation/libdeclarative_locationplugin.so", False),
             ("qml/MapLibre/libmaplibreplugin.so", False),
             ("plugins/geoservices/libqtgeoservices_maplibre.so", False),
@@ -106,12 +108,12 @@ def main() -> None:
             "module MapLibre\nplugin maplibreplugin\n", encoding="utf-8")
 
         doc = manifest(root)
-        assert len(doc["files"]) == 9, doc
+        assert len(doc["files"]) == 11, doc
         passed = m.audit(root, doc)
         assert passed["status"] == "QML_LISTED_FILES_CANDIDATE_ONLY", passed
         assert passed["listed_qml_files_candidate"]
         assert passed["modules_declared"] == ["QtLocation", "MapLibre"]
-        assert len(passed["candidate_elf_files"]) == 5
+        assert len(passed["candidate_elf_files"]) == 7
         assert "QtPositioning" in passed["unresolved_external_modules"]
         no_authority(passed)
 
