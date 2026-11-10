@@ -1,0 +1,84 @@
+name: Company M32r inert native launch-request lifecycle (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32p-native-candidate-source-20261109
+    paths:
+      - 'include/sway/stage_director_company_launch_request.h'
+      - 'sway/stage_director_company_launch_request.c'
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_m32r_launch_request.c'
+      - 'tests/stage_director/test_company_m32r_protocol_request.py'
+      - '.github/workflows/stage-director-company-m32r.yml'
+      - 'docs/stage-director-company-m32r-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inert-lifecycle-and-native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and exercise exact request lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_launch_request.c \
+            tests/stage_director/test_company_m32r_launch_request.c \
+            -o "$RUNNER_TEMP/company-m32r-request"
+          "$RUNNER_TEMP/company-m32r-request"
+      - name: Verify actual selected-host protocol and denial mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32r_protocol_request.py
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+      - name: Preserve earlier M32o lease-candidate replay and expiry tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_scene_lease_candidate.c \
+            tests/stage_director/test_company_m32o_scene_lease_candidate.c \
+            -o "$RUNNER_TEMP/company-m32o-candidate"
+          "$RUNNER_TEMP/company-m32o-candidate"
+
+  ordinary-and-private-compositor-builds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build normal SwayPX and exclude private positive scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32R_PRIVATE_SCENE_EXPOSED' >&2
+            exit 1
+          fi
+      - name: Build private test compositor without operator issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32r-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"

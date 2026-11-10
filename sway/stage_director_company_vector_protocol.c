@@ -11,6 +11,7 @@
 #include "sway/stage_director_company_scene.h"
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_scene_lease_candidate.h"
+#include "sway/stage_director_company_launch_request.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -45,6 +46,8 @@ static struct stage_director_company_birth_pidfd birth_held;
 /* M32p: compositor-held inert candidate. No public request or scene caller. */
 static struct stage_director_company_scene_lease_candidate
     native_lease_candidate;
+/* M32r: a request from Company is never a separate physical approval. */
+static struct stage_director_company_launch_request native_launch_request;
 
 struct company_binding {
 	uint64_t epoch;
@@ -213,6 +216,67 @@ static void handle_launch_intent(struct wl_client *client,
 		POST_APOLLO_COMPANY_VECTOR_V1_STATUS_LAUNCH_CANDIDATE, revision);
 }
 
+/* M32r: observe only the currently bound, selected native Company host
+ * and bounded map rectangle. Client intent/geometry are REQUEST DATA,
+ * not operator approval, launch custody or scene authorization. */
+static uint64_t candidate_boot_ns(void);
+
+static bool current_launch_request_identity(
+        struct stage_director_company_launch_request_identity *out) {
+    if (!out) return false;
+    *out = (struct stage_director_company_launch_request_identity){0};
+    if (!selected_client ||
+            !bound_is_current(selected_client, bound_resource) ||
+            !birth_native_host_probe) return false;
+    const struct company_binding *binding =
+        wl_resource_get_user_data(bound_resource);
+    if (!binding || !binding->launch_intent ||
+            !binding->viewport_candidate ||
+            binding->mode > POST_APOLLO_COMPANY_VECTOR_V1_MODE_ONLINE)
+        return false;
+    struct stage_director_rect local = {0};
+    uint64_t revision = 0;
+    struct stage_director_company_viewport_snapshot viewport = {0};
+    struct stage_director_company_native_host native = {0};
+    if (!fresh_native_host(&local, &revision) ||
+            !stage_director_company_vector_protocol_viewport_snapshot(
+                selected_client, &viewport) ||
+            !birth_native_host_probe(birth_native_host_context, &native) ||
+            !native.candidate ||
+            native.state != SD_COMPANY_NATIVE_CANDIDATE_ONLY ||
+            native.native_layer_role_ref != (uintptr_t)native_role ||
+            native.native_surface_ref != (uintptr_t)native_host_surface ||
+            native.native_client_ref != (uintptr_t)selected_client ||
+            !native.native_output_ref ||
+            viewport.selection_epoch != selection_epoch ||
+            viewport.intent_sequence != binding->intent_sequence ||
+            viewport.host_revision != revision ||
+            viewport.native_host_client_ref != native.native_client_ref)
+        return false;
+    *out = (struct stage_director_company_launch_request_identity) {
+        .selection_epoch = selection_epoch,
+        .intent_sequence = binding->intent_sequence,
+        .host_revision = revision,
+        .native_host_layer_ref = native.native_layer_ref,
+        .native_host_surface_ref = native.native_surface_ref,
+        .native_host_client_ref = native.native_client_ref,
+        .native_output_ref = native.native_output_ref,
+        .mode = binding->mode,
+        .map_in_host = viewport.map_in_host,
+    };
+    return true;
+}
+
+struct stage_director_company_launch_request_receipt
+stage_director_company_vector_protocol_launch_request_probe_current(
+        uint64_t compositor_generation) {
+    struct stage_director_company_launch_request_identity observed = {0};
+    const bool current = current_launch_request_identity(&observed);
+    return stage_director_company_launch_request_probe(
+        &native_launch_request, compositor_generation,
+        current ? &observed : NULL, candidate_boot_ns());
+}
+
 static void handle_report_viewport(struct wl_client *client,
 		struct wl_resource *resource,
 		int32_t fx, int32_t fy, int32_t fw, int32_t fh,
@@ -222,6 +286,8 @@ static void handle_report_viewport(struct wl_client *client,
     if (bound_is_current(client, resource)) {
         stage_director_company_scene_lease_candidate_revoke(
             &native_lease_candidate);
+        stage_director_company_launch_request_revoke(
+            &native_launch_request);
     }
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	struct stage_director_rect host = {0};
@@ -256,6 +322,18 @@ static void handle_report_viewport(struct wl_client *client,
 			return;
 		}
 	}
+    /* A valid selected-host viewport creates an INERT, short-lived request.
+     * Missing native evidence or clock failure merely leaves it absent.
+     * No positive scene, launch, seat or operator authority is issued. */
+    if (b->viewport_candidate) {
+        struct stage_director_company_launch_request_identity id = {0};
+        uint64_t generation = 0;
+        if (current_launch_request_identity(&id)) {
+            (void)stage_director_company_launch_request_reserve(
+                &native_launch_request, &id, candidate_boot_ns(),
+                SD_COMPANY_LAUNCH_REQUEST_MAX_NS, &generation);
+        }
+    }
 	send_status(resource, (uint32_t)candidate.state, revision);
 }
 
@@ -306,6 +384,8 @@ static void handle_close(struct wl_client *client,
 	}
     stage_director_company_scene_lease_candidate_revoke(
         &native_lease_candidate);
+    stage_director_company_launch_request_revoke(
+        &native_launch_request);
 	/* M32n: first hide/quarantine the mapped native scene while the
 	 * selected binding, intent and process provenance are still intact.
 	 * Preserve the existing CLOSED response epoch by sending it before
@@ -383,6 +463,7 @@ void stage_director_company_vector_protocol_init(struct wl_display *display) {
 	stage_director_company_birth_pidfd_init(&birth_held);
     stage_director_company_scene_lease_candidate_init(
         &native_lease_candidate);
+    stage_director_company_launch_request_init(&native_launch_request);
 }
 
 bool stage_director_company_vector_protocol_publish(
@@ -747,6 +828,8 @@ void stage_director_company_vector_protocol_revoke(void) {
     /* Drop every private candidate before scene and kernel provenance. */
     stage_director_company_scene_lease_candidate_revoke(
         &native_lease_candidate);
+    stage_director_company_launch_request_revoke(
+        &native_launch_request);
     stage_director_company_scene_revoke(NULL);
 	/* Wipe the last admitted geometry before releasing native host refs.
 	 * Already-read snapshots are not leases: consumers must re-query. */
