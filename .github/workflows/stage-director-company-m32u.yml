@@ -1,0 +1,92 @@
+name: Company M32u static ELF and Qt plugin audit (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32t-pre-spawn-custody-20261110
+    paths:
+      - 'tools/company/m32u_elf_qt_audit.py'
+      - 'tests/stage_director/test_company_m32u_static_elf_qt.py'
+      - '.github/workflows/stage-director-company-m32u.yml'
+      - 'docs/stage-director-company-m32u-20261110.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-elf-graph-no-execution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm only data readers and C compiler are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v readelf
+          command -v cc
+      - name: Build disposable ELF fixture and audit exact dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32u_static_elf_qt.py
+      - name: Existing M32t/M32s/M32r security regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            -ffunction-sections -fdata-sections \
+            sway/stage_director_company_digest.c \
+            sway/stage_director_company_launch_request.c \
+            sway/stage_director_company_bundle_inventory.c \
+            sway/stage_director_company_pre_spawn_custody.c \
+            tests/stage_director/test_company_m32t_pre_spawn_custody.c \
+            -Wl,--gc-sections -o "$RUNNER_TEMP/company-m32t"
+          "$RUNNER_TEMP/company-m32t"
+          python3 -B tests/stage_director/test_company_m32t_pre_spawn_source.py
+          python3 -B tests/stage_director/test_company_m32s_inventory_source.py
+          python3 -B tests/stage_director/test_company_m32r_protocol_request.py
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+      - name: Protect absent production pin and CI-only scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'company_m30_manifest_elf_sha256[] = ""' sway/stage_director_company_digest.c
+          grep -Fq '#ifndef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' sway/stage_director_company_scene.c
+          echo 'COMPANY_M32U source_only=TRUE real_launch=OFF scene=OFF PASS'
+
+  production-off-normal-and-private-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Normal compositor excludes any fake positive Company scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32U_PRIVATE_SCENE_IN_NORMAL_BUILD' >&2
+            exit 1
+          fi
+          echo 'COMPANY_M32U_NORMAL compositor_scene=OFF PASS'
+      - name: Private CI compositor remains fake-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32u-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'COMPANY_M32U_PRIVATE fake_scene=CI_ONLY PASS'
