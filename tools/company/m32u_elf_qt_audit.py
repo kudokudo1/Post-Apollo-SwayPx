@@ -86,7 +86,7 @@ def check_directory(path: Path) -> None:
 def read_hashed_file(path: Path, expected: str, is_executable: bool) -> None:
     old = path.lstat()
     if (not stat.S_ISREG(old.st_mode) or old.st_uid != os.getuid()
-            or old.st_mode & 0o6222 or old.st_nlink != 1
+            or old.st_mode & 0o6022 or old.st_nlink != 1
             or old.st_size <= 0 or old.st_size > MAX_BYTES
             or (is_executable and not old.st_mode & stat.S_IXUSR)):
         raise AuditFailure("UNSAFE_FILE:" + path.name)
