@@ -21,7 +21,7 @@ def check(text):
         "listed_image_current(c)",
         "stage_director_company_pre_spawn_revoke(c, generation)",
         "snapshot.manifest[i].sha256_hex",
-        "request->expires_ns",
+        "if (snapshot.expires_ns > request->expires_ns)",
         "SD_COMPANY_PRE_SPAWN_LISTED_BYTES_CANDIDATE_ONLY",
     )
     for t in requirements:
@@ -43,7 +43,8 @@ for i,(before,after) in enumerate((
     ("same_metadata(&exe_meta, &path_exe)","true"),
     ("same_metadata(&executable, &current_path)","true"),
     ("listed_image_current(c)","true"),
-    ("request->expires_ns","UINT64_MAX"),
+    ("if (snapshot.expires_ns > request->expires_ns)",
+     "if (snapshot.expires_ns > UINT64_MAX)"),
 )):
     bad=p.replace(before,after,1)
     assert bad!=p,i
