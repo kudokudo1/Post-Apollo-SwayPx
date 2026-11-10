@@ -64,7 +64,7 @@ def main() -> None:
     for required in (
         '["readelf", "-W", "-h", "-l", "-d", "--", str(path)]',
         'shell=False', 'os.O_NOFOLLOW', 'os.O_NONBLOCK',
-        'group == "bin"', 'stat.S_ISREG(old.st_mode)', "st.st_nlink != 1",
+        'group == "bin"', 'stat.S_ISREG(old.st_mode)', "old.st_nlink != 1",
         "set(os.listdir(folder)) != wanted[group]",
         'result["unresolved"].append(', 'qt_plugin_discovery_verified": False',
         'can_spawn": False', 'can_apply_scene": False',
