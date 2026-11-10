@@ -80,4 +80,27 @@ bool stage_director_company_scene_apply_ci_only(
  * Must run before actor destruction or container scene-tree deletion. */
 void stage_director_company_scene_revoke(struct sway_view *view);
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32e: disposable GitHub-only positive scene-operations probe. Its synthetic
+ * approval flags are NOT real custody or a production scene lease. The
+ * ordinary compositor never declares or calls this function. */
+struct stage_director_company_native_host;
+bool stage_director_company_scene_apply_m32e_fixture_only(
+    struct sway_view *view,
+    const struct stage_director_company_native_host *observed_host);
+/* M32f: host-loss event is compositor-owned layer lifecycle, not a QML
+ * message or synthetic app ID. The private scene retains native layer ref. */
+struct sway_layer_surface;
+void stage_director_company_scene_m32f_host_lost(
+    struct sway_layer_surface *lost_layer);
+
+/* M32j, private CI only: a revoked but still mapped native Qt actor is
+ * quarantined until the compositor actually observes its XDG unmap.
+ * This is a membership check only; never an authorization to reapply. */
+bool stage_director_company_scene_m32j_quarantined(
+    const struct sway_view *view);
+void stage_director_company_scene_m32j_forget_unmapped(
+    const struct sway_view *view);
+#endif
+
 #endif

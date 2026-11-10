@@ -38,6 +38,7 @@
 #include <wlr/util/log.h>
 #include "sway/stage_director_ci_scene_probe.h"
 #endif
+#include "sway/stage_director_company_input.h"
 #include "sway/tree/workspace.h"
 
 static void seat_device_destroy(struct sway_seat_device *seat_device) {
@@ -1133,6 +1134,22 @@ void seat_set_raw_focus(struct sway_seat *seat, struct sway_node *node) {
 }
 
 static void seat_set_workspace_focus(struct sway_seat *seat, struct sway_node *node) {
+	/* M32d: embedded native MapLibre receives pointer events only. Never
+	 * let ordinary workspace, IPC criteria or initial XDG focus switch
+	 * the keyboard away from the Company layer into its captive actor. */
+	if (node && node->type == N_CONTAINER &&
+			node->sway_container && node->sway_container->view &&
+			stage_director_company_scene_reject_keyboard_view(
+				node->sway_container->view)) {
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* M32g: native real IPC focus attempt. The denial precedes
+		 * unfocus, keyboard enter, seat state and input-method changes. */
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32G][CI_ONLY] "
+			"native_ipc_keyboard_focus=DENIED actor_embedded=1");
+#endif
+		return;
+	}
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Must run before unfocus, focus stack mutation or keyboard enter.
 	 * This also blocks IPC criteria [con_id=...] focus, not only
@@ -1296,6 +1313,10 @@ void seat_set_focus_workspace(struct sway_seat *seat,
 
 void seat_set_focus_surface(struct sway_seat *seat,
 		struct wlr_surface *surface, bool unfocus) {
+	/* Refuse direct or subsurface focus before modifying the old
+	 * keyboard focus, input-method relay or tablet-pad association. */
+	if (stage_director_company_scene_reject_keyboard_surface(surface))
+		return;
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	/* Independent direct-root-surface entry, still before prior unfocus.
 	 * Subsurfaces need a separate parent-chain ownership test. */
@@ -1318,6 +1339,44 @@ void seat_set_focus_surface(struct sway_seat *seat,
 	sway_input_method_relay_set_focus(&seat->im_relay, surface);
 	seat_tablet_pads_set_focus(seat, surface);
 }
+
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* Before M32e scene admission, ordinary Sway may already have put the
+ * future Qt actor on a seat focus stack or sent it keyboard enter. The
+ * M32d focus guard only rejects NEW attempts. Inspect compositor-owned
+ * seats and revoke any preexisting actor focus now that the scene is
+ * admitted. Do not alter seats focused on unrelated views/layers. */
+void stage_director_company_m32g_clear_admitted_actor_keyboard_focus(
+        struct sway_view *actor) {
+	if (!actor || !actor->surface || !actor->container || !server.input)
+		return;
+	struct sway_seat *seat;
+	wl_list_for_each(seat, &server.input->seats, link) {
+		if (!seat->wlr_seat) continue;
+		struct sway_node *focus=seat_get_focus(seat);
+		const bool actor_node=focus && focus->type==N_CONTAINER &&
+			focus->sway_container==actor->container;
+		struct wlr_surface *keyboard=
+			seat->wlr_seat->keyboard_state.focused_surface;
+		const bool actor_surface=keyboard &&
+			wlr_surface_get_root_surface(keyboard)==actor->surface;
+		if (!actor_node && !actor_surface) continue;
+		if (actor_node) seat_set_focus(seat,NULL);
+		/* seat_set_focus(NULL) can restore a Company layer in an
+		 * exclusive-layer seat. Only clear the keyboard again if it
+		 * STILL points to our native Qt root after that operation. */
+		keyboard=seat->wlr_seat->keyboard_state.focused_surface;
+		if (keyboard &&
+				wlr_surface_get_root_surface(keyboard)==actor->surface)
+			seat_set_focus_surface(seat,NULL,false);
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32G][CI_ONLY] "
+			"admission_keyboard_focus_cleared=1 "
+			"actor_sway_focus=%d actor_wayland_focus=%d",
+			actor_node,actor_surface);
+	}
+}
+#endif
 
 void seat_set_focus_layer(struct sway_seat *seat,
 		struct wlr_layer_surface_v1 *layer) {

@@ -19,6 +19,9 @@
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_company_actor_pair.h"
 #include "sway/stage_director_company_scene.h"
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+#include "sway/stage_director_company_input.h"
+#endif
 #include "sway/stage_director_news_host_session.h"
 #include "sway/stage_director_news_session_lease.h"
 #include "sway/stage_director_weather_watch_protocol.h"
@@ -805,6 +808,30 @@ void stage_director_view_mapped(struct sway_view *view) {
 	 * future authenticated actor selection must use exact wl_resources. */
 	if (view && view->type == SWAY_VIEW_XDG_SHELL) {
 		const char *app_id = view_get_app_id(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+		/* Diagnostic only: make the Wayland app ID, actual XDG root and
+		 * current compositor-observed Company host eligibility visible
+		 * when the private M32e test fails BEFORE scene admission. */
+		const struct stage_director_company_native_actor ci_actor =
+			stage_director_company_native_observe_actor(view);
+		int ci_host_candidates = 0;
+		int ci_host_state = -1;
+		for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+			if (!layers[i].occupied || !layers[i].surface) continue;
+			const struct stage_director_company_native_host h =
+				stage_director_company_native_observe_host(layers[i].surface);
+			if (h.state == SD_COMPANY_NATIVE_WRONG_NAMESPACE) continue;
+			ci_host_state = (int)h.state;
+			if (h.candidate) ci_host_candidates++;
+		}
+		sway_log(SWAY_INFO,
+			"[stage-director][COMPANY_M32E][CI_ONLY][XDG_MAP] "
+			"app_id=%s actor_state=%d actor_size=%dx%d "
+			"host_state=%d host_candidates=%d",
+			app_id ? app_id : "(null)", (int)ci_actor.state,
+			ci_actor.root_global.width, ci_actor.root_global.height,
+			ci_host_state, ci_host_candidates);
+#endif
 		if (app_id && strstr(app_id, "CompanyVectorProbe")) {
 			const struct stage_director_company_native_actor company =
 				stage_director_company_native_observe_actor(view);
@@ -935,6 +962,15 @@ void stage_director_view_mapped(struct sway_view *view) {
 				const struct stage_director_company_actor_pair_result
 					pair = stage_director_company_actor_pair_probe(
 						&pair_evidence);
+				/* M32e does not invoke the private setter on XDG map:
+				 * view->surface->current is valid here, but Sway may still
+				 * have view->geometry=0x0. Await its real commit. */
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+				sway_log(SWAY_INFO,
+					"[stage-director][COMPANY_M32E][CI_ONLY] "
+					"map_pending_geometry_commit observed_source=%dx%d",
+					company.root_global.width, company.root_global.height);
+#endif
 				/* M32c: the real renderer backend exists in normal SwayPX,
 				 * but no compositor-issued scene/seat/popup permission exists.
 				 * Analyze current candidate only; never call the setter.
@@ -999,6 +1035,61 @@ void stage_director_view_mapped(struct sway_view *view) {
 	}
 }
 
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+/* M32e // private positive probe on an actual mapped XDG geometry commit.
+ * The app ID is ONLY a disposable fixture filter. Real actor and host
+ * identity must still be re-read from compositor-owned Wayland objects,
+ * and the private M32e fixture apply helper retains all
+ * its exact-geometry, native-client and CI environment checks. */
+void stage_director_company_m32e_geometry_committed(struct sway_view *view) {
+    if (!view || view->type != SWAY_VIEW_XDG_SHELL) return;
+    const char *app_id = view_get_app_id(view);
+    if (!app_id || strcmp(app_id, "CompanyVectorProbe")) return;
+    /* After successful private embedding, skip later MapLibre frame
+     * commits; never repeat scene reparenting or move on every frame. */
+    if (stage_director_company_scene_is_embedded_root(view->surface))
+        return;
+    /* A still-mapped revoked actor is never eligible for automatic
+     * scene re-admission from an ordinary Qt buffer/geometry commit. */
+    if (stage_director_company_scene_m32j_quarantined(view))
+        return;
+    const struct stage_director_company_native_actor actor =
+        stage_director_company_native_observe_actor(view);
+    if (!actor.candidate || view->geometry.x || view->geometry.y ||
+            view->geometry.width != 1493 || view->geometry.height != 788) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "geometry_not_ready native_candidate=%d source=%d,%d %dx%d",
+            actor.candidate, view->geometry.x, view->geometry.y,
+            view->geometry.width, view->geometry.height);
+        return;
+    }
+    int candidates = 0;
+    struct stage_director_company_native_host host = {0};
+    for (int i = 0; i < STAGE_DIRECTOR_MAX_LAYERS; ++i) {
+        if (!layers[i].occupied || !layers[i].surface) continue;
+        const struct stage_director_company_native_host observed =
+            stage_director_company_native_observe_host(layers[i].surface);
+        if (observed.candidate) {
+            candidates++;
+            host = observed;
+        }
+    }
+    if (candidates != 1) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "unique_host_refused candidates=%d", candidates);
+        return;
+    }
+    if (stage_director_company_scene_apply_m32e_fixture_only(view, &host)) {
+        sway_log(SWAY_INFO,
+            "[stage-director][COMPANY_M32E][CI_ONLY] "
+            "native_scene_apply=PASS authority=FAKE_CI "
+            "production=OFF visual=UNVERIFIED");
+    }
+}
+#endif
+
 void stage_director_view_identity_changed(struct sway_view *view) {
 	classify(view, "identity");
 }
@@ -1007,6 +1098,10 @@ void stage_director_view_unmapped(struct sway_view *view) {
 	/* Clear any private experimental map crop before wlroots destroys
 	 * the XDG scene tree. The ordinary compositor has none to revoke. */
 	stage_director_company_scene_revoke(view);
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Only a native XDG unmap frees a revoked-actor quarantine slot. */
+	stage_director_company_scene_m32j_forget_unmapped(view);
+#endif
 #ifdef SD_STAGE_DIRECTOR_CI_SCENE_PROBE
 	stage_director_ci_scene_probe_restore(view);
 #endif
@@ -1193,6 +1288,10 @@ void stage_director_layer_committed(struct sway_layer_surface *surface) {
 
 void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Revoke before the mapped Company's native scene node disappears. */
+	stage_director_company_scene_m32f_host_lost(surface);
+#endif
 	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {
@@ -1215,6 +1314,10 @@ void stage_director_layer_unmapped(struct sway_layer_surface *surface) {
 
 void stage_director_layer_destroyed(struct sway_layer_surface *surface) {
 	ensure_weather_host_session();
+#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION
+	/* Idempotent if the normal unmap callback already revoked. */
+	stage_director_company_scene_m32f_host_lost(surface);
+#endif
 	stage_director_company_pairing_host_lost(surface);
 	if (stage_director_news_host_session_tracks(
 			&weather_host_session, (uintptr_t)surface)) {

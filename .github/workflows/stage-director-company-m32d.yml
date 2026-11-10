@@ -1,0 +1,126 @@
+name: Stage Director Company M32d native popup pointer keyboard confinement (default OFF)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'include/sway/stage_director_company_input.h'
+      - 'sway/stage_director_company_input.c'
+      - 'sway/stage_director_company_scene.c'
+      - 'sway/input/cursor.c'
+      - 'sway/input/seat.c'
+      - 'sway/desktop/xdg_shell.c'
+      - 'sway/stage_director_company_selection.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_input_m32d.c'
+      - '.github/workflows/stage-director-company-m32d.yml'
+      - 'docs/stage-director-company-m32d-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-company-input-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and execute real production C policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_viewport.c \
+            sway/stage_director_company_input.c \
+            tests/stage_director/test_company_input_m32d.c \
+            -o "$RUNNER_TEMP/test_company_input_m32d" -lm
+          "$RUNNER_TEMP/test_company_input_m32d"
+      - name: Assert normal compositor input paths and no trust bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          policy=Path('sway/stage_director_company_input.c').read_text()
+          scene=Path('sway/stage_director_company_scene.c').read_text()
+          cursor=Path('sway/input/cursor.c').read_text()
+          seat=Path('sway/input/seat.c').read_text()
+          xdg=Path('sway/desktop/xdg_shell.c').read_text()
+          selection=Path('sway/stage_director_company_selection.c').read_text()
+          meson=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          assert "'stage_director_company_input.c'" in meson
+          assert cursor.count('stage_director_company_scene_reject_pointer(')>=3
+          assert 'stage_director_company_scene_is_embedded_root(' in cursor
+          assert 'pointer_state.focused_surface' in cursor
+          assert 'stage_director_company_scene_is_embedded_root(' in scene
+          assert 'wlr_surface_get_root_surface(' in scene
+          assert 'wl_list_empty(&view->wlr_xdg_toplevel->base->popups)' in scene
+          assert 'stage_director_company_scene_reject_keyboard_view(' in seat
+          assert 'stage_director_company_scene_reject_keyboard_surface(' in seat
+          assert xdg.count('stage_director_company_scene_reject_popup(')==2
+          assert 'stage_director_company_scene_revoke(view);' in xdg
+          assert 'stage_director_company_scene_revoke(NULL);' in selection
+          assert 'wlr_scene_node_set_enabled(node, false)' in scene
+          assert 'SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in scene
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          for forbidden in ('wlr_seat_pointer_notify_button(',
+                            'seat_keyboard_notify_enter(',
+                            'wlr_scene_node_reparent(',
+                            'getenv(', 'strcmp('):
+              assert forbidden not in policy,forbidden
+          print('SD_COMPANY_M32D_LIVE_HOOKS '
+                'pointer_motion_click_wheel=GUARDED '
+                'xdg_popup_root_nested=DENIED '
+                'keyboard_workspace_direct=DENIED '
+                'resize_host_change=REVOKE '
+                'compositor_default=OFF PASS')
+          PY
+
+  isolated-scene-with-input-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile real wlroots popup-preflight and Company pointer guards in private test variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32d-private-scene-input-ci"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$output/bin/sway"
+          echo "SD_COMPANY_M32D_PRIVATE_WLROOTS_SCENE "
+          echo "source_popup_preflight=COMPILED "
+          echo "production_scene=OFF real_company_visual=NOT_YET"
+
+  full-normal-swaypx-input-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build normal SwayPX with Company containment hooked in live source
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git \
+            --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$out/bin/sway"
+          echo "SD_COMPANY_M32D_FULL_SWAYPX source=COMPILED "
+          echo "production_scene=OFF user_install=NONE"
