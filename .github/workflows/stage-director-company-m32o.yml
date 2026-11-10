@@ -1,0 +1,112 @@
+name: Company M32o bounded scene-lease candidate lifecycle (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32d-input-popup-focus-containment-20261109
+      - stage-director/company-m32m-protocol-revoke-preflight-20261109
+    paths:
+      - 'include/sway/stage_director_company_scene_lease_candidate.h'
+      - 'sway/stage_director_company_scene_lease_candidate.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_m32o_scene_lease_candidate.c'
+      - '.github/workflows/stage-director-company-m32o.yml'
+      - 'docs/stage-director-company-m32o-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lease-candidate-negative-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce no production issuer, privilege or source bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          header=Path('include/sway/stage_director_company_scene_lease_candidate.h').read_text()
+          source=Path('sway/stage_director_company_scene_lease_candidate.c').read_text()
+          meson=Path('sway/meson.build').read_text()
+          protocol=Path('sway/stage_director_company_vector_protocol.c').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          scene=Path('sway/stage_director_company_scene.c').read_text()
+          assert "'stage_director_company_scene_lease_candidate.c'," in meson
+          assert 'SD_COMPANY_LEASE_CANDIDATE_MAX_NS UINT64_C(5000000000)' in header
+          assert 'SD_COMPANY_LEASE_MATCHED_CANDIDATE_ONLY' in source
+          assert 'identity->selection_epoch <= c->last_epoch' in source
+          assert 'monotonic_now_ns >= c->expires_at_ns' in source
+          assert 'monotonic_now_ns < c->reserved_at_ns' in source
+          assert 'stage_director_company_scene_lease_candidate_revoke(c)' in source
+          assert 'stage_director_company_vector_protocol_admission_preflight(' in protocol
+          assert 'SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT' in protocol
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          assert '#ifndef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in scene
+          for privilege in (
+              '.operator_authenticated = true',
+              '.launch_authenticated = true',
+              '.scene_lease_issued = true',
+              '.can_apply_scene = true',
+              '.can_accept_input = true',
+              '.can_focus_keyboard = true',
+              '.can_show_popup = true'):
+              assert privilege not in source, privilege
+          for prohibited in (
+              'wl_global_create(', 'wl_resource_create(',
+              'wlr_scene_node_set_enabled(', 'wlr_seat_',
+              'posix_spawn(', 'fork(', 'execve(',
+              'stage_director_company_scene_apply_ci_only(',
+              'stage_director_company_scene_apply_m32e_fixture_only('):
+              assert prohibited not in source, prohibited
+          print('SD_COMPANY_M32O_SOURCE no_global=1 no_issuer=1 '
+                'privileges=ZERO production_scene=OFF PASS')
+          PY
+      - name: Compile and run native C lifecycle negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_company_scene_lease_candidate.c \
+            tests/stage_director/test_company_m32o_scene_lease_candidate.c \
+            -o "$RUNNER_TEMP/sd-company-m32o-candidate"
+          "$RUNNER_TEMP/sd-company-m32o-candidate"
+
+  normal-and-private-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary compositor with inert candidate only
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32O_PRIVATE_SCENE_IN_PRODUCTION_BINARY' >&2
+            exit 1
+          fi
+          echo 'SD_COMPANY_M32O_NORMAL compositor_compiles=1 production_scene=OFF PASS'
+      - name: Build isolated private compositor without granting an issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32o-private-lease-candidate"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'SD_COMPANY_M32O_PRIVATE compositor_compiles=1 candidate_only=1 PASS'

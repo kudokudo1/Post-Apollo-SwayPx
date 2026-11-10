@@ -28,6 +28,7 @@ sway_sources = files(
 	'stage_director_company_actor_pair.c',
 	'stage_director_company_scene_plan.c',
 	'stage_director_company_scene.c',
+	'stage_director_company_scene_lease_candidate.c',
 	'stage_director_company_input.c',
 	'stage_director_company_vector_protocol.c',
 	'stage_director_company_selection.c',
