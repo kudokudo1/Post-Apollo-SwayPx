@@ -1,0 +1,77 @@
+name: Company M32p real native candidate-source bridge (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32d-input-popup-focus-containment-20261109
+      - stage-director/company-m32m-protocol-revoke-preflight-20261109
+      - stage-director/company-m32o-scene-lease-candidate-lifecycle-20261109
+    paths:
+      - 'include/sway/stage_director_company_vector_protocol.h'
+      - 'sway/stage_director_company_vector_protocol.c'
+      - 'sway/stage_director_company_scene_lease_candidate.c'
+      - 'include/sway/stage_director_company_scene_lease_candidate.h'
+      - 'tests/stage_director/test_company_m32p_native_candidate_bridge.py'
+      - '.github/workflows/stage-director-company-m32p.yml'
+      - 'docs/stage-director-company-m32p-20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-native-source-and-inert-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject spoofed native observations and missing revocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+      - name: Preserve M32o C replay, expiry and revocation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/stage_director_company_scene_lease_candidate.c \
+            tests/stage_director/test_company_m32o_scene_lease_candidate.c \
+            -o "$RUNNER_TEMP/sd-company-m32p-candidate"
+          "$RUNNER_TEMP/sd-company-m32p-candidate"
+
+  normal-and-private-compositor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build ordinary SwayPX with native source but no scene issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32P_PRIVATE_SCENE_EXPOSED_IN_NORMAL_BUILD' >&2
+            exit 1
+          fi
+          echo 'SD_COMPANY_M32P_NORMAL real_native_bridge=LINKED scene_authority=OFF PASS'
+      - name: Build private CI compositor without production issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32p-native-bridge-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'SD_COMPANY_M32P_PRIVATE bridge_compiles=1 operator_issuer=NONE PASS'
