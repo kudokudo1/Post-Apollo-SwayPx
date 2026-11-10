@@ -26,6 +26,8 @@ QML_PLUGIN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 REQUIRED = frozenset((
     "bin/company-vector-probe",
     "lib64/libQt6Location.so.6",
+    "lib64/libQMapLibre.so.3.0.0",
+    "lib64/libQMapLibreLocation.so.3.0.0",
     "qml/QtLocation/qmldir",
     "qml/QtLocation/plugins.qmltypes",
     "qml/QtLocation/MapView.qml",
