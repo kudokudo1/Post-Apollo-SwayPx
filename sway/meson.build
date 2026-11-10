@@ -24,6 +24,7 @@ sway_sources = files(
 	'stage_director_company_executable.c',
 	'stage_director_company_digest.c',
 	'stage_director_company_bundle_inventory.c',
+	'stage_director_company_pre_spawn_custody.c',
 	'stage_director_company_wire_policy.c',
 	'stage_director_company_viewport_state.c',
 	'stage_director_company_actor_pair.c',
