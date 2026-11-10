@@ -1,0 +1,98 @@
+name: Company M32t pre-spawn descriptor custody (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32s-bundle-inventory-preflight-20261109
+    paths:
+      - 'include/sway/stage_director_company_pre_spawn_custody.h'
+      - 'sway/stage_director_company_pre_spawn_custody.c'
+      - 'sway/meson.build'
+      - 'tests/stage_director/test_company_m32t_pre_spawn_custody.c'
+      - 'tests/stage_director/test_company_m32t_pre_spawn_source.py'
+      - '.github/workflows/stage-director-company-m32t.yml'
+      - 'docs/stage-director-company-m32t-20261110.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  held-inode-request-and-listed-dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile read-only descriptor candidate with real SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            -ffunction-sections -fdata-sections \
+            sway/stage_director_company_digest.c \
+            sway/stage_director_company_launch_request.c \
+            sway/stage_director_company_bundle_inventory.c \
+            sway/stage_director_company_pre_spawn_custody.c \
+            tests/stage_director/test_company_m32t_pre_spawn_custody.c \
+            -Wl,--gc-sections \
+            -o "$RUNNER_TEMP/company-m32t-custody"
+          "$RUNNER_TEMP/company-m32t-custody"
+      - name: Mutation tests forbid missing inode or request checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32t_pre_spawn_source.py
+      - name: Preserve inherited Company request, inventory and native source tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            -ffunction-sections -fdata-sections \
+            sway/stage_director_company_digest.c \
+            sway/stage_director_company_bundle_inventory.c \
+            tests/stage_director/test_company_m32s_bundle_inventory.c \
+            -Wl,--gc-sections -o "$RUNNER_TEMP/company-m32s"
+          "$RUNNER_TEMP/company-m32s"
+          python3 -B tests/stage_director/test_company_m32s_inventory_source.py
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/stage_director_company_launch_request.c \
+            tests/stage_director/test_company_m32r_launch_request.c \
+            -o "$RUNNER_TEMP/company-m32r"
+          "$RUNNER_TEMP/company-m32r"
+          python3 -B tests/stage_director/test_company_m32r_protocol_request.py
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+
+  normal-and-private-compositor-builds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Normal compositor must exclude private positive Company scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32T_PRIVATE_SCENE_IN_PRODUCTION_BINARY' >&2
+            exit 1
+          fi
+          echo 'COMPANY_M32T_NORMAL_BUILD candidate=INERT spawn=OFF scene=OFF PASS'
+      - name: Private CI compositor retains no live Company issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32t-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'COMPANY_M32T_PRIVATE_BUILD operator=OFF real-launch=OFF PASS'
