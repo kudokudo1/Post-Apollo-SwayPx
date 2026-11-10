@@ -167,7 +167,10 @@ def inspect_tree(root: Path, hashes: dict[str, str]) -> dict[str, bytes]:
             for child in sorted(expected_children[parent_path]):
                 rel = parent_path + "/" + child if parent_path else child
                 if rel in DIRECTORIES:
-                    nextfd = os.open(child, flags, dir_fd=fd)
+                    try:
+                        nextfd = os.open(child, flags, dir_fd=fd)
+                    except OSError as exc:
+                        raise Refused("UNSAFE_DIRECTORY:" + rel) from exc
                     try:
                         scan(nextfd, rel)
                         actual = os.stat(child, dir_fd=fd, follow_symlinks=False)
@@ -176,9 +179,12 @@ def inspect_tree(root: Path, hashes: dict[str, str]) -> dict[str, bytes]:
                     finally:
                         os.close(nextfd)
                 else:
-                    filefd = os.open(child,
-                        os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
-                        dir_fd=fd)
+                    try:
+                        filefd = os.open(child,
+                            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                            dir_fd=fd)
+                    except OSError as exc:
+                        raise Refused("UNSAFE_FILE:" + rel) from exc
                     try:
                         raw, _ = check_file(filefd, rel, hashes[rel],
                             rel == "bin/company-vector-probe")
