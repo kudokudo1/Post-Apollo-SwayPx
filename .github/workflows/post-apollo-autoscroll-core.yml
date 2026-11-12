@@ -1,0 +1,57 @@
+name: SwayPX / Autoscroll Private Core
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/input/post_apollo_autoscroll.h"
+      - "sway/input/post_apollo_autoscroll.c"
+      - "tests/post_apollo_autoscroll_engine_test.c"
+      - "MODEL/autoscroll-compositor-runtime-v1.md"
+      - ".github/workflows/post-apollo-autoscroll-core.yml"
+  push:
+    branches:
+      - "autoscroll/*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pure-c-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compile internal autoscroll core with warnings as errors
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/input/post_apollo_autoscroll.c \
+            tests/post_apollo_autoscroll_engine_test.c \
+            -lm -o /tmp/post-apollo-autoscroll-unit
+      - name: Run isolated middle-click engine test
+        run: timeout 5s /tmp/post-apollo-autoscroll-unit
+      - name: Verify no compositor runtime hook was added in this stage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/master"], text=True
+          ).strip()
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", base, "HEAD"], text=True
+          ).splitlines()
+          forbidden = {
+              "sway/input/cursor.c", "sway/input/seat.c",
+              "sway/input/seatop_default.c", "sway/ipc-server.c",
+              "meson.build",
+          }
+          assert not forbidden.intersection(changed), changed
+          core = Path("sway/input/post_apollo_autoscroll.c").read_text()
+          assert "wlr_seat_pointer_notify_axis" not in core
+          assert "seatop_pointer_axis" not in core
+          assert "UInput" not in core
+          print("SWAYPX_AUTOSCROLL_NOT_ACTIVATED")
+          PY
