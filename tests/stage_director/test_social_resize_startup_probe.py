@@ -2,6 +2,7 @@
 """Offline smoke test for the isolated production SwayPX startup probe."""
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -45,7 +46,7 @@ def run_case(label: str, old_log: bool, outcome: int) -> None:
         process = subprocess.run([str(probe)], env=env, timeout=12, capture_output=True, text=True)
         assert process.returncode == outcome, (label, process.returncode, process.stderr)
         latest_file = state / "swaypx/social-resize-startup/LATEST"
-        assert "social-resize-probe: entered launcher" in process.stderr, label
+        assert re.search(r"social-resize-probe: entered launcher pid=\\d+", process.stderr), label
         assert latest_file.is_file(), label
         run = Path(latest_file.read_text().strip())
         assert run.is_dir(), label
@@ -79,7 +80,7 @@ def run_missing_compositor_case() -> None:
         env["XDG_STATE_HOME"] = str(state)
         process = subprocess.run([str(probe)], env=env, timeout=8, capture_output=True, text=True)
         assert process.returncode == 127, process.stderr
-        assert "social-resize-probe: entered launcher" in process.stderr
+        assert re.search(r"social-resize-probe: entered launcher pid=\\d+", process.stderr)
         assert "compositor not executable" in process.stderr
         latest = state / "swaypx/social-resize-startup/LATEST"
         assert latest.is_file(), process.stderr
