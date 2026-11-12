@@ -45,10 +45,14 @@ def run_case(label: str, old_log: bool, outcome: int) -> None:
         process = subprocess.run([str(probe)], env=env, timeout=12, capture_output=True, text=True)
         assert process.returncode == outcome, (label, process.returncode, process.stderr)
         latest_file = state / "swaypx/social-resize-startup/LATEST"
+        assert "social-resize-probe: entered launcher" in process.stderr, label
         assert latest_file.is_file(), label
         run = Path(latest_file.read_text().strip())
         assert run.is_dir(), label
         assert oct(run.stat().st_mode & 0o777) == "0o700"
+        launch = (run / "launch.log").read_text()
+        for phase in ("invoked", "preflight_ok", "compositor_spawned", "compositor_exited"):
+            assert "phase=" + phase in launch, (label, phase, launch)
         assert "sway 0.6-1cbca16" in (run / "metadata.log").read_text()
         assert "mock compositor launched" in (run / "sway.log").read_text()
         assert "exit=" + str(outcome) in (run / "exit.log").read_text()
@@ -62,6 +66,34 @@ def run_case(label: str, old_log: bool, outcome: int) -> None:
     print(f"PASS {label}")
 
 
+def run_missing_compositor_case() -> None:
+    with tempfile.TemporaryDirectory(prefix="social-resize-probe-missing-stage-") as temp:
+        root = Path(temp)
+        bindir = root / "stage/bin"
+        bindir.mkdir(parents=True)
+        probe = bindir / "swaypx-social-resize-probe"
+        probe.write_bytes(PROBE.read_bytes())
+        probe.chmod(0o755)
+        state = root / "state"
+        env = os.environ.copy()
+        env["XDG_STATE_HOME"] = str(state)
+        process = subprocess.run([str(probe)], env=env, timeout=8, capture_output=True, text=True)
+        assert process.returncode == 127, process.stderr
+        assert "social-resize-probe: entered launcher" in process.stderr
+        assert "compositor not executable" in process.stderr
+        latest = state / "swaypx/social-resize-startup/LATEST"
+        assert latest.is_file(), process.stderr
+        run = Path(latest.read_text().strip())
+        assert oct(run.stat().st_mode & 0o777) == "0o700"
+        launch = (run / "launch.log").read_text()
+        assert "phase=invoked" in launch
+        assert "phase=compositor_not_executable" in launch
+        assert "phase=compositor_spawned" not in launch
+        assert not (run / "sway.log").exists()
+    print("PASS missing-compositor-preserves-preflight-evidence")
+
+
 if __name__ == "__main__":
     run_case("successful-compositor-and-current-quickshell", old_log=False, outcome=0)
     run_case("nonzero-exit-and-stale-log-rejected", old_log=True, outcome=42)
+    run_missing_compositor_case()
