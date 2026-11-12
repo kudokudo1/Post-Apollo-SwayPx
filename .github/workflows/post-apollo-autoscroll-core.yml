@@ -22,6 +22,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Compile internal autoscroll core with warnings as errors
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic \
@@ -35,8 +37,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import subprocess
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/master"], text=True
+          ).strip()
           changed = subprocess.check_output(
-              ["git", "diff", "--name-only", "HEAD~1..HEAD"], text=True
+              ["git", "diff", "--name-only", base, "HEAD"], text=True
           ).splitlines()
           forbidden = {
               "sway/input/cursor.c", "sway/input/seat.c",
