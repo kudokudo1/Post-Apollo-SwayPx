@@ -4,18 +4,17 @@
 set -u
 umask 077
 
+# Journal-visible evidence even if HOME/state/stage checks fail. This prints
+# only a fixed marker and PID, never the environment or private contact data.
+printf 'social-resize-probe: entered launcher pid=%s\n' "$" >&2
+
 if [ -z "${HOME:-}" ]; then
     printf 'social-resize-probe: HOME is unset\n' >&2
     exit 78
 fi
 
-stage=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P) || exit 78
-sway="$stage/bin/sway"
-if [ ! -x "$sway" ]; then
-    printf 'social-resize-probe: compositor not executable: %s\n' "$sway" >&2
-    exit 127
-fi
-
+# Create the first persistent checkpoint before validating any staged executable.
+# Missing stages must leave evidence instead of silently exiting before LATEST.
 state_base=${XDG_STATE_HOME:-"$HOME/.local/state"}
 log_root="$state_base/swaypx/social-resize-startup"
 if ! mkdir -p -- "$log_root"; then
@@ -28,7 +27,24 @@ if ! mkdir -- "$run"; then
     printf 'social-resize-probe: cannot create run directory\n' >&2
     exit 73
 fi
-printf '%s\n' "$run" > "$log_root/LATEST"
+if ! printf '%s\n' "$run" > "$log_root/LATEST"; then
+    printf 'social-resize-probe: cannot write LATEST: %s\n' "$log_root" >&2
+    exit 73
+fi
+printf 'phase=invoked\ntime=%s\n' "$(date -Is)" > "$run/launch.log"
+
+stage=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P) || {
+    printf 'phase=stage_resolution_failed\n' >> "$run/launch.log"
+    printf 'social-resize-probe: cannot resolve stage\n' >&2
+    exit 78
+}
+sway="$stage/bin/sway"
+if [ ! -x "$sway" ]; then
+    printf 'phase=compositor_not_executable\nstage=%s\n' "$stage" >> "$run/launch.log"
+    printf 'social-resize-probe: compositor not executable: %s\n' "$sway" >&2
+    exit 127
+fi
+printf 'phase=preflight_ok\nstage=%s\n' "$stage" >> "$run/launch.log"
 
 export LD_LIBRARY_PATH="$stage/lib:$stage/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 quickshell_log=${SOCIAL_RESIZE_PROBE_QUICKSHELL_LOG:-/tmp/quickshell.log}
@@ -92,7 +108,9 @@ trap terminate HUP INT TERM
 # session. Debug logging is the only extra Sway argument.
 "$sway" -d "$@" > "$run/sway.log" 2>&1 &
 sway_pid=$!
+printf 'phase=compositor_spawned\npid=%s\n' "$sway_pid" >> "$run/launch.log"
 wait "$sway_pid"
 result=$?
+printf 'phase=compositor_exited\nexit=%s\n' "$result" >> "$run/launch.log"
 printf 'exit=%s\ntime=%s\n' "$result" "$(date -Is)" > "$run/exit.log"
 exit "$result"
