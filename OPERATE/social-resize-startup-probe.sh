@@ -6,7 +6,7 @@ umask 077
 
 # Journal-visible evidence even if HOME/state/stage checks fail. This prints
 # only a fixed marker and PID, never the environment or private contact data.
-printf 'social-resize-probe: entered launcher pid=%s\n' "$" >&2
+printf 'social-resize-probe: entered launcher pid=%s\n' "$$" >&2
 
 if [ -z "${HOME:-}" ]; then
     printf 'social-resize-probe: HOME is unset\n' >&2
