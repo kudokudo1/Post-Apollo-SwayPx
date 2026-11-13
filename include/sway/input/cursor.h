@@ -15,8 +15,12 @@
 #define SWAY_SCROLL_LEFT KEY_MAX + 3
 #define SWAY_SCROLL_RIGHT KEY_MAX + 4
 
+struct pa_autoscroll_runtime;
+
 struct sway_cursor {
 	struct sway_seat *seat;
+	/* Source-compiled but hard-OFF native autoscroll bridge. */
+	struct pa_autoscroll_runtime *autoscroll;
 	struct wlr_cursor *cursor;
 	struct {
 		double x, y;
