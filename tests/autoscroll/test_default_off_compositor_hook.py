@@ -32,6 +32,11 @@ class DefaultOffCompositorHooks(unittest.TestCase):
                         "uinput", "EVIOCGRAB", "swaymsg", "bindsym"):
             self.assertNotIn(command, RUNTIME)
         self.assertIn("if (!PA_AUTOSCROLL_LIVE_ACTIVATION", RUNTIME)
+        self.assertIn("if (cursor == NULL || !PA_AUTOSCROLL_LIVE_ACTIVATION)", RUNTIME)
+        self.assertLess(RUNTIME.index("if (cursor == NULL || !PA_AUTOSCROLL_LIVE_ACTIVATION)"),
+                        RUNTIME.index("calloc(1, sizeof(*runtime))"))
+        self.assertLess(RUNTIME.index("if (cursor == NULL || !PA_AUTOSCROLL_LIVE_ACTIVATION)"),
+                        RUNTIME.index("wl_event_loop_add_timer("))
         self.assertIn("wl_event_source_timer_update(runtime->timer, -1)",
                       RUNTIME)
 
