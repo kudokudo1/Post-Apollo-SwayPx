@@ -114,7 +114,9 @@ static int autoscroll_timer_tick(void *opaque) {
 
 struct pa_autoscroll_runtime *pa_autoscroll_runtime_create(
         struct sway_cursor *cursor) {
-    if (cursor == NULL) {
+    /* Production hard-OFF means ZERO allocation, zero timer registration
+     * and no changes to normal compositor startup or event-loop behavior. */
+    if (cursor == NULL || !PA_AUTOSCROLL_LIVE_ACTIVATION) {
         return NULL;
     }
     struct pa_autoscroll_runtime *runtime = calloc(1, sizeof(*runtime));
