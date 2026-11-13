@@ -20,7 +20,7 @@ PARALLEL ROOM // Company Map [PR #126](https://github.com/kudokudo1/Post-Apollo-
 
 - `sway/input/post_apollo_autoscroll_runtime.c` adds the real compositor-side bridge for the existing V1 speed core, V2 middle-click adapter, and V3 axis dispatcher.
 - The actual `sway/input/cursor.c` now invokes the bridge on relative pointer motion and mouse button press/release **after** both Stage Director Weather/Company physical-input pairing guards. When hard OFF, those calls return `false` and the original code continues unchanged.
-- `sway_cursor_create` allocates one per-cursor runtime and a dormant Wayland timer, and `sway_cursor_destroy` cancels and frees them. Failure to allocate the optional bridge leaves the normal mouse path working.
+- `sway_cursor_create` calls an optional factory that returns `NULL` while the production hard-OFF gate is set. **No per-cursor heap allocation or Wayland timer is made when disabled.** If a future approved test build enables the gate, the factory allocates the runtime/timer and destruction cancels/frees them. Failure to allocate that optional bridge leaves normal mouse input working.
 - Meson compiles the four namespaced autoscroll sources into the compositor.
 - A potential axis sink uses `wlr_seat_pointer_notify_axis` and `wlr_seat_pointer_notify_frame` with pixel-scroll semantics. **It cannot execute** because the compile-time guard is 0, the adapter is never enabled, the verified physical-source flag is false, and missing native Scroll Lock/output-generation evidence forces refusal.
 - No IPC, public pointer coordinates, udev permission grant, external input grab, compositor configuration option, keyboard interception, production service, or local desktop changes.
