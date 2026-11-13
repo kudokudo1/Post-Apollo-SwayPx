@@ -7,6 +7,10 @@ on:
       - "sway/input/post_apollo_autoscroll.c"
       - "include/sway/input/post_apollo_autoscroll_adapter.h"
       - "sway/input/post_apollo_autoscroll_adapter.c"
+      - "include/sway/input/post_apollo_autoscroll_axis_dispatch.h"
+      - "sway/input/post_apollo_autoscroll_axis_dispatch.c"
+      - "tests/post_apollo_autoscroll_axis_dispatch_test.c"
+      - "MODEL/autoscroll-compositor-runtime-v3.md"
       - "tests/post_apollo_autoscroll_adapter_test.c"
       - "MODEL/autoscroll-compositor-runtime-v2.md"
       - "tests/post_apollo_autoscroll_engine_test.c"
@@ -45,6 +49,16 @@ jobs:
             -lm -o /tmp/post-apollo-autoscroll-adapter-unit
       - name: Run input-mode, cancel and axis-sink contracts
         run: timeout 5s /tmp/post-apollo-autoscroll-adapter-unit
+      - name: Compile compositor-neutral scroll axis dispatch with warnings as errors
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/input/post_apollo_autoscroll.c \
+            sway/input/post_apollo_autoscroll_adapter.c \
+            sway/input/post_apollo_autoscroll_axis_dispatch.c \
+            tests/post_apollo_autoscroll_axis_dispatch_test.c \
+            -lm -o /tmp/post-apollo-autoscroll-axis-unit
+      - name: Test middle-click to axis/frame dispatch and cancel/denial
+        run: timeout 5s /tmp/post-apollo-autoscroll-axis-unit
       - name: Verify no compositor runtime hook was added in this stage
         run: |
           python3 - <<'PY'
@@ -69,6 +83,12 @@ jobs:
           assert "wlr_seat_pointer_notify_axis" not in adapter
           assert "seatop_pointer_axis" not in adapter
           assert "wl_event_loop_add_timer" not in adapter
+          dispatch = Path("sway/input/post_apollo_autoscroll_axis_dispatch.c").read_text()
+          assert "wlr_seat_pointer_notify_axis" not in dispatch
+          assert "seatop_pointer_axis" not in dispatch
+          assert "wl_event_loop_add_timer" not in dispatch
+          assert "wl_pointer" not in dispatch
+          assert "uinput" not in dispatch
           assert "swaymsg" not in adapter
           assert "UInput" not in core
           print("SWAYPX_AUTOSCROLL_NOT_ACTIVATED")
