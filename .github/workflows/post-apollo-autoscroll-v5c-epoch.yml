@@ -59,6 +59,11 @@ jobs:
               "tests/post_apollo_autoscroll_epoch_test.c",
               "MODEL/autoscroll-v5c-epoch-readiness.md",
               ".github/workflows/post-apollo-autoscroll-v5c-epoch.yml",
+              "tests/autoscroll/ci_headless_pointer_observer.c",
+              "tests/autoscroll/ci_headless_virtual_middle.c",
+              "tests/autoscroll/ci_headless_virtual_denial.nix",
+              "tests/autoscroll/ci_headless_virtual_denial.sh",
+              ".github/workflows/post-apollo-autoscroll-v5c-headless-virtual.yml",
           }
           assert changed <= allowed, sorted(changed - allowed)
           print("SWAYPX_V5C_ISOLATED_OWNER_SAFE // LIVE_DISABLED")
