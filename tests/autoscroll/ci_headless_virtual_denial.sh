@@ -55,6 +55,11 @@ cleanup() {
     if ! sudo -n setfacl --restore="$acl_snapshot"; then
       echo "PA_AUTOSCROLL_CI_UDMABUF_ACL_RESTORE_FAILED" >&2
       original_rc=3
+    elif ! diff -u "$acl_snapshot" <(getfacl -p "$device") >/dev/null; then
+      echo "PA_AUTOSCROLL_CI_UDMABUF_ACL_MISMATCH_AFTER_RESTORE" >&2
+      original_rc=3
+    else
+      echo "PA_AUTOSCROLL_CI_UDMABUF_ACL_RESTORED original_permissions=1"
     fi
   fi
   rm -rf -- "$runtime"
@@ -199,5 +204,6 @@ if grep -q 'PA_CI_AUTOSCROLL_RECEIPT kind=AXIS ' "$client_log"; then
   echo "PA_AUTOSCROLL_SPURIOUS_AXIS_WHILE_HARD_OFF" >&2
   exit 1
 fi
+grep 'PA_CI_AUTOSCROLL_RECEIPT kind=' "$client_log" | tail -15
 echo "PA_AUTOSCROLL_VIRTUAL_MIDDLE_PASSTHROUGH_PASS normal_button=1 axis=0 physical_authority=NONE"
 success=1
