@@ -158,6 +158,11 @@ jobs:
           "$output"
       - name: Verify live NEWS hooks cannot invoke test helper
         run: python3 tests/stage_director/test_news_supervisor_boundary.py
+      - name: Verify opt-in Social startup probe early checkpoint and mock lifecycle
+        run: |
+          set -euo pipefail
+          sh -n OPERATE/social-resize-startup-probe.sh
+          python3 tests/stage_director/test_social_resize_startup_probe.py
 
       - name: Compile fractional pointer and popup boundary policy
         run: |
