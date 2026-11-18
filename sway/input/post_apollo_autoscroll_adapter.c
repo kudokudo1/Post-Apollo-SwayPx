@@ -108,7 +108,7 @@ bool pa_autoscroll_adapter_middle(
     adapter->seat_id = seat_id;
     adapter->middle_release_pending = true;
     adapter->middle_release_device = device_id;
-        adapter->middle_release_seat = seat_id;
+    adapter->middle_release_seat = seat_id;
     return true;
 }
 
