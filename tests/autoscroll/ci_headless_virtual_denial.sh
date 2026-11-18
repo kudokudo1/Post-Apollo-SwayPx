@@ -24,7 +24,12 @@ client_log="$runtime/observer.log"
 sway_pid=""
 client_pid=""
 success=0
+device=/dev/udmabuf
+acl_changed=0
+acl_snapshot=""
 cleanup() {
+  local original_rc=$?
+  trap - EXIT
   if [[ -n "$client_pid" ]]; then
     kill -TERM "$client_pid" 2>/dev/null || true
     wait "$client_pid" 2>/dev/null || true
@@ -44,9 +49,48 @@ cleanup() {
     echo "=== V5C COMPOSITOR LOG ===" >&2
     tail -120 "$log" 2>/dev/null || true
   fi
+  # If an isolated CI-only ACL was created, restore its exact snapshot
+  # BEFORE removing the private runtime. Restoration failure is not ignorable.
+  if [[ "$acl_changed" == 1 ]]; then
+    if ! sudo -n setfacl --restore="$acl_snapshot"; then
+      echo "PA_AUTOSCROLL_CI_UDMABUF_ACL_RESTORE_FAILED" >&2
+      original_rc=3
+    fi
+  fi
   rm -rf -- "$runtime"
+  exit "$original_rc"
 }
 trap cleanup EXIT
+
+# The pinned SceneFX software path requires /dev/udmabuf. Reuse the
+# established Stage Director guarded ephemeral-runner ACL pattern without
+# touching any operator workstation. Never chmod/chown the character device.
+if [[ ! -c "$device" || "$(stat -Lc '%u' "$device")" != 0 ]]; then
+  echo "PA_AUTOSCROLL_CI_UDMABUF_UNEXPECTED_DEVICE" >&2
+  exit 2
+fi
+if ! python3 -c 'import os; fd=os.open("/dev/udmabuf",os.O_RDWR|os.O_CLOEXEC); os.close(fd)' 2>/dev/null; then
+  if ! command -v getfacl >/dev/null || ! command -v setfacl >/dev/null; then
+    echo "PA_AUTOSCROLL_CI_MISSING_ACL_TOOLS" >&2
+    exit 2
+  fi
+  if getfacl -cp "$device" | grep -Eq "^user:$(id -u):"; then
+    echo "PA_AUTOSCROLL_CI_EXISTING_DEVICE_ACL_REFUSED" >&2
+    exit 2
+  fi
+  acl_snapshot="$runtime/udmabuf-original.acl"
+  getfacl -p "$device" > "$acl_snapshot"
+  acl_changed=1
+  if ! sudo -n setfacl -m "u:$(id -u):rw" "$device"; then
+    echo "PA_AUTOSCROLL_CI_UDMABUF_ACL_DENIED" >&2
+    exit 2
+  fi
+  if ! python3 -c 'import os; fd=os.open("/dev/udmabuf",os.O_RDWR|os.O_CLOEXEC); os.close(fd)' 2>/dev/null; then
+    echo "PA_AUTOSCROLL_CI_UDMABUF_OPEN_DENIED" >&2
+    exit 2
+  fi
+  echo "PA_AUTOSCROLL_CI_TEMPORARY_UDMABUF_ACL_GRANTED"
+fi
 
 cat > "$config" <<'EOF'
 font pango:monospace 10
