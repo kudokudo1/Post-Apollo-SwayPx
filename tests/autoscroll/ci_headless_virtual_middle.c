@@ -73,7 +73,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     uint32_t x, y;
-    if (argc != 4 || strcmp(argv[1], "middle") ||
+    const bool middle = argc == 4 && strcmp(argv[1], "middle") == 0;
+    const bool axis_control = argc == 4 && strcmp(argv[1], "axis") == 0;
+    if ((!middle && !axis_control) ||
             !coordinate(argv[2], 1920, &x) ||
             !coordinate(argv[3], 1080, &y)) {
         return 3;
@@ -100,20 +102,28 @@ int main(int argc, char **argv) {
         zwlr_virtual_pointer_v1_frame(pointer);
         okay = flush_and_pause(sender.display);
     }
-    if (okay) {
+    if (axis_control && okay) {
+        /* Positive observer control only, AFTER the default-OFF negative
+         * check. Explicit virtual axis is never autoscroll engine output. */
+        zwlr_virtual_pointer_v1_axis(pointer, event_time(),
+            WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(16));
+        zwlr_virtual_pointer_v1_frame(pointer);
+        okay = flush_and_pause(sender.display);
+    }
+    if (middle && okay) {
         zwlr_virtual_pointer_v1_button(pointer, event_time(), BTN_MIDDLE,
             WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(pointer);
         okay = flush_and_pause(sender.display);
     }
-    if (okay) {
+    if (middle && okay) {
         /* Real virtual-pointer protocol motion, not a PA engine injection. */
         zwlr_virtual_pointer_v1_motion(pointer, event_time(),
             wl_fixed_from_int(0), wl_fixed_from_int(12));
         zwlr_virtual_pointer_v1_frame(pointer);
         okay = flush_and_pause(sender.display);
     }
-    if (okay) {
+    if (middle && okay) {
         zwlr_virtual_pointer_v1_button(pointer, event_time(), BTN_MIDDLE,
             WL_POINTER_BUTTON_STATE_RELEASED);
         zwlr_virtual_pointer_v1_frame(pointer);
@@ -123,8 +133,14 @@ int main(int argc, char **argv) {
     wl_display_roundtrip(sender.display);
     wl_display_disconnect(sender.display);
     if (!okay) return 7;
-    printf("PA_AUTOSCROLL_CI_SENT source=VIRTUAL button=BTN_MIDDLE "
-           "press=1 release=1 motion=1 axis_injected=0 "
-           "physical_authority=NONE\n");
+    if (middle) {
+        printf("PA_AUTOSCROLL_CI_SENT source=VIRTUAL button=BTN_MIDDLE "
+               "press=1 release=1 motion=1 axis_injected=0 "
+               "physical_authority=NONE\n");
+    } else {
+        printf("PA_AUTOSCROLL_CI_AXIS_CONTROL source=VIRTUAL "
+               "explicit_virtual_axis=1 autoscroll_engine=NONE "
+               "physical_authority=NONE\n");
+    }
     return 0;
 }
