@@ -32,7 +32,7 @@ struct state {
 	struct xdg_surface *xdg;
 	struct xdg_toplevel *top;
 	struct wl_buffer *parent_buf, *child_buf;
-	bool configured, ready, closed;
+	bool configured, ready, closed, axis_seen_in_frame;
 };
 static volatile sig_atomic_t stopping;
 static void on_term(int s) {(void)s; stopping = 1;}
@@ -48,7 +48,7 @@ static void global(void *data, struct wl_registry *reg,
 		s->shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
 	} else if (!strcmp(interface, wl_seat_interface.name)) {
 		s->seat = wl_registry_bind(reg, name, &wl_seat_interface,
-			version < 4 ? version : 4);
+			version < 8 ? version : 8);
 	} else if (!strcmp(interface, xdg_wm_base_interface.name)) {
 		s->wm = wl_registry_bind(reg, name,
 			&xdg_wm_base_interface, version < 3 ? version : 3);
@@ -147,13 +147,21 @@ static void pointer_button(void *data, struct wl_pointer *ptr,
 }
 static void pointer_axis(void *data, struct wl_pointer *ptr,
 		uint32_t time, uint32_t axis, wl_fixed_t value) {
-	(void)data; (void)ptr; (void)time;
+	(void)ptr; (void)time;
+	struct state *s=data;
+	s->axis_seen_in_frame=true;
 	printf("PA_CI_AUTOSCROLL_RECEIPT kind=AXIS axis=%u value=%.3f\n",
 		axis, wl_fixed_to_double(value));
 	fflush(stdout);
 }
 static void pointer_frame(void *data, struct wl_pointer *ptr) {
-	(void)data; (void)ptr;
+	(void)ptr;
+	struct state *s=data;
+	if (s->axis_seen_in_frame) {
+		puts("PA_CI_AUTOSCROLL_RECEIPT kind=AXIS_FRAME");
+		fflush(stdout);
+		s->axis_seen_in_frame=false;
+	}
 }
 static void pointer_axis_source(void *data, struct wl_pointer *ptr,
 		uint32_t source) {(void)data;(void)ptr;(void)source;}
@@ -220,7 +228,8 @@ int main(int argc, char **argv) {
 	struct wl_registry *reg=wl_display_get_registry(s.display);
 	wl_registry_add_listener(reg,&registry_listener,&s);
 	if (wl_display_roundtrip(s.display)<0 || !s.comp || !s.subcomp ||
-			!s.wm || !s.shm || !s.seat) return 4;
+			!s.wm || !s.shm || !s.seat ||
+			wl_proxy_get_version((struct wl_proxy *)s.seat)<5) return 4;
 	wl_seat_add_listener(s.seat,&seat_listener,&s);
 	xdg_wm_base_add_listener(s.wm,&wm_listener,&s);
 	s.parent=wl_compositor_create_surface(s.comp);
