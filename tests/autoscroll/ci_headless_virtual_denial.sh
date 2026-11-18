@@ -204,6 +204,20 @@ if grep -q 'PA_CI_AUTOSCROLL_RECEIPT kind=AXIS ' "$client_log"; then
   echo "PA_AUTOSCROLL_SPURIOUS_AXIS_WHILE_HARD_OFF" >&2
   exit 1
 fi
-grep 'PA_CI_AUTOSCROLL_RECEIPT kind=' "$client_log" | tail -15
 echo "PA_AUTOSCROLL_VIRTUAL_MIDDLE_PASSTHROUGH_PASS normal_button=1 axis=0 physical_authority=NONE"
+
+# POSITIVE RECEIVER CONTROL: the observer must actually receive a deliberately
+# injected VIRTUAL Wayland axis+frame. This is never an autoscroll engine tick
+# and is sequenced AFTER the negative assertion above.
+timeout 12s "$sender" axis "$x" "$y"
+sleep 1
+axis_count="$(grep -c '^PA_CI_AUTOSCROLL_RECEIPT kind=AXIS axis=' "$client_log" || true)"
+frame_count="$(grep -c '^PA_CI_AUTOSCROLL_RECEIPT kind=AXIS_FRAME
+ "$client_log" || true)"
+if [[ "$axis_count" != 1 || "$frame_count" != 1 ]]; then
+  echo "PA_AUTOSCROLL_WAYLAND_AXIS_FRAME_CONTROL_FAILED axis=$axis_count frames=$frame_count" >&2
+  exit 1
+fi
+grep 'PA_CI_AUTOSCROLL_RECEIPT kind=' "$client_log" | tail -20
+echo "PA_AUTOSCROLL_NATIVE_WAYLAND_RECEIVER_CONTROL_PASS explicit_virtual_axis=1 frame=1 engine_axis=0"
 success=1
