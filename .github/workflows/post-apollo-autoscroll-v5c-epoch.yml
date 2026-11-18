@@ -1,0 +1,65 @@
+name: SwayPX / V5C Epoch Readiness (No Live Input)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/input/post_apollo_autoscroll_epoch.h"
+      - "sway/input/post_apollo_autoscroll_epoch.c"
+      - "tests/post_apollo_autoscroll_epoch_test.c"
+      - "MODEL/autoscroll-v5c-epoch-readiness.md"
+      - ".github/workflows/post-apollo-autoscroll-v5c-epoch.yml"
+  push:
+    branches:
+      - "autoscroll/v5c-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-epoch-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compile isolated source-lifetime guard with warnings as errors
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/input/post_apollo_autoscroll_witness.c \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            tests/post_apollo_autoscroll_epoch_test.c \
+            -o /tmp/post-apollo-autoscroll-epoch
+      - name: Verify virtual source, event replay and object reuse remain fail closed
+        run: timeout 5s /tmp/post-apollo-autoscroll-epoch
+      - name: Verify shipping compositor remains hard OFF and no shared input change
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          cursor = Path("sway/input/cursor.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_autoscroll_epoch_" not in runtime
+          assert "pa_autoscroll_epoch_" not in cursor
+          assert "post_apollo_autoscroll_epoch.c" not in meson
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/master"], text=True
+          ).strip()
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only", base, "HEAD"], text=True
+          ).splitlines())
+          allowed = {
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "tests/post_apollo_autoscroll_epoch_test.c",
+              "MODEL/autoscroll-v5c-epoch-readiness.md",
+              ".github/workflows/post-apollo-autoscroll-v5c-epoch.yml",
+          }
+          assert changed <= allowed, sorted(changed - allowed)
+          print("SWAYPX_V5C_ISOLATED_OWNER_SAFE // LIVE_DISABLED")
+          PY
