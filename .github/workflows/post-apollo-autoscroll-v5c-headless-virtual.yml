@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Assert source still refuses live activation
         run: |
           set -euo pipefail
@@ -94,6 +95,6 @@ jobs:
       - name: Report limits
         if: always()
         run: |
-          echo "The actual production-hard-OFF SwayPX compositor was run on a private headless socket." >> "$GITHUB_STEP_SUMMARY"
+          echo "This job verifies a production-hard-OFF compositor on a private headless Wayland socket if the preceding setup and build succeed." >> "$GITHUB_STEP_SUMMARY"
           echo "The input source was zwlr_virtual_pointer_v1, **not** a physical libinput mouse." >> "$GITHUB_STEP_SUMMARY"
           echo "A passing button receipt with zero axes is a default-OFF negative test, not working autoscroll." >> "$GITHUB_STEP_SUMMARY"
