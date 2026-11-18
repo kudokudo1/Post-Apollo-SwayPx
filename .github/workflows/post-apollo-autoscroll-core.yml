@@ -5,6 +5,10 @@ on:
     paths:
       - "include/sway/input/post_apollo_autoscroll.h"
       - "sway/input/post_apollo_autoscroll.c"
+      - "include/sway/input/post_apollo_autoscroll_adapter.h"
+      - "sway/input/post_apollo_autoscroll_adapter.c"
+      - "tests/post_apollo_autoscroll_adapter_test.c"
+      - "MODEL/autoscroll-compositor-runtime-v2.md"
       - "tests/post_apollo_autoscroll_engine_test.c"
       - "MODEL/autoscroll-compositor-runtime-v1.md"
       - ".github/workflows/post-apollo-autoscroll-core.yml"
@@ -32,6 +36,15 @@ jobs:
             -lm -o /tmp/post-apollo-autoscroll-unit
       - name: Run isolated middle-click engine test
         run: timeout 5s /tmp/post-apollo-autoscroll-unit
+      - name: Compile isolated physical-input adapter with warnings as errors
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/input/post_apollo_autoscroll.c \
+            sway/input/post_apollo_autoscroll_adapter.c \
+            tests/post_apollo_autoscroll_adapter_test.c \
+            -lm -o /tmp/post-apollo-autoscroll-adapter-unit
+      - name: Run input-mode, cancel and axis-sink contracts
+        run: timeout 5s /tmp/post-apollo-autoscroll-adapter-unit
       - name: Verify no compositor runtime hook was added in this stage
         run: |
           python3 - <<'PY'
@@ -52,6 +65,11 @@ jobs:
           core = Path("sway/input/post_apollo_autoscroll.c").read_text()
           assert "wlr_seat_pointer_notify_axis" not in core
           assert "seatop_pointer_axis" not in core
+          adapter = Path("sway/input/post_apollo_autoscroll_adapter.c").read_text()
+          assert "wlr_seat_pointer_notify_axis" not in adapter
+          assert "seatop_pointer_axis" not in adapter
+          assert "wl_event_loop_add_timer" not in adapter
+          assert "swaymsg" not in adapter
           assert "UInput" not in core
           print("SWAYPX_AUTOSCROLL_NOT_ACTIVATED")
           PY
