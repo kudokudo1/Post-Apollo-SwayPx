@@ -228,8 +228,8 @@ int main(int argc, char **argv) {
 	s.top=xdg_surface_get_toplevel(s.xdg);
 	xdg_surface_add_listener(s.xdg,&xdg_listener,&s);
 	xdg_toplevel_add_listener(s.top,&top_listener,&s);
-	xdg_toplevel_set_app_id(s.top,"pa-ci-autoscroll-witness");
-	xdg_toplevel_set_title(s.top,"PA-CI-AUTOSCROLL-WITNESS");
+	xdg_toplevel_set_app_id(s.top,"pa-ci-autoscroll-observer");
+	xdg_toplevel_set_title(s.top,"PA-CI-AUTOSCROLL-OBSERVER");
 	xdg_toplevel_set_min_size(s.top,160,120);
 	xdg_toplevel_set_max_size(s.top,160,120);
 	wl_surface_commit(s.parent);
