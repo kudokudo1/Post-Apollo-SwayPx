@@ -10,6 +10,10 @@ on:
       - "include/sway/input/post_apollo_autoscroll_axis_dispatch.h"
       - "sway/input/post_apollo_autoscroll_axis_dispatch.c"
       - "tests/post_apollo_autoscroll_axis_dispatch_test.c"
+      - "include/sway/input/post_apollo_autoscroll_witness.h"
+      - "sway/input/post_apollo_autoscroll_witness.c"
+      - "tests/post_apollo_autoscroll_witness_test.c"
+      - "MODEL/autoscroll-compositor-witness-v5b.md"
       - "sway/input/post_apollo_autoscroll_runtime.c"
       - "include/sway/input/post_apollo_autoscroll_runtime.h"
       - "include/sway/input/cursor.h"
@@ -66,6 +70,34 @@ jobs:
             -lm -o /tmp/post-apollo-autoscroll-axis-unit
       - name: Test middle-click to axis/frame dispatch and cancel/denial
         run: timeout 5s /tmp/post-apollo-autoscroll-axis-unit
+      - name: Compile synthetic pointer-witness and mock axis-receiver tests
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/input/post_apollo_autoscroll.c \
+            sway/input/post_apollo_autoscroll_adapter.c \
+            sway/input/post_apollo_autoscroll_axis_dispatch.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            tests/post_apollo_autoscroll_witness_test.c \
+            -lm -o /tmp/post-apollo-autoscroll-witness-unit
+      - name: Test provenance, freshness, target/output turnover and no-emit denials
+        run: timeout 5s /tmp/post-apollo-autoscroll-witness-unit
+      - name: Verify witness policy stays outside production input path
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          cursor = Path("sway/input/cursor.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          witness = Path("sway/input/post_apollo_autoscroll_witness.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_autoscroll_witness_" not in runtime
+          assert "pa_autoscroll_witness_" not in cursor
+          assert "post_apollo_autoscroll_witness.c" not in meson
+          for banned in ("wlr_seat_pointer_notify", "wl_event_loop_add_timer",
+                         "uinput", "swaymsg", "libinput_device_"):
+              assert banned not in witness, banned
+          print("SWAYPX_AUTOSCROLL_WITNESS_TEST_ONLY")
+          PY
       - name: Verify compositor hook is compiled but hard OFF with pairing intact
         run: python3 -m unittest discover -s tests/autoscroll -p "test_default_off_compositor_hook.py"
       - name: Verify no changes to foreign cursor-owner dependency files
