@@ -25,6 +25,18 @@ This branch introduces `pa_autoscroll_epoch_begin/tick/cancel`, a portable nonpr
 
 The source-only unit fixtures provide *synthetic* initial event, elapsed ticks, fake pointer-address reuse with changed epochs, replay, locked seat, virtual event and scene/output change. A successful unit test only validates behavior assuming an independently trusted producer.
 
+## V5C-B // Actual headless virtual-input refusal (new CI-only fixture)
+
+The isolated `tests/autoscroll/ci_headless_virtual_denial.sh` boots the **real default-hard-OFF SwayPX compositor** on a private headless Wayland socket on a disposable GitHub Linux runner. Two separately compiled, native Wayland clients use the pinned repository's Wayland and wlroots protocols:
+
+- A mapped XDG + wl_subsurface observer records actual `wl_pointer.enter`, middle button press/release and any `wl_pointer.axis`.
+- A virtual-pointer sender uses **`zwlr_virtual_pointer_v1`** to inject only BTN_MIDDLE press, relative motion and release. This is explicitly a *virtual* device, not libinput hardware.
+- The test must see normal BTN_MIDDLE press **and** release in the target client, with **zero** unsolicited axis packets. The target coordinate comes from the compositor's actual Sway IPC tree, not arbitrary client-asserted geometry.
+- The harness enforces `CI=true`, `GITHUB_ACTIONS=true`, a private `RUNNER_TEMP` runtime directory, a locked Nix SwayPX+Mesa build, timed cleanup and explicit refusal outside CI. There is no new production event hook, runtime enable flag, virtual-input authority or host deployment.
+- The new workflow reports the exact outcome and still runs with `PA_AUTOSCROLL_LIVE_ACTIVATION 0`; the later **genuine physical-libinput** witness and authorized real `wl_pointer.axis/frame` integration remain open.
+
+This is a **negative headless integration result**, not evidence that autoscroll works. If a virtual pointer ever starts an autoscroll or the client receives unsolicited axes, the test must fail. Real application + real physical input testing is a separate, owner-approved milestone.
+
 ## PHYSICAL EVENT AND HEADLESS LIMITS
 
 A headless compositor with virtual pointer input does **not** establish the physical-libinput source demanded by V5B. A test that fabricates `origin=PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT` is a policy mock, not a genuine hardware ingress witness.
@@ -59,6 +71,7 @@ The optional auxiliary test logic must **not** be linked to production or used t
 - [x] Confirm #143 and #145 actually delivered mainline, #144 nested, runtime hard OFF.
 - [x] Identify open Company #126 overlapping input ownership.
 - [x] Add test-only lifetime epoch contract and independent CI.
+- [x] Add CI-only native virtual middle-click and observer fixture without shared cursor edits (exact-head outcome pending).
 - [ ] Verify exact-head epoch and existing compositor regression checks.
 - [ ] Coordinate with the Mouse/Keyboard primary and Company cursor owners before production handler changes.
 - [ ] Derive genuine physical ingress/scene/output evidence in isolated compositor test.
