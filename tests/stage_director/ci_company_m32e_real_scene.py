@@ -1,0 +1,786 @@
+#!/usr/bin/env python3
+"""M32e: real Company Quickshell + offline MapLibre via M32c scene setter.
+
+Strict disposable GitHub CI. Old reviewed M30s source tools are read-only
+fixtures; live SwayPX comes from this PR's private CI binary. Synthetic
+operator/launch/lease evidence exists ONLY in that private C test build.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+
+CANVAS = (166, 203, 1493, 788)
+MARKER = "[stage-director][COMPANY_M32E][CI_ONLY] native_scene_apply=PASS"
+QML_MARKER = "SD_COMPANY_M32E_REAL_QML_FULLSCREEN canvas=166,203,1493,788"
+EVENT_NAMES = ("press", "motion", "release", "wheel")
+QML = """import QtQuick
+import Quickshell
+import "widgets"
+ShellRoot {
+    id: proof
+    CompanyNetworkW {
+        id: company
+        // In the two-headless CI variant Quickshell otherwise defaults to
+        // HEADLESS-2 (confirmed by actual native Sway layer observation).
+        // Fix the disposable test host to the known first output. This is
+        // NOT a production screen override or client authority signal.
+        screen: Quickshell.screens.find(s => s.name === "HEADLESS-1")
+        menuOpen: true
+        coverageLoaded: true
+        chassisLevel: "fullscreen"
+        dockCenterX: 960
+        chassisTopY: 160
+        vectorBridgeOptIn: false
+    }
+    Timer {
+        interval: 1900
+        running: true
+        repeat: false
+        onTriggered: {
+            const c=company.ciM30iActualCanvasHostRect;
+            console.log("SD_COMPANY_M32E_REAL_QML_FULLSCREEN canvas=" +
+                Math.round(c.x)+","+Math.round(c.y)+","+
+                Math.round(c.width)+","+Math.round(c.height));
+        }
+    }
+}
+"""
+
+
+def wait_file(path: Path, marker: str, seconds: float, process=None):
+    end=time.monotonic()+seconds
+    while time.monotonic()<end:
+        content=path.read_text(errors="replace") if path.is_file() else ""
+        if marker in content:
+            return content
+        if process is not None and process.poll() is not None:
+            raise RuntimeError("M32E_PROCESS_EXITED_EARLY "+content[-2400:])
+        time.sleep(.15)
+    tail=path.read_text(errors="replace")[-5000:] if path.is_file() else ""
+    raise RuntimeError("M32E_MARKER_TIMEOUT "+marker+" "+tail)
+
+
+def wait_new_marker(path: Path, marker: str, before_chars: int,
+                    seconds: float, process=None):
+    end=time.monotonic()+seconds
+    while time.monotonic()<end:
+        data=path.read_text(errors="replace") if path.is_file() else ""
+        if marker in data[before_chars:]:
+            return data[before_chars:]
+        if process is not None and process.poll() is not None:
+            raise RuntimeError("M32F_PROCESS_EXITED_BEFORE_NEW_MARKER "+data[-2400:])
+        time.sleep(.15)
+    tail=path.read_text(errors="replace")[-5000:] if path.is_file() else ""
+    raise RuntimeError("M32F_NEW_MARKER_TIMEOUT "+marker+" "+tail)
+
+
+def compare_pixels(before, after, rgb):
+    x,y,w,h=CANVAS
+    # Positive proof of *this exact pinned* MapLibre offline source:
+    # its bright cyan header rail and gold VECTOR PROOF title appear in
+    # the actual Qt screenshot, not in Company's original raster map.
+    # The center fixture must separately show true geographic strokes.
+    # This is stronger than a sparse uniform-background delta counter,
+    # which missed the original dark MapLibre fixture (63/85 samples).
+    def features(image, rectangle, step=2):
+        left,top,right,bottom=rectangle
+        cyan=gold=0
+        for py in range(top,bottom,step):
+            for px in range(left,right,step):
+                r,g,b=rgb(image,px,py)
+                cyan+=int(g>120 and b>110 and 10*g>13*r)
+                gold+=int(r>130 and g>70 and b<150)
+        return cyan,gold
+
+    top=(x+12,y,x+w-12,y+90)
+    geographic=(x+170,y+290,x+590,y+560)
+    baseline_header=features(before,top)
+    native_header=features(after,top)
+    baseline_geo=features(before,geographic)
+    native_geo=features(after,geographic)
+    if not (native_header[0]>=250 and native_header[1]>=100 and
+            baseline_header[0]<30 and baseline_header[1]<20 and
+            native_geo[0]>=35 and native_geo[1]>=10 and
+            baseline_geo[0]<20 and baseline_geo[1]<10):
+        raise RuntimeError("M32E_NATIVE_MAPLIBRE_GEO_PALETTE_MISSING "
+            f"header={native_header} baseline_header={baseline_header} "
+            f"geo={native_geo} baseline_geo={baseline_geo}")
+    print("SD_COMPANY_M32E_MAPLIBRE_SOURCE_PIXELS "
+          f"cyan_header={native_header[0]} gold_header={native_header[1]} "
+          f"cyan_geography={native_geo[0]} gold_geography={native_geo[1]} "
+          "real_MapLibre_Qt_fixture=PASS",flush=True)
+    outside_ok=0
+    for px,py in ((x-20,y+120),(x-20,y+320),(x+w+20,y+120),
+                  (x+w+20,y+320),(x+100,y-18),(x+300,y-18),
+                  (x+100,y+h+18),(x+300,y+h+18)):
+        a,b=rgb(before,px,py),rgb(after,px,py)
+        outside_ok+=sum(abs(t-u) for t,u in zip(a,b))<60
+    if outside_ok<7:
+        raise RuntimeError(f"M32E_NATIVE_SCENE_OVERFLOW outside_ok={outside_ok}")
+    print(f"SD_COMPANY_M32E_REAL_PIXELS maplibre_geo_present=1 "
+          f"outside_unchanged={outside_ok}/8 PASS",flush=True)
+
+
+def compare_post_camera_pixels(before, after, rgb):
+    # After real pan + wheel, the native camera is intentionally not at its
+    # initial lat/lon/zoom. A geographically fixed sample box can become
+    # empty while MapLibre remains fully functional. Require the exact
+    # source's cyan/gold header AND live colored geometry ANYWHERE inside
+    # the bounded canvas; never permit pixels in the outside samples.
+    x,y,w,h=CANVAS
+    def count(im, region):
+        x0,y0,x1,y1=region
+        cyan=gold=0
+        for py in range(y0,y1,2):
+            for px in range(x0,x1,2):
+                r,g,b=rgb(im,px,py)
+                cyan+=int(g>120 and b>110 and 10*g>13*r)
+                gold+=int(r>130 and g>70 and b<150)
+        return cyan,gold
+    header=count(after,(x+12,y,x+w-12,y+90))
+    geographic=count(after,(x+20,y+95,x+w-30,y+h-75))
+    baseline=count(before,(x+20,y+95,x+w-30,y+h-75))
+    # The wider scan includes a few cyan strokes in Company's raster
+    # baseline (24 in this pinned fixture). Require an actual native
+    # geography increase rather than assuming the baseline is empty.
+    if not (header[0]>=250 and header[1]>=100 and
+            geographic[0]>=max(25,baseline[0]+12) and
+            geographic[1]>=max(8,baseline[1]+8)):
+        raise RuntimeError("M32L_POST_CAMERA_NATIVE_GEOGRAPHY_MISSING "+
+            str((header,geographic,baseline)))
+    outside=((x-20,y+120),(x-20,y+320),
+             (x+w+20,y+120),(x+w+20,y+320),
+             (x+100,y-18),(x+300,y-18),
+             (x+100,y+h+18),(x+300,y+h+18))
+    preserved=sum(int(sum(abs(a-b) for a,b in
+                  zip(rgb(before,px,py),rgb(after,px,py)))<60)
+                  for px,py in outside)
+    if preserved<7:
+        raise RuntimeError("M32L_POST_CAMERA_OUTSIDE_OVERFLOW "+str(preserved))
+    print("SD_COMPANY_M32L_POST_CAMERA "
+          f"broader_geometry={geographic[0]},{geographic[1]} "
+          f"source_header={header[0]},{header[1]} "
+          f"outside_unchanged={preserved}/8 PASS",flush=True)
+
+
+def main():
+    env=os.environ
+    temp=Path(env.get("RUNNER_TEMP","/not-ci"))
+    legacy=Path(env.get("STAGE_DIRECTOR_M32E_LEGACY","/not-legacy"))
+    dual=env.get("STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL","0")
+    if dual not in ("0","1"):
+        raise RuntimeError("BLOCKED_M32L_DUAL_FLAG_NOT_BOOLEAN")
+    dual=(dual=="1")
+    if not (env.get("CI")=="true" and env.get("GITHUB_ACTIONS")=="true"
+            and env.get("STAGE_DIRECTOR_CI_COMPANY_M32E")=="1"
+            and env.get("STAGE_DIRECTOR_CI_COMPANY_M32E_REAL")=="1"
+            and temp==Path("/home/runner/work/_temp")
+            and legacy.is_dir() and (legacy/".git").is_dir()
+            and os.getuid()!=0):
+        raise RuntimeError("BLOCKED_M32E_NOT_EXACT_DISPOSABLE_CI")
+    historical_sha=subprocess.check_output(
+        ["git","-C",str(legacy),"rev-parse","HEAD"],text=True).strip()
+    if historical_sha!="1c9e1104fffd688e15f0b1f3b77715e812d0f0f8":
+        raise RuntimeError("BLOCKED_M32E_UNPINNED_HISTORICAL_FIXTURE")
+    sys.path.insert(0,str(legacy/"tests/stage_director"))
+    import ci_company_real_quickshell as real
+    import ci_company_m30r_real_source as merged
+    from ci_company_overlay_prototype import call,nodes,ppm,rgb
+    from ci_company_input_containment import EVENT,read_until
+
+    # The historical helper loads a QML shell via a relative file path.
+    # Change only this Python process's CWD to the immutable legacy checkout.
+    os.chdir(legacy)
+    real.PIN=merged.COMPANY_MERGED_SHA
+    e,temp,runtime,checkout,qs,swaymsg,grim,ipc=real.guard()
+    output_snapshot=json.loads(
+        call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+    active=[o for o in output_snapshot if o.get("active") is True]
+    if dual:
+        positions={(str(o.get("name")),o.get("rect",{}).get("x"),
+                    o.get("rect",{}).get("y"),
+                    o.get("rect",{}).get("width"),
+                    o.get("rect",{}).get("height"))
+                   for o in active}
+        expected_positions={
+            ("HEADLESS-1",0,0,1920,1080),
+            ("HEADLESS-2",1920,0,1920,1080)}
+        if positions!=expected_positions:
+            raise RuntimeError(
+                "M32L_NOT_EXACT_TWO_HEADLESS_OUTPUTS "+str(sorted(positions)))
+        print("SD_COMPANY_M32L_OUTPUTS independent_virtual_outputs=2 "
+              "primary=0,0 secondary=1920,0 "
+              "both_1920x1080=1 PASS",flush=True)
+    elif len(active)!=1:
+        raise RuntimeError("M32E_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
+    qt=Path(env.get("STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE","/missing"))
+    pointer_bin=Path(env.get("STAGE_DIRECTOR_TEST_COMPANY_POINTER","/missing"))
+    compat=Path(env.get("STAGE_DIRECTOR_M30I_QML_IMPORT_PATH","/missing"))
+    if not all(str(p).startswith("/nix/store/") and p.is_file()
+               for p in (qt,pointer_bin)):
+        raise RuntimeError("BLOCKED_M32E_NATIVE_QT_OR_POINTER_NOT_NIX")
+    if not (str(compat).startswith("/nix/store/") and
+            (compat/"Qt5Compat/GraphicalEffects/qmldir").is_file()):
+        raise RuntimeError("BLOCKED_M32E_COMPAT_MISSING")
+    shell=merged.instrument_without_geometry_repair(
+        checkout,temp/"sd-company-m32e-quickshell-copy")
+    shell.write_text(QML,encoding="utf-8")
+    qml_paths=str(compat)+(":"+env["QML_IMPORT_PATH"]
+                            if env.get("QML_IMPORT_PATH") else "")
+    home=temp/"sd-company-m32e-home"
+    for folder in ("",".config",".cache",".local/share"):
+        (home/folder).mkdir(parents=True,exist_ok=True,mode=0o700)
+    qsenv={**env,"HOME":str(home),
+           "XDG_CONFIG_HOME":str(home/".config"),
+           "XDG_DATA_HOME":str(home/".local/share"),
+           "XDG_CACHE_HOME":str(home/".cache"),
+           "QML_IMPORT_PATH":qml_paths,"QML2_IMPORT_PATH":qml_paths,
+           "QT_QPA_PLATFORM":"wayland","NO_COLOR":"1"}
+    company_log=runtime/"sd-company-m32e-quickshell.log"
+    qt_log=runtime/"sd-company-m32e-maplibre.log"
+    sway_log=runtime/"sway.log"
+    company=actor=pointer=None
+
+    def screenshot(label):
+        image_path=temp/f"sd-company-m32e-{label}.ppm"
+        call(str(grim),"-t","ppm",str(image_path),timeout=25)
+        if not dual:
+            # The historical strict parser still validates exactly
+            # 1920x1080 on the ordinary one-output regression.
+            return ppm(image_path)
+        # Grim produces a single P6 framebuffer for both real Wayland
+        # outputs. Accept ONLY the exact expected 3840x1080 raw RGB
+        # header/length, never arbitrary source-dependent dimensions.
+        raw=image_path.read_bytes()
+        header=re.match(
+            rb"P6[ \t\r\n]+3840[ \t\r\n]+1080[ \t\r\n]+255[ \t\r\n]",
+            raw)
+        if not header or len(raw)-header.end()!=3840*1080*3:
+            raise RuntimeError(
+                "M32L_DUAL_PPM_EXACT_RGB_SIZE_INVALID "+str(len(raw)))
+        return 3840,1080,memoryview(raw)[header.end():]
+
+    try:
+        with company_log.open("w") as log:
+            company=subprocess.Popen(
+                [str(qs),"--no-color","-p",str(shell)],
+                env=qsenv,stdout=log,stderr=subprocess.STDOUT)
+        wait_file(company_log,QML_MARKER,35,company)
+        before=screenshot("before")
+        print("SD_COMPANY_M32E_REAL_COMPANY original_merged_QML=1 "
+              "actual_fullscreen_canvas=1493x788 PASS",flush=True)
+
+        with qt_log.open("w") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M32I_POPUP_TRIGGER":
+                         str(runtime/"sd-company-m32i-popup-trigger")})
+        wait_file(sway_log,MARKER,35,actor)
+        wait_file(qt_log,"SD_COMPANY_M30L_MAP_READY real_maplibre=1",35,actor)
+        wait_file(qt_log,"SD_COMPANY_M30L_FRAME_SWAPPED count=",15,actor)
+        time.sleep(.8)
+        after=screenshot("embedded-maplibre")
+        compare_pixels(before,after,rgb)
+        if dual:
+            x,y,w,h=CANVAS
+            # Do not accept a native Qt source in a corresponding map
+            # rectangle on the second independent virtual output.
+            sample_points=(
+                (1920+x+20,y+42),(1920+x+190,y+64),
+                (1920+x+420,y+100),(1920+x+500,y+450),
+                (1920+x+900,y+390),(1920+x+1300,y+660))
+            unchanged=sum(int(sum(abs(a-b) for a,b in zip(
+                rgb(before,px,py),rgb(after,px,py)))<60)
+                for px,py in sample_points)
+            if unchanged!=len(sample_points):
+                raise RuntimeError(
+                    "M32L_NATIVE_OVERFLOW_SECONDARY_OUTPUT "+
+                    str(unchanged)+"/"+str(len(sample_points)))
+            print("SD_COMPANY_M32L_SECONDARY_CLIP "
+                  "unrelated_output_samples_unchanged=6/6 PASS",flush=True)
+        print("SD_COMPANY_M32E_ACTUAL_SCENE real_wlroots_apply=1 "
+              "actual_Company_QML=1 real_MapLibre=1 "
+              "test_authority=SYNTHETIC_CI production=OFF PASS",flush=True)
+
+        # M32g: command the *real* Sway focus path against the native Qt
+        # container. Merely reading the pure focus policy is insufficient:
+        # prove the compositor intercepts an actual IPC focus request.
+        def native_actor_node():
+            tree=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_tree"))
+            candidates=[n for n in nodes(tree)
+                        if n.get("pid")==actor.pid and
+                           n.get("shell")=="xdg_shell"]
+            if len(candidates)!=1:
+                raise RuntimeError(
+                    "M32G_NATIVE_QT_TREE_NOT_UNIQUE "+
+                    str([(n.get("id"),n.get("pid")) for n in candidates]))
+            return candidates[0]
+        native_node=native_actor_node()
+        if native_node.get("focused"):
+            raise RuntimeError("M32G_NATIVE_KEYBOARD_ALREADY_FOCUSED")
+        before_focus_log=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                              f"[con_id={native_node['id']}] focus"))
+        if not isinstance(reply,list) or not reply or not all(
+                x.get("success") is True for x in reply):
+            raise RuntimeError("M32G_IPC_FOCUS_COMMAND_REFUSED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32G][CI_ONLY] "
+            "native_ipc_keyboard_focus=DENIED actor_embedded=1",
+            before_focus_log,12,actor)
+        if native_actor_node().get("focused"):
+            raise RuntimeError("M32G_NATIVE_KEYBOARD_FOCUS_LEAK")
+        after_focus=screenshot("after-rejected-keyboard-focus")
+        compare_pixels(before,after_focus,rgb)
+        print("SD_COMPANY_M32G_NATIVE_KEYBOARD "
+              "real_IPC_focus_attempt=1 compositor_refused=1 "
+              "actor_keyboard_focused=0 scene_intact=1 PASS",flush=True)
+
+        if env.get("STAGE_DIRECTOR_CI_COMPANY_INPUT")!="1":
+            raise RuntimeError("BLOCKED_M32E_POINTER_REQUIRED_CI_GATE_MISSING")
+        with (runtime/"sd-company-m32e-pointer.log").open("w") as ptrlog:
+            pointer=subprocess.Popen([str(pointer_bin)],
+                stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                stderr=ptrlog,text=True,bufsize=1,env=env)
+        assert pointer.stdout and pointer.stdin
+        read_until(pointer.stdout,
+                   "SD_CI_COMPANY_POINTER_READY real_zwlr_virtual_pointer=1")
+        initial=qt_log.read_text(errors="replace")
+        # Native Sway button-down operation must deliver the whole
+        # in-map drag. Re-enter the known native-hit location for
+        # wheel, which is a new, non-grab pointer action.
+        for action in ("move 500 450","press","move 610 490",
+                       "release","move 500 450","wheel"):
+            pointer.stdin.write(action+"\n")
+            pointer.stdin.flush()
+            observed=read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_ACK ",8)
+            if observed!="SD_CI_COMPANY_POINTER_ACK "+action:
+                raise RuntimeError("M32E_POINTER_ACK_INVALID "+observed)
+            time.sleep(.15)
+        # Clicking and dragging can trigger a Sway focus/arrange
+        # transaction. Require the native map to remain in the same
+        # original Company map slot afterward, not only before input.
+        after_drag=screenshot("after-native-drag")
+        compare_post_camera_pixels(before,after_drag,rgb)
+        print("SD_COMPANY_M32E_POST_DRAG_SCENE "
+              "native_map_still_in_company_canvas=PASS",flush=True)
+        diff=qt_log.read_text(errors="replace")[len(initial):]
+        receipts=[m.group(2) for line in diff.splitlines()
+                  if (m:=EVENT.search(line))]
+        if not all(event in receipts for event in EVENT_NAMES):
+            raise RuntimeError("M32E_ACTUAL_MAP_INPUT_MISSING "+str(receipts))
+        print("SD_COMPANY_M32E_REAL_INPUT actual_qt_press_drag_release_wheel=PASS",
+              flush=True)
+
+        # M32i: request an actual Qt::Popup from the already admitted
+        # native XDG root. This is a new real Wayland protocol attempt,
+        # and the compositor must deny it before creating its popup scene.
+        popup_trigger=runtime/"sd-company-m32i-popup-trigger"
+        qt_before=len(qt_log.read_text(errors="replace"))
+        sway_before=len(sway_log.read_text(errors="replace"))
+        popup_trigger.write_text("create-one-real-Qt-Popup\n",encoding="utf-8")
+        wait_new_marker(
+            qt_log,
+            "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1",
+            qt_before,15,actor)
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32I][CI_ONLY] "
+            "real_native_xdg_popup=DENIED embedded_root=1",
+            sway_before,15,actor)
+        time.sleep(.5)
+        if actor.poll() is not None:
+            raise RuntimeError("M32I_NATIVE_QT_DIED_AFTER_POPUP_DENIAL")
+        after_popup=screenshot("after-rejected-native-popup")
+        compare_post_camera_pixels(before,after_popup,rgb)
+        print("SD_COMPANY_M32I_NATIVE_POPUP "
+              "real_Qt_Popup_request=1 compositor_xdg_reject=1 "
+              "actor_alive=1 map_stable=1 PASS",flush=True)
+        popup_trigger.unlink(missing_ok=True)
+
+        # Negative input boundary: a press entirely outside the current
+        # map must not reach the native Qt actor even after a valid drag
+        # established pointer focus. The coordinates are outside both
+        # axes of Company's 166,203..1659,991 half-open map rectangle.
+        outside_start=len(qt_log.read_text(errors="replace"))
+        for action in ("move 1810 1040","press","release"):
+            pointer.stdin.write(action+"\n")
+            pointer.stdin.flush()
+            observed=read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_ACK ",8)
+            if observed!="SD_CI_COMPANY_POINTER_ACK "+action:
+                raise RuntimeError("M32F_OUTSIDE_POINTER_ACK_INVALID "+observed)
+            time.sleep(.15)
+        outside_log=qt_log.read_text(errors="replace")[outside_start:]
+        outside_events=[m.group(2) for line in outside_log.splitlines()
+                        if (m:=EVENT.search(line))]
+        if any(event in ("press","release","wheel") for event in outside_events):
+            raise RuntimeError("M32F_OUTSIDE_INPUT_LEAK "+str(outside_events))
+        print("SD_COMPANY_M32F_OUTSIDE_POINTER native_click_leak=0 "
+              "outside_map=1810,1040 PASS",flush=True)
+
+        pointer.stdin.write("quit\n")
+        pointer.stdin.flush()
+        read_until(pointer.stdout,"SD_CI_COMPANY_POINTER_STOP ",8)
+        pointer.wait(timeout=6)
+        pointer=None
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+        time.sleep(.8)
+        final=screenshot("after-close")
+        # Some QML glow animations vary. Require the former map pixels to
+        # return to the original Company region at most sampled positions.
+        restored=0
+        x,y,w,h=CANVAS
+        for py in range(y+70,y+h-70,42):
+            for px in range(x+90,x+w-90,43):
+                if sum(abs(a-b) for a,b in
+                       zip(rgb(before,px,py),rgb(final,px,py)))<45:
+                    restored+=1
+        if restored<220:
+            raise RuntimeError("M32E_NATIVE_MAP_NOT_CLEARED "+str(restored))
+        print(f"SD_COMPANY_M32E_REAL_TEARDOWN restored_samples={restored} "
+              "embedded_native_actor_hidden=PASS",flush=True)
+
+        # M32h: change the active Sway workspace while native MapLibre
+        # is still mapped in the original Company viewport. This is a real
+        # compositor output-arrangement transition, not a pure policy test.
+        workspaces=json.loads(call(str(swaymsg),"-s",ipc,
+                                   "-r","-t","get_workspaces"))
+        focused=[ws for ws in workspaces if ws.get("focused")]
+        if len(focused)!=1 or not focused[0].get("name"):
+            raise RuntimeError("M32H_ORIGINAL_WORKSPACE_NOT_UNIQUE")
+        original_workspace=focused[0]["name"]
+        second_map_log=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,second_map_log,35,actor)
+        time.sleep(.6)
+        compare_pixels(before,screenshot("before-workspace-loss"),rgb)
+        before_switch=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "workspace SD-CI-Company-Other"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32H_WORKSPACE_SWITCH_FAILED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32H][CI_ONLY] "
+            "native_workspace_deactivated=1 scene_revoke=PASS",
+            before_switch,20,actor)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32H_ACTOR_OR_COMPANY_EXITED_ON_SWITCH")
+        time.sleep(.5)
+        workspace_image=screenshot("inactive-workspace")
+        x,y,w,h=CANVAS
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(workspace_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32H_WORKSPACE_ACTOR_LEAK cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32H_WORKSPACE_LOSS "
+              f"real_workspace_switch=1 native_actor_alive=1 "
+              f"scene_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "workspace "+original_workspace))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32H_WORKSPACE_RETURN_FAILED "+str(reply))
+        # M32j: check the return *before* ending the independent Qt
+        # process. Revocation must be sticky, not undone by Sway's normal
+        # floating-container reparent/enable on the old workspace.
+        time.sleep(.65)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32J_RETURN_ACTOR_OR_COMPANY_EXITED")
+        return_image=screenshot("after-return-revoked-actor-alive")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(return_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32J_STALE_NATIVE_ACTOR_REEXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32J_REVOKED_RETURN "
+              f"real_workspace_return=1 native_actor_alive=1 "
+              f"scene_not_reexposed=1 cyan={cyan} gold={gold} PASS",
+              flush=True)
+        # Even an explicit IPC focus command must not revive the same
+        # compositor-quarantined still-running mapped actor.
+        native_node=native_actor_node()
+        focus_log_start=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             f"[con_id={native_node['id']}] focus"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32J_REVOKED_FOCUS_IPC_NOT_EXECUTED "+str(reply))
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32J][CI_ONLY] "
+            "revoked_native_keyboard_focus=DENIED",
+            focus_log_start,12,actor)
+        if native_actor_node().get("focused") or actor.poll() is not None:
+            raise RuntimeError("M32J_REVOKED_ACTOR_REFOCUSED_OR_EXITED")
+        time.sleep(.35)
+        focus_image=screenshot("after-revoked-ipc-focus")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(focus_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32J_REVOKED_FOCUS_REEXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32J_REVOKED_IPC_FOCUS "
+              "real_IPC_focus_attempt=1 denied=1 actor_alive=1 "
+              f"scene_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+        time.sleep(.4)
+
+        # M32f host-loss scenario: start another real native MapLibre actor
+        # after the first was normally closed, but now terminate Company
+        # WHILE the independent Qt process is still alive. The compositor
+        # must revoke on the actual native Company layer unmap/destroy and
+        # must not expose the former actor as a floating desktop window.
+        prior_scene_log=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,prior_scene_log,35,actor)
+        time.sleep(.8)
+        before_host_loss=screenshot("before-host-loss")
+        compare_pixels(before,before_host_loss,rgb)
+        if actor.poll() is not None:
+            raise RuntimeError("M32F_NATIVE_ACTOR_DIED_BEFORE_HOST_LOSS")
+        prior_host_log=len(sway_log.read_text(errors="replace"))
+        company.terminate()
+        company.wait(timeout=10)
+        company=None
+        wait_new_marker(
+            sway_log,
+            "[stage-director][COMPANY_M32F][CI_ONLY] "
+            "native_company_host_lost=1 scene_revoke=PASS",
+            prior_host_log,20,actor)
+        if actor.poll() is not None:
+            raise RuntimeError("M32F_NATIVE_ACTOR_DIED_WITH_HOST")
+        time.sleep(.8)
+        lost_image=screenshot("after-host-loss")
+        x,y,w,h=CANVAS
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(lost_image,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS "
+                f"cyan={cyan} gold={gold}")
+        print(f"SD_COMPANY_M32F_HOST_LOSS "
+              f"host_native_unmap=OBSERVED actor_still_running=1 "
+              f"map_pixels_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+
+        # M32k: CI-only virtual OUTPUT disable/enable, not a claim that
+        # an actual Fedora/DRM monitor was physically unplugged.
+        # Relaunch a real Company host, then another native MapLibre actor
+        # and revoke while BOTH processes remain alive. On restoration
+        # the same revoked actor must not leak as an ordinary floating Qt
+        # window or be re-admitted by a new MapLibre frame.
+        qml_start=len(company_log.read_text(errors="replace"))
+        with company_log.open("a") as log:
+            company=subprocess.Popen(
+                [str(qs),"--no-color","-p",str(shell)],
+                env=qsenv,stdout=log,stderr=subprocess.STDOUT)
+        wait_new_marker(company_log,QML_MARKER,qml_start,35,company)
+        scene_start=len(sway_log.read_text(errors="replace"))
+        with qt_log.open("a") as log:
+            actor=subprocess.Popen([str(qt)],stdout=log,
+                stderr=subprocess.STDOUT,
+                env={**env,"QT_QPA_PLATFORM":"wayland",
+                     "QT_WAYLAND_DISABLE_WINDOWDECORATION":"1",
+                     "QSG_RHI_BACKEND":"opengl",
+                     "LIBGL_ALWAYS_SOFTWARE":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30L":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30N":"1",
+                     "STAGE_DIRECTOR_CI_COMPANY_M30O":"1"})
+        wait_new_marker(sway_log,MARKER,scene_start,35,actor)
+        time.sleep(.6)
+        compare_pixels(before,screenshot("before-virtual-output-disable"),rgb)
+        outputs=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+        active_outputs=[v for v in outputs if v.get("active") is True]
+        if dual:
+            if (len(active_outputs)!=2 or
+                    {v.get("name") for v in active_outputs} !=
+                    {"HEADLESS-1","HEADLESS-2"}):
+                raise RuntimeError("M32L_OUTPUT_SET_CHANGED_BEFORE_DISABLE")
+            output_name="HEADLESS-1"
+        else:
+            if len(active_outputs)!=1 or not str(
+                    active_outputs[0].get("name","")).startswith("HEADLESS-"):
+                raise RuntimeError("M32K_NOT_EXACT_SINGLE_HEADLESS_OUTPUT")
+            output_name=active_outputs[0]["name"]
+        disable_start=len(sway_log.read_text(errors="replace"))
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "output "+output_name+" disable"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_DISABLE_FAILED "+str(reply))
+        deactivate_receipt=None
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            new=sway_log.read_text(errors="replace")[disable_start:]
+            if ("native_workspace_deactivated=1 scene_revoke=PASS" in new):
+                deactivate_receipt="workspace"
+                break
+            if ("native_company_host_lost=1 scene_revoke=PASS" in new):
+                deactivate_receipt="host-unmap"
+                break
+            if actor.poll() is not None or company.poll() is not None:
+                raise RuntimeError("M32K_NATIVE_PROCESS_EXITED_ON_DISABLE")
+            time.sleep(.15)
+        if not deactivate_receipt:
+            raise RuntimeError("M32K_VIRTUAL_OUTPUT_REVOKE_MISSING")
+        outputs=json.loads(call(str(swaymsg),"-s",ipc,"-r","-t","get_outputs"))
+        if any(v.get("name")==output_name and v.get("active") is True
+               for v in outputs):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_STILL_ACTIVE")
+        if dual and not any(v.get("name")=="HEADLESS-2" and
+                            v.get("active") is True for v in outputs):
+            raise RuntimeError("M32L_SECONDARY_OUTPUT_WENT_INACTIVE")
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32K_PROCESS_DIED_WITH_OUTPUT")
+        reply=json.loads(call(str(swaymsg),"-s",ipc,"-r",
+                             "output "+output_name+" enable"))
+        if not isinstance(reply,list) or not reply or not all(
+                item.get("success") is True for item in reply):
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_ENABLE_FAILED "+str(reply))
+        for _ in range(65):
+            outputs=json.loads(call(str(swaymsg),"-s",ipc,
+                                    "-r","-t","get_outputs"))
+            if any(v.get("name")==output_name and v.get("active") is True
+                   for v in outputs):
+                break
+            time.sleep(.15)
+        else:
+            raise RuntimeError("M32K_HEADLESS_OUTPUT_NOT_RESTORED")
+        time.sleep(.7)
+        if actor.poll() is not None or company.poll() is not None:
+            raise RuntimeError("M32K_PROCESS_DIED_AFTER_OUTPUT_RESTORE")
+        if dual:
+            active_after=[
+                (o.get("name"),o.get("rect",{}).get("x"))
+                for o in outputs if o.get("active") is True]
+            if set(active_after)!={("HEADLESS-1",0),("HEADLESS-2",1920)}:
+                raise RuntimeError(
+                    "M32L_OUTPUT_RESTORE_GEOMETRY_CHANGED "+
+                    str(active_after))
+        restored_output=screenshot("after-virtual-output-restore")
+        cyan=gold=0
+        for py in range(y+4,y+88,3):
+            for px in range(x+16,x+w-16,3):
+                rr,gg,bb=rgb(restored_output,px,py)
+                cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                gold+=int(rr>130 and gg>70 and bb<150)
+        if cyan>=65 or gold>=65:
+            raise RuntimeError(
+                f"M32K_VIRTUAL_OUTPUT_STALE_ACTOR_EXPOSED cyan={cyan} gold={gold}")
+        print("SD_COMPANY_M32K_VIRTUAL_OUTPUT "
+              f"real_headless_output_disable=1 revoked_via={deactivate_receipt} "
+              f"re_enabled=1 actor_alive=1 company_alive=1 "
+              f"native_pixels_hidden=1 cyan={cyan} gold={gold} PASS",flush=True)
+        if dual:
+            sx=1920+x
+            secondary_cyan=secondary_gold=0
+            for py in range(y+4,y+88,3):
+                for px in range(sx+16,sx+w-16,3):
+                    rr,gg,bb=rgb(restored_output,px,py)
+                    secondary_cyan+=int(gg>120 and bb>110 and 10*gg>13*rr)
+                    secondary_gold+=int(rr>130 and gg>70 and bb<150)
+            if secondary_cyan>=65 or secondary_gold>=65:
+                raise RuntimeError(
+                    "M32L_SECONDARY_OUTPUT_NATIVE_MAP_LEAK "+
+                    str((secondary_cyan,secondary_gold)))
+            print("SD_COMPANY_M32L_DUAL_OUTPUT_RESTORE "
+                  "primary_disabled_restored=1 secondary_stayed_active=1 "
+                  "native_actor_alive=1 secondary_no_native_map=1 PASS",
+                  flush=True)
+        actor.terminate()
+        actor.wait(timeout=10)
+        actor=None
+        company.terminate()
+        company.wait(timeout=10)
+        company=None
+    finally:
+        if pointer is not None:
+            if pointer.stdin:
+                try: pointer.stdin.write("quit\n");pointer.stdin.flush()
+                except (BrokenPipeError,OSError): pass
+            try: pointer.wait(timeout=4)
+            except subprocess.TimeoutExpired: pointer.kill();pointer.wait()
+        if actor is not None:
+            actor.terminate()
+            try: actor.wait(timeout=8)
+            except subprocess.TimeoutExpired: actor.kill();actor.wait()
+        if company is not None:
+            company.terminate()
+            try: company.wait(timeout=8)
+            except subprocess.TimeoutExpired: company.kill();company.wait()
+        for name,path in (("company",company_log),("maplibre",qt_log),
+                          ("sway",sway_log),
+                          ("pointer",runtime/"sd-company-m32e-pointer.log")):
+            if path.is_file():
+                (temp/f"sd-company-m32e-{name}.log").write_text(
+                    path.read_text(errors="replace")[-65000:],
+                    encoding="utf-8")
+    print("SD_COMPANY_M32E_REAL_WAYLAND isolated_pixels_input_teardown=PASS "
+          "operator_Fedora_visual=NOT_TESTED production=OFF",flush=True)
+
+
+if __name__=="__main__":
+    try:
+        main()
+    except Exception as exc:
+        print("SD_COMPANY_M32E_REAL_BLOCKED:",str(exc),file=sys.stderr,flush=True)
+        raise SystemExit(1)

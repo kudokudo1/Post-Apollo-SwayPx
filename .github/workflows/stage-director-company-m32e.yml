@@ -1,0 +1,394 @@
+name: Company M32e private compositor scene execution preflight (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32d-input-popup-focus-containment-20261109
+    paths:
+      - 'include/sway/stage_director_company_scene.h'
+      - 'sway/stage_director_company_scene.c'
+      - 'sway/stage_director.c'
+      - 'sway/desktop/xdg_shell.c'
+      - 'sway/desktop/transaction.c'
+      - 'include/sway/stage_director.h'
+      - 'include/sway/stage_director_company_input.h'
+      - 'include/sway/input/seat.h'
+      - 'sway/input/cursor.c'
+      - 'sway/input/seat.c'
+      - 'sway/input/seatop_down.c'
+      - '.github/workflows/stage-director-company-m32e.yml'
+      - 'docs/stage-director-company-m32e-20261109.md'
+      - 'tests/stage_director/ci_company_m32e_real_scene.py'
+      - 'tests/stage_director/headless_sway_smoke.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-trust-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert test-only scene call, exact fixture and ordinary compositor refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          stage=Path('sway/stage_director.c').read_text()
+          scene=Path('sway/stage_director_company_scene.c').read_text()
+          header=Path('include/sway/stage_director_company_scene.h').read_text()
+          meson=Path('sway/meson.build').read_text()
+          digest=Path('sway/stage_director_company_digest.c').read_text()
+          def exact_one(source,token):
+              assert source.count(token)==1,(token,source.count(token))
+          exact_one(stage,'stage_director_company_scene_apply_m32e_fixture_only(')
+          exact_one(scene,'bool stage_director_company_scene_apply_m32e_fixture_only(')
+          exact_one(header,'bool stage_director_company_scene_apply_m32e_fixture_only(')
+          assert 'void stage_director_company_m32e_geometry_committed(struct sway_view *view)' in stage
+          assert 'if (stage_director_company_scene_apply_m32e_fixture_only(view, &host))' in stage
+          transaction=Path('sway/desktop/transaction.c').read_text()
+          assert 'preserved_embedded_container_position=1' in transaction
+          assert 'preserved_embedded_container_parent=1' in transaction
+          assert 'preserved_embedded_output_parent=1' in transaction
+          assert 'stage_director_company_scene_is_embedded_root(' in transaction
+          assert 'stage_director_company_m32e_geometry_committed(view);' in Path('sway/desktop/xdg_shell.c').read_text()
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in Path('sway/desktop/xdg_shell.c').read_text()
+          assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION\n/* M32f:' in scene
+          assert 'M32e // positive native-scene probe' in scene
+          for needed in ('getenv("CI")','getenv("GITHUB_ACTIONS")',
+                         'getenv("STAGE_DIRECTOR_CI_COMPANY_M32E")',
+                         'getenv("RUNNER_TEMP")',
+                         '"/home/runner/work/_temp"',
+                         'host->host_global.width != 1920',
+                         'actor.root_global.width != 1493',
+                         'view->geometry.width != 1493',
+                         '.frame_in_host = {0, 0, 1920, 1080}',
+                         '.map_in_frame = {166, 203, 1493, 788}',
+                         'stage_director_company_scene_prepare(&e, &guard, exact_source)',
+                         'stage_director_company_scene_apply_ci_only(view, &e, &guard)'):
+              assert needed in scene,needed
+          assert 'company_scene_ci_args += \'-DSD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION=1\'' in meson
+          assert 'company_m30_manifest_elf_sha256[] = ""' in digest
+          assert 'stage_director_company_scene_apply_ci_only(' not in stage
+          assert 'stage_director_company_scene_m32f_host_lost(' in stage
+          assert 'native_company_host_lost=1 scene_revoke=PASS' in scene
+          assert 'ci_scene.host_layer_ref = current->host.native_layer_ref' in scene
+          assert 'ci_scene.host_layer_ref = 0' in scene
+          assert '(uintptr_t)lost_layer != ci_scene.host_layer_ref' in scene
+          test=Path('tests/stage_director/ci_company_m32e_real_scene.py').read_text()
+          assert 'M32F_OUTSIDE_INPUT_LEAK' in test
+          assert 'M32F_NATIVE_ACTOR_EXPOSED_AFTER_HOST_LOSS' in test
+          assert 'M32G_NATIVE_KEYBOARD_FOCUS_LEAK' in test
+          assert 'M32I_NATIVE_QT_DIED_AFTER_POPUP_DENIAL' in test
+          assert 'SD_COMPANY_M32I_NATIVE_POPUP' in test
+          assert 'real_native_xdg_popup=DENIED embedded_root=1' in Path('sway/desktop/xdg_shell.c').read_text()
+          assert 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in Path('.github/workflows/stage-director-company-m32e.yml').read_text()
+          assert 'M32H_WORKSPACE_ACTOR_LEAK' in test
+          assert 'M32J_STALE_NATIVE_ACTOR_REEXPOSED' in test
+          assert 'SD_COMPANY_M32J_REVOKED_RETURN' in test
+          assert 'M32J_REVOKED_FOCUS_REEXPOSED' in test
+          assert 'SD_COMPANY_M32J_REVOKED_IPC_FOCUS' in test
+          assert 'M32K_VIRTUAL_OUTPUT_REVOKE_MISSING' in test
+          assert 'M32K_VIRTUAL_OUTPUT_STALE_ACTOR_EXPOSED' in test
+          assert 'M32L_NOT_EXACT_TWO_HEADLESS_OUTPUTS' in test
+          assert 'M32L_NATIVE_OVERFLOW_SECONDARY_OUTPUT' in test
+          assert 'M32L_SECONDARY_OUTPUT_NATIVE_MAP_LEAK' in test
+          assert 'M32L_OUTPUT_RESTORE_GEOMETRY_CHANGED' in test
+          smoke=Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          assert 'BLOCKED_M32L_NOT_EXACT_DISPOSABLE_DUAL_CI' in smoke
+          assert 'export WLR_HEADLESS_OUTPUTS=2' in smoke
+          assert 'output HEADLESS-2 position 1920 0' in smoke
+          assert 'SD_COMPANY_M32K_VIRTUAL_OUTPUT' in test
+          assert 'output "+output_name+" disable' in test
+          assert 'output "+output_name+" enable' in test
+          assert 'revoked_native_keyboard_focus=DENIED' in scene
+          assert 'ci_actor_reserve(view)' in scene
+          assert 'ci_actor_quarantine(actor)' in scene
+          assert 'SD_COMPANY_M32J_CI_ACTOR_CAP 16' in scene
+          assert 'stage_director_company_scene_m32j_forget_unmapped(view);' in stage
+          assert 'stage_director_company_scene_m32j_quarantined(view)' in stage
+          assert 'quarantine_layout_kept_hidden=1' in transaction
+          assert 'stage_director_company_scene_m32j_quarantined(' in transaction
+          assert 'stage_director_company_scene_m32j_quarantined(' in header
+          assert 'stage_director_company_scene_m32j_forget_unmapped(' in header
+          assert 'M32H_WORKSPACE_RETURN_FAILED' in test
+          assert 'native_workspace_deactivated=1 scene_revoke=PASS' in transaction
+          assert 'real_IPC_focus_attempt=1' in test
+          seat=Path('sway/input/seat.c').read_text()
+          assert 'native_ipc_keyboard_focus=DENIED actor_embedded=1' in seat
+          assert 'admission_keyboard_focus_cleared=1' in seat
+          assert 'stage_director_company_scene_reject_keyboard_view(' in seat
+          assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(view);' in scene
+          assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(' in seat
+          assert 'stage_director_company_m32g_clear_admitted_actor_keyboard_focus(' in Path('include/sway/input/seat.h').read_text()
+          assert 'wait_new_marker(' in test
+          assert 'actor.poll() is not None' in test
+          assert 'company.terminate()' in test
+          cursor=Path('sway/input/cursor.c').read_text()
+          seatop=Path('sway/input/seatop_down.c').read_text()
+          grab_header=Path('include/sway/stage_director_company_input.h').read_text()
+          seat_header=Path('include/sway/input/seat.h').read_text()
+          for source,required in (
+              (cursor,'stage_director_company_scene_contained_native_grab('),
+              (cursor,'event->state == WL_POINTER_BUTTON_STATE_RELEASED &&'),
+              (seatop,'seat->seatop_impl != &seatop_impl'),
+              (seatop,'wlr_surface_get_root_surface(down->surface) == native_root'),
+              (scene,'stage_director_company_seatop_down_matches_root('),
+              (grab_header,'bool stage_director_company_scene_contained_native_grab('),
+              (seat_header,'bool stage_director_company_seatop_down_matches_root(')):
+              assert required in source,required
+          for source in (cursor,seatop,scene,grab_header,seat_header):
+              assert '#ifdef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' in source
+          assert 'stage_director_company_input_pointer(' in scene
+          assert '!verified.deny_event' in scene
+          print('SD_COMPANY_M32E_GRAB_SOURCE native_seatop_origin=REQUIRED '
+                'inside_crop=REQUIRED release=BOUND native_hover_not_granted PASS')
+          print('SD_COMPANY_M32E_SOURCE_BOUNDARY production=OFF '
+                'real_native_scene_call=CI_ONLY fixed_geometry=PASS '
+                'fake_test_authority=EXPLICIT digest=UNPINNED PASS')
+          PY
+
+  private-full-build-and-empty-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile normal SwayPX and prove no test-only scene call
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'FAIL test-only scene call leaked to ordinary SwayPX' >&2
+            exit 1
+          fi
+          echo 'SD_COMPANY_M32E_NORMAL_SCENE production=OFF source=NO_TEST_CALL PASS'
+      - name: Compile actual private wlroots setter and exact fixture call site
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32e-private-live-scene-probe"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway" && test -x "$private/bin/swaymsg"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo "SD_COMPANY_M32E_PRIVATE_SCENE_BINARY=$private/bin/sway" >> "$GITHUB_ENV"
+          echo "SD_COMPANY_M32E_PRIVATE_SWAYMSG=$private/bin/swaymsg" >> "$GITHUB_ENV"
+          echo 'SD_COMPANY_M32E_NATIVE_CALLSITE compiled=1 actual_scene_setter=LINKED production=OFF PASS'
+      - name: Boot and stop the private compositor without a Company/Qt actor
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          export STAGE_DIRECTOR_MESA_DIR="$mesa"
+          export STAGE_DIRECTOR_TEST_SWAYMSG="$SD_COMPANY_M32E_PRIVATE_SWAYMSG"
+          # Existing CI guard grants a temporary ACL to the runner uid and
+          # restores /dev/udmabuf state on success or failure. Never use on Fedora.
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$SD_COMPANY_M32E_PRIVATE_SCENE_BINARY"
+          echo 'SD_COMPANY_M32E_EMPTY_WAYLAND compositor_boot=PASS live_MapLibre=NOT_TESTED real_scene_pixels=NOT_TESTED'
+
+  real-company-maplibre-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    strategy:
+      fail-fast: false
+      matrix:
+        headless_outputs: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/Post-Apollo-SwayPx
+          ref: 1c9e1104fffd688e15f0b1f3b77715e812d0f0f8
+          path: legacy-m30s
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: kudokudo1/The-Post-Apollo-Project
+          ref: 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          path: company-source
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual real native MapLibre and test M32c scene in Company
+        shell: bash
+        env:
+          STAGE_DIRECTOR_CI_COMPANY_M32E: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M32E_REAL: '1'
+          # One-screen regression remains unchanged. Second variant uses
+          # genuinely separate headless output surfaces, not fake pixels.
+          STAGE_DIRECTOR_CI_COMPANY_M32L_DUAL: ${{ matrix.headless_outputs == 2 && '1' || '0' }}
+          # Required by the reviewed M30h Wayland virtual-pointer binary.
+          # This is scoped to the disposable positive native CI job only.
+          STAGE_DIRECTOR_CI_COMPANY_INPUT: '1'
+          STAGE_DIRECTOR_CI_COMPANY_QUICKSHELL: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30R: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30L: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30N: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30O: '1'
+          STAGE_DIRECTOR_CI_COMPANY_M30S: '1'
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('tests/stage_director/ci_company_m32e_real_scene.py')
+          ast.parse(p.read_text())
+          assert 'SD_COMPANY_M32E_REAL_QML_FULLSCREEN' in p.read_text()
+          assert 'STAGE_DIRECTOR_CI_COMPANY_M32E_REAL' in Path('tests/stage_director/headless_sway_smoke.sh').read_text()
+          print('SD_COMPANY_M32E_NATIVE_DRIVER_SYNTAX PASS')
+          PY
+          bash -n tests/stage_director/headless_sway_smoke.sh
+          test "$(git -C legacy-m30s rev-parse HEAD)" = 1c9e1104fffd688e15f0b1f3b77715e812d0f0f8
+          test "$(git -C company-source rev-parse HEAD)" = 877eb00d0f260f9fdda52712f35abec59b2f83b3
+          test -z "$(git -C legacy-m30s status --porcelain)"
+          test -z "$(git -C company-source status --porcelain)"
+          export STAGE_DIRECTOR_M32E_LEGACY="$GITHUB_WORKSPACE/legacy-m30s"
+          export STAGE_DIRECTOR_COMPANY_PINNED_SOURCE="$GITHUB_WORKSPACE/company-source"
+          export STAGE_DIRECTOR_M30L_CI_SOURCE="$RUNNER_TEMP/sd-company-m30l-native-src"
+          (cd legacy-m30s && python3 -B tests/stage_director/ci_company_m30s_prepare.py)
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ["STAGE_DIRECTOR_M30L_CI_SOURCE"])/"main.qml"
+          data=p.read_text()
+          old="    width: 840\n    height: 540"
+          new="    width: 1493\n    height: 788"
+          if data.count(old)!=1 or data.count(new):
+              raise RuntimeError('M32E_QT_FIRST_MAP_SIZE_SOURCE_DRIFT')
+          p.write_text(data.replace(old,new,1))
+          # The pinned Qt app uses "PostApolloCompanyVectorProbe" as the
+          # application name, which did not match the exact CI floating rule.
+          # Set the disposable copy's Wayland desktop-file identity BEFORE
+          # QML creates its first native XDG surface. This is a diagnostic
+          # selector only, never ownership evidence or production authority.
+          cpp=p.with_name("main.cpp")
+          code=cpp.read_text()
+          anchor='    app.setApplicationName("PostApolloCompanyVectorProbe");'
+          if code.count(anchor)!=1 or 'setDesktopFileName(' in code:
+              raise RuntimeError('M32E_QT_APP_ID_SOURCE_DRIFT')
+          cpp.write_text(code.replace(anchor,anchor+
+              '\n    QGuiApplication::setDesktopFileName('+
+              'QStringLiteral("CompanyVectorProbe"));',1))
+          # Only a disposable build of the pinned Qt source receives a
+          # native Popup test. No modification to the original renderer.
+          code=cpp.read_text()
+          after=('    if (!window) {' + chr(10) +
+                 '        qCritical() << "UNEXPECTED_ROOT_OBJECT";' + chr(10) +
+                 '        return 4;' + chr(10) + '    }')
+          if code.count(after)!=1 or 'SD_COMPANY_M32I_QT_POPUP_TRIGGERED' in code:
+              raise RuntimeError('M32I_QT_NATIVE_WINDOW_ANCHOR_DRIFT')
+          popup_code=r'''
+              std::fprintf(stderr,
+                  "SD_COMPANY_M32I_QT_HOOK_BOOT ci=%d gha=%d enabled=%d\n",
+                  qgetenv("CI") == "true", qgetenv("GITHUB_ACTIONS") == "true",
+                  qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1");
+              std::fflush(stderr);
+              if (qgetenv("CI") == "true" && qgetenv("GITHUB_ACTIONS") == "true"
+                      && qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_NATIVE_POPUP") == "1") {
+                  const QString trigger =
+                      QString::fromUtf8(qgetenv("STAGE_DIRECTOR_CI_COMPANY_M32I_POPUP_TRIGGER"));
+                  if (!trigger.startsWith(QStringLiteral("/home/runner/work/_temp/")))
+                      qFatal("M32I_POPUP_TRIGGER_NOT_DISPOSABLE");
+                  auto *poll = new QTimer(&app);
+                  poll->setInterval(100);
+                  QObject::connect(poll, &QTimer::timeout, &app,
+                      [poll, window, trigger]() {
+                          if (!QFileInfo::exists(trigger)) return;
+                          poll->stop();
+                          /* Parent-child QWindows may become wl_subsurface.
+                           * Require xdg_popup: an independent Qt::Popup
+                           * with explicit transient parent is not a child. */
+                          auto *popup = new QQuickWindow();
+                          popup->setTransientParent(window);
+                          popup->setFlags(Qt::Popup);
+                          popup->setWidth(160);
+                          popup->setHeight(110);
+                          popup->setPosition(window->position() + QPoint(1300, 80));
+                          popup->setColor(QColor("#ED981A"));
+                          std::fprintf(stderr,
+                              "SD_COMPANY_M32I_QT_POPUP_TRIGGERED native_Qt_Popup=1\n");
+                          std::fflush(stderr);
+                          popup->show();
+                      });
+                  poll->start();
+                  std::fprintf(stderr,"SD_COMPANY_M32I_QT_HOOK_ARMED\n");
+                  std::fflush(stderr);
+                  QTimer::singleShot(9000, &app, [trigger]() {
+                      std::fprintf(stderr,
+                          "SD_COMPANY_M32I_QT_TRIGGER_PROBE present=%d\n",
+                          QFileInfo::exists(trigger));
+                      std::fflush(stderr);
+                  });
+              }
+          '''
+          cpp.write_text(code.replace(after,after+popup_code,1))
+          print('SD_COMPANY_M32I_NATIVE_QT_POPUP disposable_copy=PASS')
+          print('SD_COMPANY_M32E_NATIVE_FIRST_MAP exact_1493x788_copy=PASS '
+                'desktop_id=CI_ONLY_CompanyVectorProbe')
+          PY
+          app="$(nix build --impure --expr \
+              'import ./legacy-m30s/tests/stage_director/ci_company_maplibre_native.nix {
+                 source = builtins.path {
+                   path = builtins.getEnv "STAGE_DIRECTOR_M30L_CI_SOURCE";
+                   name = "company-m32e-exact-first-map-source";
+                 };
+               }' \
+              --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$app/bin/company-vector-probe"
+          # qtWrapperHook installs a launcher shell script, not the ELF.
+          test -x "$app/bin/.company-vector-probe-wrapped"
+          grep -aFq 'SD_COMPANY_M32I_QT_HOOK_BOOT' "$app/bin/.company-vector-probe-wrapped"
+          export STAGE_DIRECTOR_M30L_NATIVE_MAPLIBRE="$app/bin/company-vector-probe"
+          qs="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.quickshell' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          if test -x "$qs/bin/quickshell"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/quickshell"
+          elif test -x "$qs/bin/qs"; then export STAGE_DIRECTOR_TEST_QUICKSHELL="$qs/bin/qs"
+          else echo 'M32E_NO_REAL_QUICKSHELL' >&2; exit 1; fi
+          pointer="$(nix build --impure --expr 'import ./legacy-m30s/tests/stage_director/ci_company_virtual_pointer.nix' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$pointer/bin/sd-company-m30h-pointer"
+          export STAGE_DIRECTOR_TEST_COMPANY_POINTER="$pointer/bin/sd-company-m30h-pointer"
+          compat="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.qt6.qt5compat' --no-link --print-out-paths --show-trace | tail -n 1)"
+          module="$(find "$compat" -type f -path '*/Qt5Compat/GraphicalEffects/qmldir' -print -quit)"
+          test -n "$module"
+          export STAGE_DIRECTOR_M30I_QML_IMPORT_PATH="$(dirname "$(dirname "$(dirname "$module")")")"
+          grim="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.grim' --no-link --print-out-paths | tail -n 1)"
+          test -x "$grim/bin/grim"
+          export STAGE_DIRECTOR_TEST_GRIM="$grim/bin/grim"
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32e-real-qt-scene-ci"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway" && test -x "$private/bin/swaymsg"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          export STAGE_DIRECTOR_TEST_SWAYMSG="$private/bin/swaymsg"
+          export STAGE_DIRECTOR_MESA_DIR="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$STAGE_DIRECTOR_MESA_DIR/share/glvnd/egl_vendor.d/50_mesa.json"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$private/bin/sway"
+          test -z "$(git -C company-source status --porcelain)"
+          test -z "$(git -C legacy-m30s status --porcelain)"
+      - name: Capture disposable native pixel/input evidence on failure or pass
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-company-m32e-real-native-maplibre
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            /home/runner/work/_temp/sd-company-m32e-*.ppm
+            /home/runner/work/_temp/sd-company-m32e-*.log

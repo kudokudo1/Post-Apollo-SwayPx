@@ -10,6 +10,7 @@
 #include "sway/stage_director_company_native.h"
 #include "sway/stage_director_company_vector_protocol.h"
 #include "sway/stage_director_company_scene.h"
+#include "sway/stage_director_company_scene.h"
 #include "sway/input/cursor.h"
 #include "sway/input/seat.h"
 
@@ -62,6 +63,10 @@ static bool probe_paired_native_host(void *context,
 				observed.host_global) ||
 			!same_rect(company_selection.output_global,
 				observed.output_global)) {
+		/* The previously installed clip/scene is stale the instant the
+		 * host moves or the selected output changes. Hide before creating
+		 * a fresh generation; never wait for another pointer event. */
+		stage_director_company_scene_revoke(NULL);
 		if (company_selection.revision == UINT64_MAX) return false;
 		company_selection.revision++;
 		company_selection.host_global = observed.host_global;

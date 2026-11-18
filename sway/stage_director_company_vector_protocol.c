@@ -7,6 +7,8 @@
 #include "sway/stage_director_company_birth_pidfd.h"
 #include "sway/stage_director_company_executable.h"
 #include "sway/stage_director_company_digest.h"
+#include "sway/stage_director_company_actor_pair.h"
+#include "sway/stage_director_company_scene.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -291,6 +293,11 @@ static void handle_close(struct wl_client *client,
 		send_status(resource, POST_APOLLO_COMPANY_VECTOR_V1_STATUS_DENIED, 0);
 		return;
 	}
+	/* M32n: first hide/quarantine the mapped native scene while the
+	 * selected binding, intent and process provenance are still intact.
+	 * Preserve the existing CLOSED response epoch by sending it before
+	 * protocol_revoke() clears selection_epoch. */
+	stage_director_company_scene_revoke(NULL);
 	struct company_binding *b = wl_resource_get_user_data(resource);
 	b->launch_intent = false;
 	b->viewport_candidate = false;
@@ -308,7 +315,12 @@ static void handle_destroy(struct wl_client *client,
 }
 
 static void destroy_binding(struct wl_resource *resource) {
-	if (bound_resource == resource) bound_resource = NULL;
+	/* M32n: an actual Wayland resource destroy, including implicit client
+	 * disconnect, must revoke native scene/selection/pidfd BEFORE free.
+	 * An old inert binding cannot revoke a newer selected session. */
+	if (bound_resource == resource) {
+		stage_director_company_vector_protocol_revoke();
+	}
 	free(wl_resource_get_user_data(resource));
 }
 
@@ -485,7 +497,117 @@ stage_director_company_vector_protocol_digest_evidence(
 	return stage_director_company_digest_check_system_home(&birth_held);
 }
 
+/* M32m: one compositor-owned READ-ONLY observation boundary.
+ * All positive statuses are candidates. The actual scene authorizer must
+ * independently authenticate operator intent, exact launch custody and
+ * a short-lived revocable compositor lease. This function cannot do so. */
+static struct stage_director_company_admission_preflight
+admission_status(enum stage_director_company_admission_status state,
+        bool pair, bool executable, bool digest) {
+    return (struct stage_director_company_admission_preflight) {
+        .status = state,
+        .native_pair_candidate = pair,
+        .current_executable_candidate = executable,
+        .exact_elf_digest_candidate = digest,
+        /* Remaining authority bits deliberately zero on EVERY path. */
+    };
+}
+
+struct stage_director_company_admission_preflight
+stage_director_company_vector_protocol_admission_preflight(
+        struct wl_client *client,
+        const struct stage_director_company_native_actor *actor,
+        const struct stage_director_company_lineage_result *lineage) {
+    if (!selection_current(client) || !birth_native_host_probe)
+        return admission_status(SD_COMPANY_ADMISSION_NO_SELECTED_HOST,
+            false,false,false);
+    struct stage_director_company_intent_snapshot intent = {0};
+    if (!stage_director_company_vector_protocol_intent_snapshot(
+                client, &intent))
+        return admission_status(SD_COMPANY_ADMISSION_NO_LIVE_INTENT,
+            false,false,false);
+    struct stage_director_company_viewport_snapshot viewport = {0};
+    if (!stage_director_company_vector_protocol_viewport_snapshot(
+                client, &viewport))
+        return admission_status(SD_COMPANY_ADMISSION_NO_CURRENT_VIEWPORT,
+            false,false,false);
+    if (!actor || !lineage || !stage_director_company_vector_protocol_birth_actor_candidate(
+                client, actor, lineage))
+        return admission_status(SD_COMPANY_ADMISSION_NO_KERNEL_ACTOR,
+            false,false,false);
+
+    /* No native actor/host pointer can originate in a public Wayland
+     * message. Re-observe the compositor's selected layer NOW, not from
+     * an old protocol report. */
+    struct stage_director_company_native_host host = {0};
+    if (!birth_native_host_probe(birth_native_host_context, &host))
+        return admission_status(SD_COMPANY_ADMISSION_NATIVE_PAIR_CHANGED,
+            false,false,false);
+    const struct stage_director_company_executable_result executable =
+        stage_director_company_vector_protocol_executable_evidence(
+            client, actor, lineage);
+    /* The compiled manifest is intentionally empty until an independent
+     * operator-approved executable is pinned in a reviewed build. */
+    const struct stage_director_company_digest_result digest =
+        stage_director_company_vector_protocol_digest_evidence(
+            client, actor, lineage);
+    const struct stage_director_company_actor_pair_evidence evidence = {
+        .selected_native_company_host = true,
+        .kernel_pidfd_actor_candidate = true,
+        .host = host,
+        .actor = *actor,
+        .intent = intent,
+        .viewport = viewport,
+        .lineage = *lineage,
+        .executable = executable,
+        .digest = digest,
+    };
+    const struct stage_director_company_actor_pair_result pair =
+        stage_director_company_actor_pair_probe(&evidence);
+    if (!pair.native_process_candidate || !pair.target_geometry_candidate ||
+            pair.status == SD_COMPANY_PAIR_NO_SELECTED_HOST ||
+            pair.status == SD_COMPANY_PAIR_NO_INTENT_OR_VIEWPORT ||
+            pair.status == SD_COMPANY_PAIR_NATIVE_PEER_CHANGED ||
+            pair.status == SD_COMPANY_PAIR_PROCESS_NOT_PROVEN ||
+            pair.status == SD_COMPANY_PAIR_UNSAFE_TARGET)
+        return admission_status(SD_COMPANY_ADMISSION_NATIVE_PAIR_CHANGED,
+            false,false,false);
+    if (!pair.executable_inode_candidate)
+        return admission_status(SD_COMPANY_ADMISSION_EXECUTABLE_UNVERIFIED,
+            true,false,false);
+    if (pair.status == SD_COMPANY_PAIR_DIGEST_UNPINNED)
+        return admission_status(SD_COMPANY_ADMISSION_DIGEST_UNPINNED,
+            true,true,false);
+    if (!pair.exact_elf_digest_candidate ||
+            pair.status != SD_COMPANY_PAIR_EXACT_ELF_CANDIDATE_ONLY)
+        return admission_status(SD_COMPANY_ADMISSION_DIGEST_UNTRUSTED,
+            true,true,false);
+    return admission_status(SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT,
+        true,true,true);
+}
+
+const char *stage_director_company_admission_status_name(
+        enum stage_director_company_admission_status state) {
+    switch (state) {
+    case SD_COMPANY_ADMISSION_NO_SELECTED_HOST: return "NO_SELECTED_HOST";
+    case SD_COMPANY_ADMISSION_NO_LIVE_INTENT: return "NO_LIVE_INTENT";
+    case SD_COMPANY_ADMISSION_NO_CURRENT_VIEWPORT: return "NO_CURRENT_VIEWPORT";
+    case SD_COMPANY_ADMISSION_NO_KERNEL_ACTOR: return "NO_KERNEL_ACTOR";
+    case SD_COMPANY_ADMISSION_NATIVE_PAIR_CHANGED: return "NATIVE_PAIR_CHANGED";
+    case SD_COMPANY_ADMISSION_EXECUTABLE_UNVERIFIED: return "EXECUTABLE_UNVERIFIED";
+    case SD_COMPANY_ADMISSION_DIGEST_UNPINNED: return "DIGEST_UNPINNED";
+    case SD_COMPANY_ADMISSION_DIGEST_UNTRUSTED: return "DIGEST_UNTRUSTED";
+    case SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT: return "OPERATOR_LEASE_ABSENT";
+    }
+    return "INVALID";
+}
+
+/* Revoking the selected Company protocol MUST hide and quarantine any
+ * already-admitted native Qt actor first. The private compositor positive
+ * test can have a scene; the normal compositor cannot. In both cases,
+ * this operation is safe, one-way and grants no new authority. */
 void stage_director_company_vector_protocol_revoke(void) {
+    stage_director_company_scene_revoke(NULL);
 	/* Wipe the last admitted geometry before releasing native host refs.
 	 * Already-read snapshots are not leases: consumers must re-query. */
 	if (bound_resource) {

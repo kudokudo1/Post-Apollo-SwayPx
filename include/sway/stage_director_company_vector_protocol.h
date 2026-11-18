@@ -92,6 +92,52 @@ stage_director_company_vector_protocol_digest_evidence(
 	const struct stage_director_company_native_actor *actor,
 	const struct stage_director_company_lineage_result *lineage);
 
+/* M32m // Read-only, compositor-internal admission preflight.
+ *
+ * Reports the current selected host, real intent/viewport, kernel-held
+ * actor birth and installed executable/digest evidence. It NEVER issues
+ * an operator approval, launch custody, scene lease or input permission.
+ * Even exact ELF verification ends at OPERATOR_LEASE_ABSENT.
+ *
+ * Caller must pass a compositor-observed XDG actor and native lineage.
+ * No QML, Wayland request handler, IPC or app-id can supply approval.
+ */
+enum stage_director_company_admission_status {
+    SD_COMPANY_ADMISSION_NO_SELECTED_HOST,
+    SD_COMPANY_ADMISSION_NO_LIVE_INTENT,
+    SD_COMPANY_ADMISSION_NO_CURRENT_VIEWPORT,
+    SD_COMPANY_ADMISSION_NO_KERNEL_ACTOR,
+    SD_COMPANY_ADMISSION_NATIVE_PAIR_CHANGED,
+    SD_COMPANY_ADMISSION_EXECUTABLE_UNVERIFIED,
+    SD_COMPANY_ADMISSION_DIGEST_UNPINNED,
+    SD_COMPANY_ADMISSION_DIGEST_UNTRUSTED,
+    SD_COMPANY_ADMISSION_OPERATOR_LEASE_ABSENT,
+};
+struct stage_director_company_admission_preflight {
+    enum stage_director_company_admission_status status;
+    bool native_pair_candidate;
+    bool current_executable_candidate;
+    bool exact_elf_digest_candidate;
+    /* No production issuer exists: these must always remain false. */
+    bool operator_authorized;
+    bool authenticated_launch;
+    bool scene_lease_issued;
+    bool can_apply_scene;
+    bool can_accept_input;
+    bool can_focus_keyboard;
+    bool can_show_popup;
+};
+struct stage_director_company_admission_preflight
+stage_director_company_vector_protocol_admission_preflight(
+    struct wl_client *selected_host_client,
+    const struct stage_director_company_native_actor *native_actor,
+    const struct stage_director_company_lineage_result *native_lineage);
+const char *stage_director_company_admission_status_name(
+    enum stage_director_company_admission_status status);
+
+/* All revocation paths (explicit CLOSE, native role/host destruction,
+ * replacement, shutdown) remove any scene BEFORE resetting selection,
+ * intent, viewport or held kernel actor identity. */
 void stage_director_company_vector_protocol_revoke(void);
 void stage_director_company_vector_protocol_finish(void);
 
