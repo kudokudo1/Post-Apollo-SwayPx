@@ -22,9 +22,11 @@ struct pa_autoscroll_adapter {
     uint64_t seat_id;
     bool middle_release_pending;
     uint64_t middle_release_device;
+    uint64_t middle_release_seat;
     bool other_release_pending;
     uint32_t other_release_button;
     uint64_t other_release_device;
+    uint64_t other_release_seat;
 };
 
 typedef void (*pa_autoscroll_axis_sink)(

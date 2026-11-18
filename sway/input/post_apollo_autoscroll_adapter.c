@@ -58,13 +58,16 @@ bool pa_autoscroll_adapter_middle(
         return false;
     }
     if (!pressed && adapter->middle_release_pending
-            && device_id == adapter->middle_release_device) {
+            && device_id == adapter->middle_release_device
+            && seat_id == adapter->middle_release_seat) {
         adapter->middle_release_pending = false;
         adapter->middle_release_device = 0;
+        adapter->middle_release_seat = 0;
         return true;
     }
     if (pressed && adapter->middle_release_pending
-            && device_id == adapter->middle_release_device) {
+            && device_id == adapter->middle_release_device
+            && seat_id == adapter->middle_release_seat) {
         /* Ignore duplicate physical down before paired release. */
         return true;
     }
@@ -89,6 +92,7 @@ bool pa_autoscroll_adapter_middle(
         pa_autoscroll_adapter_cancel(adapter);
         adapter->middle_release_pending = true;
         adapter->middle_release_device = device_id;
+        adapter->middle_release_seat = seat_id;
         return true;
     }
     if (!verified_surface_hit || target_node_id == 0
@@ -104,6 +108,7 @@ bool pa_autoscroll_adapter_middle(
     adapter->seat_id = seat_id;
     adapter->middle_release_pending = true;
     adapter->middle_release_device = device_id;
+    adapter->middle_release_seat = seat_id;
     return true;
 }
 
@@ -117,15 +122,18 @@ bool pa_autoscroll_adapter_other_button(
     }
     if (!pressed && adapter->other_release_pending
             && button == adapter->other_release_button
-            && device_id == adapter->other_release_device) {
+            && device_id == adapter->other_release_device
+            && seat_id == adapter->other_release_seat) {
         adapter->other_release_pending = false;
         adapter->other_release_button = 0;
         adapter->other_release_device = 0;
+        adapter->other_release_seat = 0;
         return true;
     }
     if (pressed && adapter->other_release_pending
             && button == adapter->other_release_button
-            && device_id == adapter->other_release_device) {
+            && device_id == adapter->other_release_device
+            && seat_id == adapter->other_release_seat) {
         return true;
     }
     if (!adapter->engine.active) {
@@ -140,6 +148,7 @@ bool pa_autoscroll_adapter_other_button(
     adapter->other_release_pending = true;
     adapter->other_release_button = button;
     adapter->other_release_device = device_id;
+    adapter->other_release_seat = seat_id;
     return true;
 }
 

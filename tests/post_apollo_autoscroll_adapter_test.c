@@ -208,6 +208,41 @@ static void test_secondary_or_virtual_cannot_steal_session(void) {
     assert(!a.engine.active);
 }
 
+static void test_consumed_releases_remain_bound_to_original_seat(void) {
+    struct pa_autoscroll_adapter a;
+    configured(&a);
+
+    /* A device identity alone must not swallow a release on another seat. */
+    assert(middle(&a, true));
+    assert(a.middle_release_pending && a.middle_release_seat == SEAT);
+    assert(!pa_autoscroll_adapter_middle(&a, false, true, DEVICE, SEAT + 1,
+        true, TARGET, LAYOUT, 0, 0, START + 1, false, false));
+    assert(a.middle_release_pending);
+    assert(middle(&a, false));
+    assert(!a.middle_release_pending && a.middle_release_seat == 0);
+
+    /* The same rule applies to a click that cancels active scrolling. */
+    assert(pa_autoscroll_adapter_other_button(&a, PA_AUTOSCROLL_BTN_LEFT,
+                                                true, true, DEVICE, SEAT));
+    assert(a.other_release_pending && a.other_release_seat == SEAT);
+    assert(!pa_autoscroll_adapter_other_button(&a, PA_AUTOSCROLL_BTN_LEFT,
+                                                 false, true, DEVICE, SEAT + 1));
+    assert(a.other_release_pending);
+    assert(pa_autoscroll_adapter_other_button(&a, PA_AUTOSCROLL_BTN_LEFT,
+                                                false, true, DEVICE, SEAT));
+    assert(!a.other_release_pending && a.other_release_seat == 0);
+
+    /* Disabling while a middle press is pending retains only its own pair. */
+    pa_autoscroll_adapter_configure(&a, true);
+    assert(middle(&a, true));
+    pa_autoscroll_adapter_configure(&a, false);
+    assert(!pa_autoscroll_adapter_middle(&a, false, true, DEVICE, SEAT + 1,
+        true, TARGET, LAYOUT, 0, 0, START + 1, false, false));
+    assert(a.middle_release_pending);
+    assert(middle(&a, false));
+    assert(!a.middle_release_pending && a.middle_release_seat == 0);
+}
+
 int main(void) {
     test_default_off_and_real_target_requirement();
     test_middle_click_toggle_release_pairing();
@@ -217,6 +252,7 @@ int main(void) {
     test_wrong_device_seat_layout_or_target_fails_closed();
     test_null_sink_lock_and_focus_refuse_scroll();
     test_secondary_or_virtual_cannot_steal_session();
+    test_consumed_releases_remain_bound_to_original_seat();
     puts("SWAYPX_AUTOSCROLL_ADAPTER_PASS // NO_ACTIVE_COMPOSITOR_INPUT");
     return 0;
 }
