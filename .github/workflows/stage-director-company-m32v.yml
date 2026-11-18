@@ -1,0 +1,89 @@
+name: Company M32v QML + Qt plugin file inventory (production OFF)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - stage-director/company-m32u-static-elf-qt-inventory-20261110
+    paths:
+      - 'tools/company/m32v_qml_bundle_audit.py'
+      - 'tests/stage_director/test_company_m32v_qml_bundle_audit.py'
+      - 'docs/stage-director-company-m32v-20261110.md'
+      - '.github/workflows/stage-director-company-m32v.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-qml-and-qt-plugin-negative-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: No installed Qt or real Company application needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cc
+          command -v python3
+          python3 -B tests/stage_director/test_company_m32v_qml_bundle_audit.py
+      - name: Recheck existing M32u static ELF and prior pre-spawn tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/stage_director/test_company_m32u_static_elf_qt.py
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            -ffunction-sections -fdata-sections \
+            sway/stage_director_company_digest.c \
+            sway/stage_director_company_launch_request.c \
+            sway/stage_director_company_bundle_inventory.c \
+            sway/stage_director_company_pre_spawn_custody.c \
+            tests/stage_director/test_company_m32t_pre_spawn_custody.c \
+            -Wl,--gc-sections -o "$RUNNER_TEMP/company-m32t"
+          "$RUNNER_TEMP/company-m32t"
+          python3 -B tests/stage_director/test_company_m32t_pre_spawn_source.py
+          python3 -B tests/stage_director/test_company_m32s_inventory_source.py
+          python3 -B tests/stage_director/test_company_m32r_protocol_request.py
+          python3 -B tests/stage_director/test_company_m32p_native_candidate_bridge.py
+      - name: Assert production digest and scene remain disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'company_m30_manifest_elf_sha256[] = ""' sway/stage_director_company_digest.c
+          grep -Fq '#ifndef SD_STAGE_DIRECTOR_CI_COMPANY_SCENE_ACTUATION' sway/stage_director_company_scene.c
+          echo 'COMPANY_M32V listed_qml_candidate_only=TRUE no_real_artifact=TRUE scene=OFF PASS'
+
+  ordinary-and-ci-private-compositor-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Ordinary compositor does not include CI positive Company scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          normal="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$normal/bin/sway"
+          if grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$normal/bin/sway"; then
+            echo 'BLOCKED_M32V_PRIVATE_SCENE_IN_NORMAL_BUILD' >&2
+            exit 1
+          fi
+          echo 'COMPANY_M32V_NORMAL scene=OFF PASS'
+      - name: CI-private compositor is not production
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$(nix build --impure --expr 'let f = builtins.getFlake (toString ./.); p = f.packages.x86_64-linux.swayfx-unwrapped-git; in p.overrideAttrs (old: { pname = "swayfx-company-m32v-private"; mesonFlags = (old.mesonFlags or []) ++ [ "-Dsd-ci-company-scene-actuation=true" ]; })' --no-link --print-out-paths --show-trace --print-build-logs | tail -n 1)"
+          test -x "$private/bin/sway"
+          grep -aFq 'native_scene_apply=PASS authority=FAKE_CI' "$private/bin/sway"
+          echo 'COMPANY_M32V_CI_PRIVATE fake_only=TRUE real_map_spawn=OFF PASS'
