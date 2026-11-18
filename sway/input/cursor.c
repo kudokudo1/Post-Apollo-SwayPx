@@ -20,6 +20,7 @@
 #include "util.h"
 #include "sway/commands.h"
 #include "sway/input/cursor.h"
+#include "sway/input/post_apollo_autoscroll_runtime.h"
 #include "sway/input/keyboard.h"
 #include "sway/input/tablet.h"
 #include "sway/layers.h"
@@ -328,6 +329,11 @@ static void handle_pointer_motion_relative(
 	struct sway_cursor *cursor = wl_container_of(listener, cursor, motion);
 	struct wlr_pointer_motion_event *e = data;
 	cursor_handle_activity_from_device(cursor, &e->pointer->base);
+	/* Default OFF: no input consumed. Preserve native compositor pairing. */
+	if (pa_autoscroll_runtime_motion(cursor->autoscroll,
+			&e->pointer->base, e->delta_x, e->delta_y)) {
+		return;
+	}
 
 	pointer_motion(cursor, e->time_msec, &e->pointer->base, e->delta_x,
 		e->delta_y, e->unaccel_dx, e->unaccel_dy);
@@ -389,6 +395,12 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 		server.session_lock.lock != NULL, event->button, event->state,
 		cursor->cursor->x, cursor->cursor->y);
 	if (weather_paired || company_paired) {
+		return;
+	}
+	/* Runs after both Stage Director pairing guards. Hard-OFF by default. */
+	if (pa_autoscroll_runtime_button(cursor->autoscroll,
+			&event->pointer->base, event->time_msec, event->button,
+			event->state == WL_POINTER_BUTTON_STATE_PRESSED)) {
 		return;
 	}
 	dispatch_cursor_button(cursor, &event->pointer->base,
@@ -1041,6 +1053,8 @@ void sway_cursor_destroy(struct sway_cursor *cursor) {
 		return;
 	}
 
+	pa_autoscroll_runtime_destroy(cursor->autoscroll);
+	cursor->autoscroll = NULL;
 	wl_event_source_remove(cursor->hide_source);
 
 	wl_list_remove(&cursor->image_surface_destroy.link);
@@ -1090,6 +1104,8 @@ struct sway_cursor *sway_cursor_create(struct sway_seat *seat) {
 
 	cursor->seat = seat;
 	wlr_cursor_attach_output_layout(wlr_cursor, root->output_layout);
+	/* Optional hard-OFF adapter; a failed allocation preserves mouse input. */
+	cursor->autoscroll = pa_autoscroll_runtime_create(cursor);
 
 	cursor->hide_source = wl_event_loop_add_timer(server.wl_event_loop,
 			hide_notify, cursor);
