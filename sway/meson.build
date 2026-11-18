@@ -68,6 +68,10 @@ sway_sources = files(
 
 	'input/input-manager.c',
 	'input/cursor.c',
+	'input/post_apollo_autoscroll.c',
+	'input/post_apollo_autoscroll_adapter.c',
+	'input/post_apollo_autoscroll_axis_dispatch.c',
+	'input/post_apollo_autoscroll_runtime.c',
 	'input/keyboard.c',
 	'input/seat.c',
 	'input/seatop_default.c',

@@ -10,6 +10,13 @@ on:
       - "include/sway/input/post_apollo_autoscroll_axis_dispatch.h"
       - "sway/input/post_apollo_autoscroll_axis_dispatch.c"
       - "tests/post_apollo_autoscroll_axis_dispatch_test.c"
+      - "sway/input/post_apollo_autoscroll_runtime.c"
+      - "include/sway/input/post_apollo_autoscroll_runtime.h"
+      - "include/sway/input/cursor.h"
+      - "sway/input/cursor.c"
+      - "sway/meson.build"
+      - "tests/autoscroll/test_default_off_compositor_hook.py"
+      - "MODEL/autoscroll-compositor-runtime-v4.md"
       - "MODEL/autoscroll-compositor-runtime-v3.md"
       - "tests/post_apollo_autoscroll_adapter_test.c"
       - "MODEL/autoscroll-compositor-runtime-v2.md"
@@ -59,7 +66,9 @@ jobs:
             -lm -o /tmp/post-apollo-autoscroll-axis-unit
       - name: Test middle-click to axis/frame dispatch and cancel/denial
         run: timeout 5s /tmp/post-apollo-autoscroll-axis-unit
-      - name: Verify no compositor runtime hook was added in this stage
+      - name: Verify compositor hook is compiled but hard OFF with pairing intact
+        run: python3 -m unittest discover -s tests/autoscroll -p "test_default_off_compositor_hook.py"
+      - name: Verify no changes to foreign cursor-owner dependency files
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -71,9 +80,9 @@ jobs:
               ["git", "diff", "--name-only", base, "HEAD"], text=True
           ).splitlines()
           forbidden = {
-              "sway/input/cursor.c", "sway/input/seat.c",
-              "sway/input/seatop_default.c", "sway/ipc-server.c",
-              "meson.build",
+              "sway/input/seat.c",
+              "sway/input/seatop_default.c",
+              "sway/ipc-server.c",
           }
           assert not forbidden.intersection(changed), changed
           core = Path("sway/input/post_apollo_autoscroll.c").read_text()
@@ -91,5 +100,5 @@ jobs:
           assert "uinput" not in dispatch
           assert "swaymsg" not in adapter
           assert "UInput" not in core
-          print("SWAYPX_AUTOSCROLL_NOT_ACTIVATED")
+          print("SWAYPX_AUTOSCROLL_COMPILED_HARD_OFF")
           PY
