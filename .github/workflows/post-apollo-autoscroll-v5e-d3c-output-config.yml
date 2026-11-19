@@ -67,7 +67,10 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert "sway/config/output.c" in paths
+          # D3C was merged into its base branch; source truth outlives
+          # the now-moving historical diff boundary.
+          config_source = Path("sway/config/output.c").read_text()
+          assert "output_autoscroll_config_committed(cfg->output)" in config_source
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c","include/sway/input/seat.h",
               "sway/input/input-manager.c","sway/tree/container.c",
