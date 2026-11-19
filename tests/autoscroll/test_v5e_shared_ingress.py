@@ -43,6 +43,9 @@ class SharedOriginSeam(unittest.TestCase):
     def test_candidate_observation_not_physical_authority(self):
         self.assertIn("wlr_input_device_is_libinput(device)", SOURCE)
         self.assertIn("wlr_libinput_get_device_handle(device)", SOURCE)
+        self.assertIn("libinput_device_get_udev_device(handle)", SOURCE)
+        self.assertIn("pa_autoscroll_kernel_tree_candidate(", SOURCE)
+        self.assertIn("udev_device_unref(udev)", SOURCE)
         self.assertIn("libinput_device_config_scroll_get_method(handle)",
                       SOURCE)
         self.assertIn("LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN", SOURCE)
