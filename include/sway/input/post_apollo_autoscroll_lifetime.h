@@ -21,6 +21,7 @@ enum pa_autoscroll_lifetime_kind {
 struct pa_autoscroll_lifetime_issuer {
     uint64_t latest_epoch;
     bool exhausted;
+    bool initialized;
 };
 
 struct pa_autoscroll_lifetime_slot {
@@ -29,8 +30,8 @@ struct pa_autoscroll_lifetime_slot {
     bool live;
 };
 
-/* Initialize once per compositor session, never reset during a session. */
-void pa_autoscroll_lifetime_init(struct pa_autoscroll_lifetime_issuer *issuer);
+/* The issuer must be zero-initialized. Reject repeated initialization. */
+bool pa_autoscroll_lifetime_init(struct pa_autoscroll_lifetime_issuer *issuer);
 
 /* Refuse double bind, invalid kind, zero wraparound and exhaustion. */
 bool pa_autoscroll_lifetime_bind(
