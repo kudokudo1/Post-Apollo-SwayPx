@@ -34,6 +34,7 @@ on:
       - 'tests/post_apollo_autoscroll_v5f_owner_guard_test.c'
       - 'MODEL/autoscroll-v5f-a-owner-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -63,6 +64,7 @@ jobs:
               ["git", "diff", "--name-only", base, "HEAD"],
               text=True).splitlines())
           allowed = {
+              ".github/workflows/post-apollo-autoscroll-core.yml",
               "sway/input/post_apollo_autoscroll_owner_snapshot.c",
               "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
               "tests/autoscroll/test_v5f_owner_snapshot.py",
