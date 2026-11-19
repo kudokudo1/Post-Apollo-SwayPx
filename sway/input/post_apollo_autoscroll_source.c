@@ -7,13 +7,10 @@
  */
 #include <stdbool.h>
 #include <wlr/types/wlr_input_device.h>
-#include "config.h"
 #include "sway/input/post_apollo_autoscroll_source.h"
 
-#if WLR_HAS_LIBINPUT_BACKEND
 #include <libinput.h>
 #include <wlr/backend/libinput.h>
-#endif
 
 struct pa_autoscroll_origin_facts pa_autoscroll_source_probe(
         struct wlr_input_device *device) {
@@ -24,7 +21,6 @@ struct pa_autoscroll_origin_facts pa_autoscroll_source_probe(
     }
     facts.pointer_device = true;
 
-#if WLR_HAS_LIBINPUT_BACKEND
     if (!wlr_input_device_is_libinput(device)) {
         return facts;
     }
@@ -44,6 +40,5 @@ struct pa_autoscroll_origin_facts pa_autoscroll_source_probe(
     facts.native_scroll_method_known = true;
     facts.native_scroll_on_button_down =
         method == LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
-#endif
     return facts;
 }
