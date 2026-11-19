@@ -88,7 +88,12 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
           }
           assert changed <= allowed, sorted(changed-allowed)
-          assert {"sway/input/seat.c", "include/sway/input/seat.h"} <= changed
+          # The D2 child was merged into its parent feature branch; its
+          # source hooks may already exist at the current comparison base.
+          # Verify the actual owner source, not historical diff membership.
+          seat_source = Path("sway/input/seat.c").read_text()
+          assert "pa_autoscroll_lifetime_bind(" in seat_source
+          assert "pa_autoscroll_lifetime_revoke(" in seat_source
           for name in ("sway/input/cursor.c", "sway/input/input-manager.c",
                         "sway/desktop/xdg_shell.c",
                        "sway/desktop/output.c",
