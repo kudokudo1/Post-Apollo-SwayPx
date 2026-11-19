@@ -7,6 +7,7 @@ on:
       - 'sway/input/post_apollo_autoscroll_runtime.c'
       - 'include/sway/input/post_apollo_autoscroll_runtime.h'
       - 'sway/input/post_apollo_autoscroll_source.c'
+      - 'sway/input/post_apollo_autoscroll_source_stub.c'
       - 'include/sway/input/post_apollo_autoscroll_source.h'
       - 'sway/meson.build'
       - 'tests/autoscroll/test_v5e_shared_ingress.py'
@@ -42,6 +43,7 @@ jobs:
           allowed = {
               "include/sway/input/post_apollo_autoscroll_source.h",
               "sway/input/post_apollo_autoscroll_source.c",
+              "sway/input/post_apollo_autoscroll_source_stub.c",
               "include/sway/input/post_apollo_autoscroll_runtime.h",
               "sway/input/post_apollo_autoscroll_runtime.c",
               "sway/input/cursor.c",
