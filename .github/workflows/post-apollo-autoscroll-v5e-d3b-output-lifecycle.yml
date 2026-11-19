@@ -20,6 +20,7 @@ on:
       - 'tests/autoscroll/test_v5e_f1_real_snapshot.py'
       - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -57,6 +58,7 @@ jobs:
               "tests/autoscroll/test_v5e_f1_real_snapshot.py",
               "MODEL/autoscroll-v5e-f1-real-snapshot.md",
               ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
               "sway/meson.build",
               "sway/config/output.c",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
@@ -73,7 +75,12 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert {"sway/tree/output.c","include/sway/output.h"} <= paths
+          output_files = {"sway/tree/output.c","include/sway/output.h"}
+          if not output_files <= paths:
+              assert not (output_files & paths), sorted(output_files & paths)
+              owner = Path("sway/tree/output.c").read_text()
+              assert "pa_autoscroll_lifetime_bind(" in owner
+              assert "pa_autoscroll_lifetime_revoke(" in owner
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c",
               "include/sway/input/seat.h","sway/input/input-manager.c",
