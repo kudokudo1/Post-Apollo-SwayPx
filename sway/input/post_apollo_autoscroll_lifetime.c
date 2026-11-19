@@ -1,25 +1,28 @@
 /* Detached compositor-owned epoch allocator. No devices or Wayland dispatch. */
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 #include "sway/input/post_apollo_autoscroll_lifetime.h"
 
 static bool kind_valid(enum pa_autoscroll_lifetime_kind kind) {
     return kind >= PA_LIFETIME_DEVICE && kind <= PA_LIFETIME_OUTPUT;
 }
 
-void pa_autoscroll_lifetime_init(struct pa_autoscroll_lifetime_issuer *issuer) {
-    if (issuer != NULL) {
-        memset(issuer, 0, sizeof(*issuer));
+bool pa_autoscroll_lifetime_init(struct pa_autoscroll_lifetime_issuer *issuer) {
+    if (issuer == NULL || issuer->initialized) {
+        return false;
     }
+    issuer->latest_epoch = 0;
+    issuer->exhausted = false;
+    issuer->initialized = true;
+    return true;
 }
 
 bool pa_autoscroll_lifetime_bind(
         struct pa_autoscroll_lifetime_issuer *issuer,
         struct pa_autoscroll_lifetime_slot *slot,
         enum pa_autoscroll_lifetime_kind kind) {
-    if (issuer == NULL || slot == NULL || !kind_valid(kind)
-            || slot->live || issuer->exhausted) {
+    if (issuer == NULL || slot == NULL || !issuer->initialized
+            || !kind_valid(kind) || slot->live || issuer->exhausted) {
         return false;
     }
     if (issuer->latest_epoch == UINT64_MAX) {
