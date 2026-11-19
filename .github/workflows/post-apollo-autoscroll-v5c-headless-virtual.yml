@@ -1,0 +1,100 @@
+name: SwayPX / V5C Virtual Middle Denial (Headless Only)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_headless_pointer_observer.c'
+      - 'tests/autoscroll/ci_headless_virtual_middle.c'
+      - 'tests/autoscroll/ci_headless_virtual_denial.nix'
+      - 'tests/autoscroll/ci_headless_virtual_denial.sh'
+      - 'MODEL/autoscroll-v5c-epoch-readiness.md'
+      - '.github/workflows/post-apollo-autoscroll-v5c-headless-virtual.yml'
+  push:
+    branches:
+      - 'autoscroll/v5c-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-headless-virtual-negative:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Assert source still refuses live activation
+        run: |
+          set -euo pipefail
+          bash -n tests/autoscroll/ci_headless_virtual_denial.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          cursor = Path("sway/input/cursor.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "ci_headless_virtual_middle" not in runtime
+          assert "ci_headless_virtual_middle" not in cursor
+          assert "ci_headless_virtual_middle" not in meson
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/master"], text=True
+          ).strip()
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only", base, "HEAD"], text=True
+          ).splitlines())
+          allowed = {
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "tests/post_apollo_autoscroll_epoch_test.c",
+              "MODEL/autoscroll-v5c-epoch-readiness.md",
+              ".github/workflows/post-apollo-autoscroll-v5c-epoch.yml",
+              "tests/autoscroll/ci_headless_pointer_observer.c",
+              "tests/autoscroll/ci_headless_virtual_middle.c",
+              "tests/autoscroll/ci_headless_virtual_denial.nix",
+              "tests/autoscroll/ci_headless_virtual_denial.sh",
+              ".github/workflows/post-apollo-autoscroll-v5c-headless-virtual.yml",
+          }
+          assert changed <= allowed, sorted(changed - allowed)
+          print("V5C_VIRTUAL_NEGATIVE_SOURCE_ISOLATION_PASS")
+          PY
+      - name: Install Nix in disposable CI
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build actual default-OFF SwayPX and native Wayland test binaries
+        run: |
+          set -euo pipefail
+          compositor="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          client="$(nix build --impure --expr 'import ./tests/autoscroll/ci_headless_virtual_denial.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          test -x "$client/bin/pa-ci-autoscroll-observer"
+          test -x "$client/bin/pa-ci-virtual-middle"
+          echo "PA_CI_SWAY=$compositor/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_CI_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_CI_OBSERVER=$client/bin/pa-ci-autoscroll-observer" >> "$GITHUB_ENV"
+          echo "PA_CI_SENDER=$client/bin/pa-ci-virtual-middle" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Verify virtual middle press/release reaches client without autoscroll axis
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_headless_virtual_denial.sh \
+            "$PA_CI_SWAY" "$PA_CI_SWAYMSG" "$PA_CI_OBSERVER" "$PA_CI_SENDER"
+      - name: Report limits
+        if: always()
+        run: |
+          echo "This job verifies a production-hard-OFF compositor on a private headless Wayland socket if the preceding setup and build succeed." >> "$GITHUB_STEP_SUMMARY"
+          echo "The input source was zwlr_virtual_pointer_v1, **not** a physical libinput mouse." >> "$GITHUB_STEP_SUMMARY"
+          echo "A passing button receipt with zero axes is a default-OFF negative test, not working autoscroll." >> "$GITHUB_STEP_SUMMARY"
