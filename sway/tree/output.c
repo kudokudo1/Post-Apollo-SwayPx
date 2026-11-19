@@ -162,6 +162,25 @@ uint64_t output_autoscroll_lifetime_epoch(const struct sway_output *output) {
 		&output->autoscroll_output_lifetime, PA_LIFETIME_OUTPUT);
 }
 
+void output_autoscroll_config_committed(struct sway_output *output) {
+	if (output == NULL) {
+		return;
+	}
+	/* Rotate even if geometry appears identical. Mode, transform, scale,
+	 * color pipeline or auto-layout may change on a successful backend
+	 * configuration. An unverified object is always represented by zero.
+	 * Never issue a token for a disabled, fallback or destroying output. */
+	pa_autoscroll_lifetime_revoke(&output->autoscroll_output_lifetime);
+	if (!output->enabled || output->node.destroying ||
+			output->wlr_output == NULL || root == NULL ||
+			root->fallback_output == output || server.input == NULL) {
+		return;
+	}
+	(void)pa_autoscroll_lifetime_bind(
+		&server.input->autoscroll_lifetime_issuer,
+		&output->autoscroll_output_lifetime, PA_LIFETIME_OUTPUT);
+}
+
 void output_enable(struct sway_output *output) {
 	if (!sway_assert(!output->enabled, "output is already enabled")) {
 		return;

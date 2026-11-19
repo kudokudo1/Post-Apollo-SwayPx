@@ -128,6 +128,10 @@ void output_disable(struct sway_output *output);
 /* Read only while output is live; zero for disabled/fallback/destroyed. */
 uint64_t output_autoscroll_lifetime_epoch(const struct sway_output *output);
 
+/* Rotate an output's availability epoch after a real backend config commit.
+ * Fail closed: this cannot grant physical hardware or scroll permission. */
+void output_autoscroll_config_committed(struct sway_output *output);
+
 struct sway_workspace *output_get_active_workspace(struct sway_output *output);
 
 void output_for_each_workspace(struct sway_output *output,

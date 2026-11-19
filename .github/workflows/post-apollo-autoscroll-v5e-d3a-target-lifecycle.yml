@@ -13,6 +13,10 @@ on:
       - 'tests/autoscroll/test_v5e_d3b_output_lifecycle.py'
       - 'MODEL/autoscroll-v5e-d3b-output-lifecycle.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml'
+      - 'sway/config/output.c'
+      - 'tests/autoscroll/test_v5e_d3c_output_config_epoch.py'
+      - 'MODEL/autoscroll-v5e-d3c-output-configuration.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml'
   workflow_dispatch:
 
 permissions:
@@ -43,6 +47,10 @@ jobs:
           allowed={
               "include/sway/tree/container.h",
               "sway/tree/container.c",
+              "sway/config/output.c",
+              "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
+              "MODEL/autoscroll-v5e-d3c-output-configuration.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
               "sway/tree/output.c",
               "include/sway/output.h",
               "tests/autoscroll/test_v5e_d3b_output_lifecycle.py",
@@ -73,6 +81,10 @@ jobs:
               assert "pa_autoscroll_lifetime_bind(" in output
               assert "pa_autoscroll_lifetime_revoke(" in output
               assert Path("tests/autoscroll/test_v5e_d3b_output_lifecycle.py").is_file()
+          if "sway/config/output.c" in paths:
+              config = Path("sway/config/output.c").read_text()
+              assert "output_autoscroll_config_committed(cfg->output)" in config
+              assert Path("tests/autoscroll/test_v5e_d3c_output_config_epoch.py").is_file()
           runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime
