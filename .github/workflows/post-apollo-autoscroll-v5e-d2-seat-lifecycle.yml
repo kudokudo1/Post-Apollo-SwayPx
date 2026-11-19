@@ -30,6 +30,7 @@ on:
       - 'tests/autoscroll/test_v5e_f1_real_snapshot.py'
       - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -74,6 +75,7 @@ jobs:
               "tests/autoscroll/test_v5e_f1_real_snapshot.py",
               "MODEL/autoscroll-v5e-f1-real-snapshot.md",
               ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
               "sway/meson.build",
               "sway/config/output.c",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
@@ -90,7 +92,15 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
           }
           assert changed <= allowed, sorted(changed-allowed)
-          assert {"sway/input/seat.c", "include/sway/input/seat.h"} <= changed
+          # The older D2 PR has since been merged into its input-manager
+          # feature base. If no longer a child diff, assert actual owner code
+          # rather than requiring the same merged file to change twice.
+          seat_files = {"sway/input/seat.c", "include/sway/input/seat.h"}
+          if not seat_files <= changed:
+              assert not (seat_files & changed), sorted(seat_files & changed)
+              owner = Path("sway/input/seat.c").read_text()
+              assert "pa_autoscroll_lifetime_bind(" in owner
+              assert "pa_autoscroll_lifetime_revoke(" in owner
           for name in ("sway/input/cursor.c", "sway/input/input-manager.c",
                        "sway/desktop/xdg_shell.c",
                        "sway/desktop/output.c",
