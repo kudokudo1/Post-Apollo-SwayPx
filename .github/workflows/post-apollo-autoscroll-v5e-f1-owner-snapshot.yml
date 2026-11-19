@@ -12,6 +12,7 @@ on:
       - 'sway/meson.build'
       - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -49,6 +50,7 @@ jobs:
               "sway/meson.build",
               "MODEL/autoscroll-v5e-f1-real-snapshot.md",
               ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
