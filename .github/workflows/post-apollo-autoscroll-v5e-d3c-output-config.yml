@@ -1,0 +1,105 @@
+name: SwayPX / V5E-D3C Committed Output Layout Epochs (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/config/output.c'
+      - 'sway/tree/output.c'
+      - 'include/sway/output.h'
+      - 'tests/autoscroll/test_v5e_d3c_output_config_epoch.py'
+      - 'MODEL/autoscroll-v5e-d3c-output-configuration.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  committed-output-layout-lifetimes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact head and parent source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Confirm narrowly owned config/output epoch diff and hard-OFF input
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-d3b-output-lifetime-20261119"],
+              text=True).strip()
+          paths=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "sway/config/output.c","sway/tree/output.c",
+              "include/sway/output.h",
+              "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
+              "MODEL/autoscroll-v5e-d3c-output-configuration.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+          }
+          assert paths <= allowed, sorted(paths-allowed)
+          assert "sway/config/output.c" in paths
+          forbidden={
+              "sway/input/cursor.c","sway/input/seat.c","include/sway/input/seat.h",
+              "sway/input/input-manager.c","sway/tree/container.c",
+              "sway/desktop/output.c","sway/desktop/xdg_shell.c",
+              "sway/desktop/transaction.c","sway/meson.build",
+              "sway/stage_director_company_input.c",
+              "sway/stage_director_company_scene.c",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+          }
+          assert not (paths & forbidden), sorted(paths & forbidden)
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_V5E_D3C_COMMITTED_OUTPUT_CONFIG_ONLY_HARD_OFF_PASS")
+          PY
+      - name: Strict C11 issuer and all lifecycle source regressions
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            tests/post_apollo_autoscroll_lifetime_test.c \
+            -o /tmp/pa-v5e-d3c-tokens
+          timeout 5s /tmp/pa-v5e-d3c-tokens
+          for test in test_v5e_d3c_output_config_epoch.py \
+                      test_v5e_d3b_output_lifecycle.py \
+                      test_v5e_d3a_target_lifecycle.py \
+                      test_v5e_d2_seat_lifecycle.py \
+                      test_v5e_d1_device_lifecycle.py \
+                      test_default_off_compositor_hook.py \
+                      test_v5e_shared_ingress.py; do
+            python3 -m unittest discover -s tests/autoscroll -p "$test" -v
+          done
+      - name: Install Nix in disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile actual SwayPX with config epoch rotation, hard OFF
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$out/bin/sway"
+          echo "PA_V5E_D3C_REAL_COMPOSITOR_CONFIG_EPOCH_BUILD_PASS"
+      - name: State remaining verification limits
+        if: always()
+        run: |
+          echo "This verifies real committed output-config callback ordering and native binary build, NOT an observed monitor move/scale native event trace." >> "$GITHUB_STEP_SUMMARY"
+          echo "Some layout state outside the output config commit path or initial display creation may still need dedicated epoch invalidation." >> "$GITHUB_STEP_SUMMARY"
+          echo "No trusted hardware, compositor-generated scrolling, Escape or indicator activation. Production remains OFF." >> "$GITHUB_STEP_SUMMARY"
