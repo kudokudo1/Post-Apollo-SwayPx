@@ -7,6 +7,14 @@ on:
       - 'sway/input/post_apollo_autoscroll_runtime.c'
       - 'include/sway/input/post_apollo_autoscroll_runtime.h'
       - 'sway/input/post_apollo_autoscroll_source.c'
+      - 'sway/input/post_apollo_autoscroll_topology.c'
+      - 'include/sway/input/post_apollo_autoscroll_topology.h'
+      - 'sway/input/post_apollo_autoscroll_lifetime.c'
+      - 'include/sway/input/post_apollo_autoscroll_lifetime.h'
+      - 'tests/post_apollo_autoscroll_topology_test.c'
+      - 'tests/post_apollo_autoscroll_lifetime_test.c'
+      - 'MODEL/autoscroll-v5e-c-topology-lifetime.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml'
       - 'sway/input/post_apollo_autoscroll_source_stub.c'
       - 'include/sway/input/post_apollo_autoscroll_source.h'
       - 'sway/meson.build'
@@ -43,6 +51,14 @@ jobs:
           allowed = {
               "include/sway/input/post_apollo_autoscroll_source.h",
               "sway/input/post_apollo_autoscroll_source.c",
+              "sway/input/post_apollo_autoscroll_topology.c",
+              "include/sway/input/post_apollo_autoscroll_topology.h",
+              "sway/input/post_apollo_autoscroll_lifetime.c",
+              "include/sway/input/post_apollo_autoscroll_lifetime.h",
+              "tests/post_apollo_autoscroll_topology_test.c",
+              "tests/post_apollo_autoscroll_lifetime_test.c",
+              "MODEL/autoscroll-v5e-c-topology-lifetime.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
               "sway/input/post_apollo_autoscroll_source_stub.c",
               "include/sway/input/post_apollo_autoscroll_runtime.h",
               "sway/input/post_apollo_autoscroll_runtime.c",
