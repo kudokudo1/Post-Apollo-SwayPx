@@ -1,0 +1,100 @@
+name: SwayPX / V5E-D3A Actual Mapped Target Lifetime (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/tree/container.c'
+      - 'include/sway/tree/container.h'
+      - 'tests/autoscroll/test_v5e_d3a_target_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d3a-target-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  target-owner-source-and-native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout complete exact branch with parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require target owner changes only, no Map file collision or activation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-d2-seat-lifetime-20261119"],
+              text=True).strip()
+          paths=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "include/sway/tree/container.h",
+              "sway/tree/container.c",
+              "tests/autoscroll/test_v5e_d3a_target_lifecycle.py",
+              "MODEL/autoscroll-v5e-d3a-target-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+          }
+          assert paths <= allowed, sorted(paths-allowed)
+          assert {"sway/tree/container.c","include/sway/tree/container.h"} <= paths
+          forbidden={
+              "sway/input/cursor.c","sway/input/seat.c",
+              "include/sway/input/seat.h","sway/input/input-manager.c",
+              "sway/meson.build","sway/desktop/output.c","sway/tree/output.c",
+              "sway/stage_director_company_scene.c",
+              "sway/stage_director_company_input.c",
+              "sway/desktop/xdg_shell.c",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+          }
+          assert not (paths & forbidden), sorted(paths & forbidden)
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_V5E_D3A_TARGET_ONLY_NO_COMPANY_OVERLAP_HARD_OFF_PASS")
+          PY
+      - name: Strict C11 epoch semantics and source-order tests
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            tests/post_apollo_autoscroll_lifetime_test.c \
+            -o /tmp/pa-v5e-d3a-tokens
+          timeout 5s /tmp/pa-v5e-d3a-tokens
+          for test in test_v5e_d3a_target_lifecycle.py \
+                      test_v5e_d2_seat_lifecycle.py \
+                      test_v5e_d1_device_lifecycle.py \
+                      test_default_off_compositor_hook.py \
+                      test_v5e_shared_ingress.py; do
+            python3 -m unittest discover -s tests/autoscroll -p "$test" -v
+          done
+      - name: Install Nix on disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile and link actual SwayPX production hard OFF
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$out/bin/sway"
+          echo "PA_V5E_D3A_REAL_TARGET_LIFETIME_SWAYPX_BUILD_PASS"
+      - name: Proof limits
+        if: always()
+        run: |
+          echo "Actual view container create/begin-destroy source hooks are compiled, but no live XDG window lifecycle token trace is proven." >> "$GITHUB_STEP_SUMMARY"
+          echo "A mapped container is only a lifetime candidate. Surface hit-test, focus, scene visibility and Company pairing remain separate security checks." >> "$GITHUB_STEP_SUMMARY"
+          echo "Output geometry/layout and physical input provenance are not verified. No local changes, production still hard OFF." >> "$GITHUB_STEP_SUMMARY"
