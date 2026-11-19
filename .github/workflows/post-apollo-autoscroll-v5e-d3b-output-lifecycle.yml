@@ -71,7 +71,10 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert {"sway/tree/output.c","include/sway/output.h"} <= paths
+          # The D3B base now includes merged output lifetime hooks.
+          output_source = Path("sway/tree/output.c").read_text()
+          assert "pa_autoscroll_lifetime_bind(" in output_source
+          assert "pa_autoscroll_lifetime_revoke(" in output_source
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c",
               "include/sway/input/seat.h","sway/input/input-manager.c",
