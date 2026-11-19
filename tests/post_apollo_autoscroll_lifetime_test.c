@@ -4,14 +4,21 @@
 #include "sway/input/post_apollo_autoscroll_lifetime.h"
 
 static void test_unique_domains_and_address_reuse(void) {
-    struct pa_autoscroll_lifetime_issuer issuer;
+    struct pa_autoscroll_lifetime_issuer issuer={0};
     struct pa_autoscroll_lifetime_slot device={0}, seat={0};
     struct pa_autoscroll_lifetime_slot target={0}, output={0};
-    pa_autoscroll_lifetime_init(&issuer);
+    assert(pa_autoscroll_lifetime_init(&issuer));
+    assert(!pa_autoscroll_lifetime_init(NULL));
+    struct pa_autoscroll_lifetime_issuer uninitialized={0};
+    assert(!pa_autoscroll_lifetime_bind(
+        &uninitialized,&device,PA_LIFETIME_DEVICE));
     assert(!pa_autoscroll_lifetime_bind(NULL,&device,PA_LIFETIME_DEVICE));
     assert(!pa_autoscroll_lifetime_bind(&issuer,NULL,PA_LIFETIME_DEVICE));
     assert(!pa_autoscroll_lifetime_bind(&issuer,&device,PA_LIFETIME_NONE));
     assert(pa_autoscroll_lifetime_bind(&issuer,&device,PA_LIFETIME_DEVICE));
+    /* A mistaken repeated initialization must not reset the sequence. */
+    assert(!pa_autoscroll_lifetime_init(&issuer));
+    assert(issuer.latest_epoch == 1);
     assert(pa_autoscroll_lifetime_bind(&issuer,&seat,PA_LIFETIME_SEAT));
     assert(pa_autoscroll_lifetime_bind(&issuer,&target,PA_LIFETIME_TARGET));
     assert(pa_autoscroll_lifetime_bind(&issuer,&output,PA_LIFETIME_OUTPUT));
@@ -34,9 +41,9 @@ static void test_unique_domains_and_address_reuse(void) {
 }
 
 static void test_no_wraparound_and_fail_closed(void) {
-    struct pa_autoscroll_lifetime_issuer issuer;
+    struct pa_autoscroll_lifetime_issuer issuer={0};
     struct pa_autoscroll_lifetime_slot a={0},b={0};
-    pa_autoscroll_lifetime_init(&issuer);
+    assert(pa_autoscroll_lifetime_init(&issuer));
     issuer.latest_epoch=UINT64_MAX-1u;
     assert(pa_autoscroll_lifetime_bind(&issuer,&a,PA_LIFETIME_OUTPUT));
     assert(pa_autoscroll_lifetime_epoch(&a,PA_LIFETIME_OUTPUT)==UINT64_MAX);
