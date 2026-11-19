@@ -1,0 +1,127 @@
+name: SwayPX / V5E-F1 Real Owner Epoch Snapshot + V5C Guard (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_epoch.h'
+      - 'sway/input/post_apollo_autoscroll_epoch.c'
+      - 'include/sway/input/post_apollo_autoscroll_snapshot.h'
+      - 'sway/input/post_apollo_autoscroll_snapshot.c'
+      - 'tests/post_apollo_autoscroll_f1_guard_join_test.c'
+      - 'tests/autoscroll/test_v5e_f1_real_snapshot.py'
+      - 'sway/meson.build'
+      - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-compositor-owner-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact source and stacked parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Refuse unapproved Company input or live runtime changes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-d3c-output-config-epoch-20261119"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "include/sway/input/post_apollo_autoscroll_snapshot.h",
+              "sway/input/post_apollo_autoscroll_snapshot.c",
+              "tests/post_apollo_autoscroll_f1_guard_join_test.c",
+              "tests/autoscroll/test_v5e_f1_real_snapshot.py",
+              "sway/meson.build",
+              "MODEL/autoscroll-v5e-f1-real-snapshot.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert "sway/meson.build" in changed
+          for forbidden in ("sway/input/cursor.c","sway/input/seat.c",
+                  "include/sway/input/seat.h",
+                  "sway/input/input-manager.c",
+                  "sway/tree/container.c","sway/tree/output.c",
+                  "sway/config/output.c","sway/desktop/output.c",
+                  "sway/stage_director_company_input.c",
+                  "sway/stage_director_company_scene.c",
+                  "sway/input/post_apollo_autoscroll_runtime.c",
+                  "include/sway/input/post_apollo_autoscroll_runtime.h"):
+              assert forbidden not in changed, forbidden
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_V5E_F1_SOURCE_ONLY_MESON_OVERLAP_NO_ACTUATION_PASS")
+          PY
+      - name: Strict C11 issuer and V5C guard cancellation with mock event observations
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            tests/post_apollo_autoscroll_f1_guard_join_test.c \
+            -o /tmp/pa-v5f1-join
+          timeout 5s /tmp/pa-v5f1-join
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            tests/post_apollo_autoscroll_lifetime_test.c \
+            -o /tmp/pa-v5f1-lifetime
+          timeout 5s /tmp/pa-v5f1-lifetime
+      - name: Real owner membership, hit-test, output and hard-OFF regression
+        run: |
+          set -euo pipefail
+          for t in test_v5e_f1_real_snapshot.py \
+                   test_v5e_d3c_output_config_epoch.py \
+                   test_v5e_d3b_output_lifecycle.py \
+                   test_v5e_d3a_target_lifecycle.py \
+                   test_v5e_d2_seat_lifecycle.py \
+                   test_v5e_d1_device_lifecycle.py \
+                   test_v5e_shared_ingress.py \
+                   test_default_off_compositor_hook.py; do
+            python3 -m unittest discover -s tests/autoscroll -p "$t" -v
+          done
+      - name: Install Nix in isolated GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Compile full production-hard-OFF SwayPX binary with F1 snapshot
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$out/bin/sway"
+          echo "PA_V5E_F1_REAL_OWNER_SNAPSHOT_AND_GUARD_LINKED_PASS"
+      - name: State limits
+        if: always()
+        run: |
+          echo "The binary links the real read-only device/seat/target/output snapshot and the portable V5C epoch guard." >> "$GITHUB_STEP_SUMMARY"
+          echo "The four-domain cancellation tests use synthetic positive witnesses, NOT real hardware provenance." >> "$GITHUB_STEP_SUMMARY"
+          echo "No live autoscroll ingress uses this helper; no actual native hotplug/layout token trace, compositor-issued positive witness, axis/frame or indicator is demonstrated." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production remains hard OFF. A new compositor-session authority is required before any future privilege use." >> "$GITHUB_STEP_SUMMARY"

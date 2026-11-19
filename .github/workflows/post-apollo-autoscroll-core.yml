@@ -27,6 +27,10 @@ on:
       - "tests/post_apollo_autoscroll_engine_test.c"
       - "MODEL/autoscroll-compositor-runtime-v1.md"
       - ".github/workflows/post-apollo-autoscroll-core.yml"
+      - "include/sway/input/post_apollo_autoscroll_snapshot.h"
+      - "sway/input/post_apollo_autoscroll_snapshot.c"
+      - "include/sway/input/post_apollo_autoscroll_epoch.h"
+      - "sway/input/post_apollo_autoscroll_epoch.c"
   push:
     branches:
       - "autoscroll/*"
@@ -92,7 +96,18 @@ jobs:
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "pa_autoscroll_witness_" not in runtime
           assert "pa_autoscroll_witness_" not in cursor
-          assert "post_apollo_autoscroll_witness.c" not in meson
+          # F1 compiles the portable witness and V5C guard in the real
+          # compositor, but has no positive witness producer or live caller.
+          # Older branches must still keep the witness outside Meson.
+          snapshot = Path("sway/input/post_apollo_autoscroll_snapshot.c")
+          if snapshot.is_file():
+              assert "'input/post_apollo_autoscroll_witness.c'" in meson
+              assert "'input/post_apollo_autoscroll_epoch.c'" in meson
+              assert "'input/post_apollo_autoscroll_snapshot.c'" in meson
+              assert "pa_autoscroll_epoch_begin(" not in runtime
+              assert "pa_autoscroll_collect_compositor_epochs(" not in runtime
+          else:
+              assert "post_apollo_autoscroll_witness.c" not in meson
           for banned in ("wlr_seat_pointer_notify", "wl_event_loop_add_timer",
                          "uinput", "swaymsg", "libinput_device_"):
               assert banned not in witness, banned
@@ -106,7 +121,10 @@ jobs:
           from pathlib import Path
           import subprocess
           base = subprocess.check_output(
-              ["git", "merge-base", "HEAD", "origin/master"], text=True
+              ["git", "merge-base", "HEAD",
+               "origin/autoscroll/v5e-d3c-output-config-epoch-20261119"
+               if Path("sway/input/post_apollo_autoscroll_snapshot.c").is_file()
+               else "origin/master"], text=True
           ).strip()
           changed = subprocess.check_output(
               ["git", "diff", "--name-only", base, "HEAD"], text=True
