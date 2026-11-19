@@ -20,6 +20,7 @@
 #include "util.h"
 #include "sway/input/cursor.h"
 #include "sway/input/post_apollo_autoscroll_axis_dispatch.h"
+#include "sway/input/post_apollo_autoscroll_origin_policy.h"
 #include "sway/input/post_apollo_autoscroll_runtime.h"
 #include "sway/server.h"
 #include "sway/tree/node.h"
@@ -160,14 +161,20 @@ void pa_autoscroll_runtime_destroy(struct pa_autoscroll_runtime *runtime) {
 
 bool pa_autoscroll_runtime_button(struct pa_autoscroll_runtime *runtime,
         struct wlr_input_device *device, uint32_t timestamp,
-        uint32_t button, bool pressed) {
+        uint32_t button, bool pressed,
+        const struct pa_autoscroll_origin_facts *origin) {
     if (!PA_AUTOSCROLL_LIVE_ACTIVATION || runtime == NULL ||
             !runtime->dispatch.adapter.enabled ||
-            device == NULL || runtime->cursor == NULL) {
+            device == NULL || runtime->cursor == NULL ||
+            /* A libinput backend CANDIDATE is necessary, not sufficient.
+             * A synthetic kernel pointer may also reach libinput. */
+            pa_autoscroll_origin_classify(origin) !=
+                PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE) {
         return false;
     }
-    /* No verified physical pointer or libinput Scroll Lock source exists.
-     * These false/true gates intentionally prevent consumption for now.
+    /* Native scroll mode is observed, but genuine physical provenance,
+     * object lifetimes and layout epoch are not yet authenticated.
+     * The independent false/true gates still prevent consumption.
      */
     const bool physical_verified = false;
     const bool native_scroll_lock_active = true;

@@ -1,0 +1,96 @@
+name: SwayPX / V5E-B Shared Cursor Source Probe (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/input/cursor.c'
+      - 'sway/input/post_apollo_autoscroll_runtime.c'
+      - 'include/sway/input/post_apollo_autoscroll_runtime.h'
+      - 'sway/input/post_apollo_autoscroll_source.c'
+      - 'sway/input/post_apollo_autoscroll_source_stub.c'
+      - 'include/sway/input/post_apollo_autoscroll_source.h'
+      - 'sway/meson.build'
+      - 'tests/autoscroll/test_v5e_shared_ingress.py'
+      - 'MODEL/autoscroll-v5e-b-shared-cursor-probe.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-shared-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR head and its parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify only the scoped shared cursor changes and still hard OFF
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-a-origin-policy-20261119"],
+              text=True).strip()
+          changed = set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed = {
+              "include/sway/input/post_apollo_autoscroll_source.h",
+              "sway/input/post_apollo_autoscroll_source.c",
+              "sway/input/post_apollo_autoscroll_source_stub.c",
+              "include/sway/input/post_apollo_autoscroll_runtime.h",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+              "sway/input/cursor.c",
+              "sway/meson.build",
+              "tests/autoscroll/test_v5e_shared_ingress.py",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+              "MODEL/autoscroll-v5e-b-shared-cursor-probe.md",
+          }
+          assert changed <= allowed, sorted(changed - allowed)
+          forbidden = {"sway/input/seat.c","sway/input/seatop_default.c",
+                       "sway/desktop/xdg_shell.c",
+                       "sway/stage_director_company_input.c",
+                       "sway/stage_director_company_scene.c"}
+          assert not (changed & forbidden), sorted(changed & forbidden)
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_AUTOSCROLL_V5E_B_SHARED_CURSOR_SCOPE_PASS")
+          PY
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_default_off_compositor_hook.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5e_shared_ingress.py' -v
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_origin_policy.c \
+            tests/post_apollo_autoscroll_origin_policy_test.c \
+            -o /tmp/pa-v5e-b-origin-policy
+          timeout 5s /tmp/pa-v5e-b-origin-policy
+      - name: Install Nix in disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build and link real SwayPX with libinput source probe, no deployment
+        run: |
+          set -euo pipefail
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/v5e-b-swaypx-path.txt"
+          executable="$(tail -n 1 "$RUNNER_TEMP/v5e-b-swaypx-path.txt")/bin/sway"
+          test -x "$executable"
+          echo "PA_AUTOSCROLL_V5E_B_PRODUCTION_HARD_OFF_BUILD_PASS"
+      - name: Declare limitation
+        if: always()
+        run: |
+          echo "This CI builds SwayPX with a non-authorizing candidate probe after Stage Director pairing." >> "$GITHUB_STEP_SUMMARY"
+          echo "It does not demonstrate genuine physical provenance, real mouse events, or active autoscroll." >> "$GITHUB_STEP_SUMMARY"
+          echo "No operator desktop services or files are modified." >> "$GITHUB_STEP_SUMMARY"
