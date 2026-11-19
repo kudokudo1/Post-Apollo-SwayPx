@@ -18,6 +18,11 @@ on:
       - 'sway/input/post_apollo_autoscroll_source_stub.c'
       - 'include/sway/input/post_apollo_autoscroll_source.h'
       - 'sway/meson.build'
+      - 'sway/input/input-manager.c'
+      - 'include/sway/input/input-manager.h'
+      - 'tests/autoscroll/test_v5e_d1_device_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d1-device-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml'
       - 'tests/autoscroll/test_v5e_shared_ingress.py'
       - 'MODEL/autoscroll-v5e-b-shared-cursor-probe.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml'
@@ -64,6 +69,11 @@ jobs:
               "sway/input/post_apollo_autoscroll_runtime.c",
               "sway/input/cursor.c",
               "sway/meson.build",
+              "sway/input/input-manager.c",
+              "include/sway/input/input-manager.h",
+              "tests/autoscroll/test_v5e_d1_device_lifecycle.py",
+              "MODEL/autoscroll-v5e-d1-device-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
               "tests/autoscroll/test_v5e_shared_ingress.py",
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
               "MODEL/autoscroll-v5e-b-shared-cursor-probe.md",
