@@ -80,7 +80,10 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert {"sway/tree/container.c","include/sway/tree/container.h"} <= paths
+          # Stacked D3A source may already be present in its parent branch.
+          target_source = Path("sway/tree/container.c").read_text()
+          assert "pa_autoscroll_lifetime_bind(" in target_source
+          assert "pa_autoscroll_lifetime_revoke(" in target_source
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c",
               "include/sway/input/seat.h","sway/input/input-manager.c",
