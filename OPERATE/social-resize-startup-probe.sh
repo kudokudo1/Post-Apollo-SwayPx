@@ -60,8 +60,22 @@ started_epoch=$(date +%s)
     "$sway" --version
 } > "$run/metadata.log" 2>&1
 
-# Copy only a log written in this invocation's time window. The normal Sway
-# config still writes /tmp/quickshell.log; no shared config is changed.
+# Both the periodic monitor and the compositor-exit checkpoint use the
+# same freshness rule; an old /tmp log must not be promoted to this run.
+snapshot_quickshell_log() {
+    if [ -f "$quickshell_log" ]; then
+        log_mtime=$(stat -c %Y -- "$quickshell_log" 2>/dev/null || printf '0')
+        if [ "$log_mtime" -ge "$started_epoch" ]; then
+            cp -- "$quickshell_log" "$run/quickshell.log" 2>/dev/null || :
+            printf 'quickshell_log=current mtime=%s\n' "$log_mtime"
+        else
+            printf 'quickshell_log=older_than_probe mtime=%s\n' "$log_mtime"
+        fi
+    else
+        printf 'quickshell_log=absent\n'
+    fi
+}
+
 (
     while :; do
         printf '%s ' "$(date -Is)"
@@ -70,17 +84,7 @@ started_epoch=$(date +%s)
         else
             printf 'pgrep=unavailable\n'
         fi
-        if [ -f "$quickshell_log" ]; then
-            log_mtime=$(stat -c %Y -- "$quickshell_log" 2>/dev/null || printf '0')
-            if [ "$log_mtime" -ge "$started_epoch" ]; then
-                cp -- "$quickshell_log" "$run/quickshell.log" 2>/dev/null || :
-                printf 'quickshell_log=current mtime=%s\n' "$log_mtime"
-            else
-                printf 'quickshell_log=older_than_probe mtime=%s\n' "$log_mtime"
-            fi
-        else
-            printf 'quickshell_log=absent\n'
-        fi
+        snapshot_quickshell_log
         sleep 1
     done
 ) >> "$run/health.log" 2>&1 &
@@ -111,6 +115,12 @@ sway_pid=$!
 printf 'phase=compositor_spawned\npid=%s\n' "$sway_pid" >> "$run/launch.log"
 wait "$sway_pid"
 result=$?
+# Fast compositor failures can finish before the one-second monitor records
+# Quickshell output. Stop that monitor and capture a final bounded snapshot.
+cleanup
+monitor_pid=
+printf '%s snapshot=final_exit exit=%s\n' "$(date -Is)" "$result" >> "$run/health.log"
+snapshot_quickshell_log >> "$run/health.log"
 printf 'phase=compositor_exited\nexit=%s\n' "$result" >> "$run/launch.log"
 printf 'exit=%s\ntime=%s\n' "$result" "$(date -Is)" > "$run/exit.log"
 exit "$result"
