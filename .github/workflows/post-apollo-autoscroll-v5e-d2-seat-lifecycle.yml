@@ -1,0 +1,97 @@
+name: SwayPX / V5E-D2 Real Seat Lifetime Hooks (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/input/seat.c'
+      - 'include/sway/input/seat.h'
+      - 'tests/autoscroll/test_v5e_d2_seat_lifecycle.py'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml'
+      - 'MODEL/autoscroll-v5e-d2-seat-lifecycle.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seat-lifetime-source-and-native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact source under test and parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Strict D2 seat-only shared ownership and hard-OFF gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-d1-device-lifetime-20261119"],
+              text=True).strip()
+          changed = set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"], text=True).splitlines())
+          allowed = {
+              "sway/input/seat.c", "include/sway/input/seat.h",
+              "tests/autoscroll/test_v5e_d2_seat_lifecycle.py",
+              "MODEL/autoscroll-v5e-d2-seat-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert {"sway/input/seat.c", "include/sway/input/seat.h"} <= changed
+          for name in ("sway/input/cursor.c", "sway/input/input-manager.c",
+                       "sway/meson.build", "sway/desktop/xdg_shell.c",
+                       "sway/desktop/output.c", "sway/tree/container.c",
+                       "sway/input/seatop_down.c",
+                       "sway/stage_director_company_input.c",
+                       "sway/stage_director_company_scene.c",
+                       "sway/input/post_apollo_autoscroll_runtime.c"):
+              assert name not in changed, name
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_V5E_D2_SEAT_ONLY_SHARED_SCOPE_HARD_OFF_PASS")
+          PY
+      - name: Run seat lifetime, device, core and pairing source tests
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            tests/post_apollo_autoscroll_lifetime_test.c \
+            -o /tmp/pa-v5ed2-lifetime
+          timeout 5s /tmp/pa-v5ed2-lifetime
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5e_d2_seat_lifecycle.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5e_d1_device_lifecycle.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_default_off_compositor_hook.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5e_shared_ingress.py' -v
+      - name: Install Nix on disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Link full real production-hard-OFF SwayPX
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$out/bin/sway"
+          echo "PA_V5E_D2_ACTUAL_SEAT_CALLBACK_COMPOSITOR_BUILD_PASS"
+      - name: Preserve evidence boundary
+        if: always()
+        run: |
+          echo "Actual seat-create and seat-destroy C callbacks now bind/revoke seat lifetime tokens." >> "$GITHUB_STEP_SUMMARY"
+          echo "No live seat create/destroy event trace is captured in this workflow. Source and native-build evidence only." >> "$GITHUB_STEP_SUMMARY"
+          echo "No physical authentication, session identity across restarts, active autoscroll or host deployment." >> "$GITHUB_STEP_SUMMARY"

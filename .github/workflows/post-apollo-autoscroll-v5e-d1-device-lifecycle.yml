@@ -9,6 +9,11 @@ on:
       - 'tests/autoscroll/test_v5e_d1_device_lifecycle.py'
       - 'MODEL/autoscroll-v5e-d1-device-lifecycle.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml'
+      - 'sway/input/seat.c'
+      - 'include/sway/input/seat.h'
+      - 'tests/autoscroll/test_v5e_d2_seat_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d2-seat-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml'
   workflow_dispatch:
 
 permissions:
@@ -41,6 +46,11 @@ jobs:
               "include/sway/input/input-manager.h",
               "sway/input/input-manager.c",
               "sway/meson.build",
+              "sway/input/seat.c",
+              "include/sway/input/seat.h",
+              "tests/autoscroll/test_v5e_d2_seat_lifecycle.py",
+              "MODEL/autoscroll-v5e-d2-seat-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
               "tests/autoscroll/test_v5e_d1_device_lifecycle.py",
               "MODEL/autoscroll-v5e-d1-device-lifecycle.md",
               ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
@@ -49,13 +59,17 @@ jobs:
           }
           assert changed <= allowed, sorted(changed - allowed)
           forbidden = {
-              "sway/input/cursor.c", "sway/input/seat.c",
-              "include/sway/input/seat.h", "sway/desktop/output.c",
+              "sway/input/cursor.c", "sway/desktop/output.c",
               "sway/tree/container.c", "sway/desktop/xdg_shell.c",
               "sway/input/post_apollo_autoscroll_runtime.c",
               "include/sway/input/post_apollo_autoscroll_runtime.h",
           }
           assert not (changed & forbidden), sorted(changed & forbidden)
+          if "sway/input/seat.c" in changed:
+              seat = Path("sway/input/seat.c").read_text()
+              assert "pa_autoscroll_lifetime_bind(" in seat
+              assert "pa_autoscroll_lifetime_revoke(" in seat
+              assert Path("tests/autoscroll/test_v5e_d2_seat_lifecycle.py").is_file()
           runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime
