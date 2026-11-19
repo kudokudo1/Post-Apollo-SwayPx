@@ -4,6 +4,14 @@
 #include <string.h>
 #include "sway/input/post_apollo_autoscroll_topology.h"
 
+static size_t bounded_length(const char *s, size_t bound) {
+    size_t i = 0;
+    while (i < bound && s[i] != '\0') {
+        i++;
+    }
+    return i;
+}
+
 static bool decimal_digits(const char *start, const char *end) {
     if (start == NULL || end == NULL || end <= start) {
         return false;
@@ -23,8 +31,8 @@ bool pa_autoscroll_kernel_tree_candidate(
     if (udev_syspath == NULL || udev_devnode == NULL) {
         return false;
     }
-    const size_t syslen = strnlen(udev_syspath, 4096u);
-    const size_t devlen = strnlen(udev_devnode, 256u);
+    const size_t syslen = bounded_length(udev_syspath, 4096u);
+    const size_t devlen = bounded_length(udev_devnode, 256u);
     if (syslen < sizeof("/sys/devices/a/input/input1/event1") - 1
             || syslen == 4096u || devlen == 256u
             || strncmp(udev_syspath, sys_prefix, strlen(sys_prefix)) != 0
