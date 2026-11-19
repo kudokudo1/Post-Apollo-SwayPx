@@ -18,6 +18,7 @@ on:
       - 'tests/autoscroll/test_v5e_f1_real_snapshot.py'
       - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -55,6 +56,7 @@ jobs:
               "tests/autoscroll/test_v5e_f1_real_snapshot.py",
               "MODEL/autoscroll-v5e-f1-real-snapshot.md",
               ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
               "sway/meson.build",
               "include/sway/output.h",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
@@ -69,7 +71,11 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert "sway/config/output.c" in paths
+          # D3C's parent feature branch may now already contain the
+          # merged config source. Verify hook ownership even without diff.
+          if "sway/config/output.c" not in paths:
+              owner = Path("sway/config/output.c").read_text()
+              assert "output_autoscroll_config_committed(cfg->output)" in owner
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c","include/sway/input/seat.h",
               "sway/input/input-manager.c","sway/tree/container.c",
