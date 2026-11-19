@@ -1,0 +1,133 @@
+name: SwayPX / V5F-A Owner Snapshot + Pinned V5C Guard (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/input/post_apollo_autoscroll_owner_snapshot.c'
+      - 'include/sway/input/post_apollo_autoscroll_owner_snapshot.h'
+      - 'sway/meson.build'
+      - 'tests/autoscroll/test_v5f_owner_snapshot.py'
+      - 'tests/post_apollo_autoscroll_v5f_owner_guard_test.c'
+      - 'MODEL/autoscroll-v5f-a-owner-snapshot.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-owned-four-epochs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout full exact source history
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require read-only F-A scope and production hard-OFF
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-d3c-output-config-epoch-20261119"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              ".github/workflows/post-apollo-autoscroll-core.yml",
+              "sway/input/post_apollo_autoscroll_owner_snapshot.c",
+              "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
+              "sway/meson.build",
+              "tests/autoscroll/test_v5f_owner_snapshot.py",
+              "tests/post_apollo_autoscroll_v5f_owner_guard_test.c",
+              "MODEL/autoscroll-v5f-a-owner-snapshot.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert {
+              "sway/input/post_apollo_autoscroll_owner_snapshot.c",
+              "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
+              "sway/meson.build",
+          } <= changed
+          forbidden={
+              "sway/input/cursor.c","sway/input/seat.c",
+              "include/sway/input/seat.h","sway/input/input-manager.c",
+              "sway/tree/container.c","sway/tree/output.c",
+              "sway/config/output.c","sway/desktop/xdg_shell.c",
+              "sway/desktop/transaction.c","sway/input/seatop_down.c",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+              "sway/stage_director_company_input.c",
+              "sway/stage_director_company_scene.c",
+          }
+          assert not (changed & forbidden), sorted(changed & forbidden)
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "'input/post_apollo_autoscroll_owner_snapshot.c'" in Path("sway/meson.build").read_text()
+          print("PA_V5F_A_OWNER_SNAPSHOT_SCOPE_HARD_OFF_PASS")
+          PY
+      - name: Test real source owner membership and earlier lifecycle regressions
+        run: |
+          set -euo pipefail
+          for test in test_v5f_owner_snapshot.py \
+                      test_v5e_d3c_output_config_epoch.py \
+                      test_v5e_d3b_output_lifecycle.py \
+                      test_v5e_d3a_target_lifecycle.py \
+                      test_v5e_d2_seat_lifecycle.py \
+                      test_v5e_d1_device_lifecycle.py \
+                      test_default_off_compositor_hook.py \
+                      test_v5e_shared_ingress.py; do
+            python3 -m unittest discover -s tests/autoscroll -p "$test" -v
+          done
+      - name: Compile and run SYNTHETIC four-owner revocation against PINNED V5C
+        run: |
+          set -euo pipefail
+          pin=fb064cf3c82aa7b9e8d2375bb631773d5eb5a12f
+          if ! git cat-file -e "$pin"; then
+            git fetch --no-tags origin "$pin"
+          fi
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/include/sway/input" "$tmp/sway/input"
+          for name in post_apollo_autoscroll_epoch post_apollo_autoscroll_witness; do
+            git show "$pin:include/sway/input/$name.h" > "$tmp/include/sway/input/$name.h"
+            git show "$pin:sway/input/$name.c" > "$tmp/sway/input/$name.c"
+          done
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -I"$tmp/include" -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            "$tmp/sway/input/post_apollo_autoscroll_epoch.c" \
+            "$tmp/sway/input/post_apollo_autoscroll_witness.c" \
+            tests/post_apollo_autoscroll_v5f_owner_guard_test.c \
+            -o "$tmp/v5f-owner-contract"
+          timeout 5s "$tmp/v5f-owner-contract"
+      - name: Install Nix in isolated runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build REAL SwayPX with owner observation but no live actuation
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$sway/bin/sway"
+          echo "PA_V5F_A_OWNER_SNAPSHOT_REAL_SWAYPX_HARD_OFF_LINK_PASS"
+      - name: Preserve limitations
+        if: always()
+        run: |
+          echo "Real compositor observation source is linked, but no production caller or input activation exists." >> "$GITHUB_STEP_SUMMARY"
+          echo "V5C guard compatibility uses synthetic positive witnesses from an exact master commit, not physical hardware or live callback evidence." >> "$GITHUB_STEP_SUMMARY"
+          echo "Feature and master histories remain separate; no user workstation modifications." >> "$GITHUB_STEP_SUMMARY"

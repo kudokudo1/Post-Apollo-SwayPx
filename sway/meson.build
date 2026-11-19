@@ -74,6 +74,7 @@ sway_sources = files(
 	'input/post_apollo_autoscroll_origin_policy.c',
 	'input/post_apollo_autoscroll_topology.c',
 	'input/post_apollo_autoscroll_lifetime.c',
+	'input/post_apollo_autoscroll_owner_snapshot.c',
 	'input/post_apollo_autoscroll_runtime.c',
 	'input/keyboard.c',
 	'input/seat.c',

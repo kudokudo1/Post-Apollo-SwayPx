@@ -12,6 +12,14 @@ on:
       - 'tests/autoscroll/test_v5e_d3c_output_config_epoch.py'
       - 'MODEL/autoscroll-v5e-d3c-output-configuration.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml'
+      - 'sway/input/post_apollo_autoscroll_owner_snapshot.c'
+      - 'include/sway/input/post_apollo_autoscroll_owner_snapshot.h'
+      - 'tests/autoscroll/test_v5f_owner_snapshot.py'
+      - 'tests/post_apollo_autoscroll_v5f_owner_guard_test.c'
+      - 'MODEL/autoscroll-v5f-a-owner-snapshot.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml'
+      - 'sway/meson.build'
+      - '.github/workflows/post-apollo-autoscroll-core.yml'
   workflow_dispatch:
 
 permissions:
@@ -40,6 +48,15 @@ jobs:
           paths=set(subprocess.check_output(
               ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
           allowed={
+              ".github/workflows/post-apollo-autoscroll-core.yml",
+              "sway/input/post_apollo_autoscroll_owner_snapshot.c",
+              "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
+              "tests/autoscroll/test_v5f_owner_snapshot.py",
+              "tests/post_apollo_autoscroll_v5f_owner_guard_test.c",
+              "MODEL/autoscroll-v5f-a-owner-snapshot.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml",
+              "sway/meson.build",
+
               "sway/tree/output.c",
               "sway/config/output.c",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
@@ -56,12 +73,15 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
           }
           assert paths <= allowed, sorted(paths-allowed)
-          assert {"sway/tree/output.c","include/sway/output.h"} <= paths
+          # The D3B base now includes merged output lifetime hooks.
+          output_source = Path("sway/tree/output.c").read_text()
+          assert "pa_autoscroll_lifetime_bind(" in output_source
+          assert "pa_autoscroll_lifetime_revoke(" in output_source
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c",
               "include/sway/input/seat.h","sway/input/input-manager.c",
               "sway/tree/container.c","include/sway/tree/container.h",
-              "sway/meson.build","sway/desktop/output.c",
+              "sway/desktop/output.c",
               "sway/desktop/xdg_shell.c","sway/desktop/transaction.c",
               "sway/input/seatop_down.c",
               "sway/stage_director_company_input.c",
@@ -73,6 +93,12 @@ jobs:
               config = Path("sway/config/output.c").read_text()
               assert "output_autoscroll_config_committed(cfg->output)" in config
               assert Path("tests/autoscroll/test_v5e_d3c_output_config_epoch.py").is_file()
+          if "sway/input/post_apollo_autoscroll_owner_snapshot.c" in paths:
+              source = Path("sway/input/post_apollo_autoscroll_owner_snapshot.c").read_text()
+              assert "find_live_native_pointer(event_device)" in source
+              assert "wlr_output_layout_output_at(" in source
+              assert Path("tests/autoscroll/test_v5f_owner_snapshot.py").is_file()
+              assert "'input/post_apollo_autoscroll_owner_snapshot.c'" in Path("sway/meson.build").read_text()
           runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime

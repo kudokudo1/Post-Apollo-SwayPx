@@ -104,13 +104,47 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import os
           import subprocess
+          branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME")
+          if branch == "autoscroll/v5f-a-owner-snapshot-20261119":
+              # Merged D1-D3 source lives on a feature chain, not on master.
+              # Keep a strict F-A manifest instead of falsely calling its
+              # already-reviewed seat.c parent history a new core edit.
+              base_ref = "origin/autoscroll/v5e-d3c-output-config-epoch-20261119"
+          else:
+              base_ref = "origin/master"
           base = subprocess.check_output(
-              ["git", "merge-base", "HEAD", "origin/master"], text=True
+              ["git", "merge-base", "HEAD", base_ref], text=True
           ).strip()
           changed = subprocess.check_output(
               ["git", "diff", "--name-only", base, "HEAD"], text=True
           ).splitlines()
+          if branch == "autoscroll/v5f-a-owner-snapshot-20261119":
+              allowed_fa = {
+                  "sway/input/post_apollo_autoscroll_owner_snapshot.c",
+                  "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
+                  "sway/meson.build",
+                  "tests/autoscroll/test_v5f_owner_snapshot.py",
+                  "tests/post_apollo_autoscroll_v5f_owner_guard_test.c",
+                  "MODEL/autoscroll-v5f-a-owner-snapshot.md",
+                  ".github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml",
+                  ".github/workflows/post-apollo-autoscroll-core.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+                  ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+              }
+              assert set(changed) <= allowed_fa, sorted(set(changed)-allowed_fa)
+              source = Path("sway/input/post_apollo_autoscroll_owner_snapshot.c").read_text()
+              assert "find_live_native_pointer(event_device)" in source
+              assert "wlr_output_layout_output_at(" in source
+              assert "'input/post_apollo_autoscroll_owner_snapshot.c'" in Path("sway/meson.build").read_text()
+              assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in Path(
+                  "sway/input/post_apollo_autoscroll_runtime.c").read_text()
           forbidden = {
               "sway/input/seat.c",
               "sway/input/seatop_default.c",
