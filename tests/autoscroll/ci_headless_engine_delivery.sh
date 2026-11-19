@@ -150,6 +150,9 @@ if [[ -z "$wayland" || -z "$ipc" ]]; then
 fi
 export WAYLAND_DISPLAY="$wayland"
 export SWAYSOCK="$ipc"
+# Reused V5C native observer requires its original isolation marker.
+# Keep that stricter check; the V5D marker separately guards the engine sender.
+export PA_AUTOSCROLL_CI_VIRTUAL_NEGATIVE=1
 export PA_AUTOSCROLL_CI_ENGINE_SYNTHETIC=1
 
 "$observer" run >"$client_log" 2>&1 &
