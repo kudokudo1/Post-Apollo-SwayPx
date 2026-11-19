@@ -15,14 +15,14 @@ Per login, under `${XDG_STATE_HOME:-$HOME/.local/state}/swaypx/social-resize-sta
 - `launch.log`: first persistent `phase=invoked` checkpoint, preflight outcome, compositor spawn and normal exit markers (written **before** checking the compositor executable)
 - `metadata.log`: session time, binary version, stage path, selected nonsecret session fields
 - `sway.log`: complete compositor debug stdout/stderr
-- `health.log`: approximately one-second Quickshell process presence and startup-log freshness samples
-- `quickshell.log`: a periodically copied snapshot of `/tmp/quickshell.log`, **only after** it is modified in the observed session
+- `health.log`: approximately one-second Quickshell process presence and startup-log freshness samples, plus a `snapshot=final_exit` checkpoint after a normally observed compositor exit
+- `quickshell.log`: a periodically copied snapshot of `/tmp/quickshell.log`, with one final capture on normal/nonzero compositor exit, **only if** its modification time meets the probe's start-time guard
 - `exit.log`: compositor exit status and time **only if the shell is allowed to finish**
 - `LATEST` at the parent directory: path of the most recent diagnostic run
 
 The launcher also prints a minimal `social-resize-probe: entered launcher` marker to standard error before checking HOME, stage files, or writable state. It includes a PID, not private environment values. If the journal has that marker but `LATEST` is absent, investigate state-directory access. If neither exists, do **not** conclude GDM never invoked the launcher: journal capture may be incomplete, and the selected session may differ. The current GDM session registration warning is not by itself evidence of a particular launcher or compositor failure.
 
-A forced power-off or kernel hang might prevent the last buffers from reaching disk. An absent `exit.log` is not proof of a compositor crash. A Quickshell process from a different concurrent graphical session could also appear in `health.log`; inspect session identity before treating presence as proof that the requested desktop loaded.
+A fast compositor exit previously could beat the periodic Quickshell sample; the final exit checkpoint now captures a recent log even in that case. This does not prove the log belongs to the requested session: another session could update the same /tmp file, and modification times have only whole-second precision. A forced power-off or kernel hang might prevent the last buffers from reaching disk. An absent `exit.log` is not proof of a compositor crash. A Quickshell process from a different concurrent graphical session could also appear in `health.log`; inspect session identity before treating presence as proof that the requested desktop loaded.
 
 The directory uses restrictive user permissions (`umask 077`), but the application logs can still contain private data. Review or redact before sharing.
 
@@ -82,7 +82,7 @@ Run the self-contained offline test:
 python3 tests/stage_director/test_social_resize_startup_probe.py
 ```
 
-It uses disposable mock Sway executables, never opens a Wayland session, and asserts timestamped logs, exit propagation, 0700 storage, stale-log rejection, and a private persistent early-failure checkpoint when the compositor executable is absent. **A passing mock test does not prove the actual Fedora/GDM session works.**
+It uses disposable mock Sway executables, never opens a Wayland session, and asserts timestamped logs, exit propagation, 0700 storage, stale-log rejection, rapid compositor exit with a deliberately blocked periodic monitor, and a private persistent early-failure checkpoint when the compositor executable is absent. **A passing mock test does not prove the actual Fedora/GDM session works.**
 
 After a new PR revision, the old installed diagnostic launcher is **not** updated automatically. Replacing that host file is a separate local-write action requiring operator approval, exact-source verification and a recovery plan; do not attempt another gray-screen login merely because these offline tests pass.
 
