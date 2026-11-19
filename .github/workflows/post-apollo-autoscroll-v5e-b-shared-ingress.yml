@@ -36,6 +36,11 @@ on:
       - 'tests/autoscroll/test_v5e_d3a_target_lifecycle.py'
       - 'MODEL/autoscroll-v5e-d3a-target-lifecycle.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml'
+      - 'sway/tree/output.c'
+      - 'include/sway/output.h'
+      - 'tests/autoscroll/test_v5e_d3b_output_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d3b-output-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml'
   workflow_dispatch:
 
 permissions:
@@ -79,6 +84,11 @@ jobs:
               "sway/input/post_apollo_autoscroll_runtime.c",
               "sway/input/cursor.c",
               "sway/meson.build",
+              "sway/tree/output.c",
+              "include/sway/output.h",
+              "tests/autoscroll/test_v5e_d3b_output_lifecycle.py",
+              "MODEL/autoscroll-v5e-d3b-output-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
               "sway/tree/container.c",
               "include/sway/tree/container.h",
               "tests/autoscroll/test_v5e_d3a_target_lifecycle.py",
@@ -114,6 +124,11 @@ jobs:
               assert "pa_autoscroll_lifetime_bind(" in container
               assert "pa_autoscroll_lifetime_revoke(" in container
               assert Path("tests/autoscroll/test_v5e_d3a_target_lifecycle.py").is_file()
+          if "sway/tree/output.c" in changed:
+              output = Path("sway/tree/output.c").read_text()
+              assert "pa_autoscroll_lifetime_bind(" in output
+              assert "pa_autoscroll_lifetime_revoke(" in output
+              assert Path("tests/autoscroll/test_v5e_d3b_output_lifecycle.py").is_file()
           runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime

@@ -8,6 +8,11 @@ on:
       - 'tests/autoscroll/test_v5e_d3a_target_lifecycle.py'
       - 'MODEL/autoscroll-v5e-d3a-target-lifecycle.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml'
+      - 'sway/tree/output.c'
+      - 'include/sway/output.h'
+      - 'tests/autoscroll/test_v5e_d3b_output_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d3b-output-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml'
   workflow_dispatch:
 
 permissions:
@@ -38,6 +43,11 @@ jobs:
           allowed={
               "include/sway/tree/container.h",
               "sway/tree/container.c",
+              "sway/tree/output.c",
+              "include/sway/output.h",
+              "tests/autoscroll/test_v5e_d3b_output_lifecycle.py",
+              "MODEL/autoscroll-v5e-d3b-output-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
               "tests/autoscroll/test_v5e_d3a_target_lifecycle.py",
               "MODEL/autoscroll-v5e-d3a-target-lifecycle.md",
               ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
@@ -51,13 +61,18 @@ jobs:
           forbidden={
               "sway/input/cursor.c","sway/input/seat.c",
               "include/sway/input/seat.h","sway/input/input-manager.c",
-              "sway/meson.build","sway/desktop/output.c","sway/tree/output.c",
+              "sway/meson.build","sway/desktop/output.c",
               "sway/stage_director_company_scene.c",
               "sway/stage_director_company_input.c",
               "sway/desktop/xdg_shell.c",
               "sway/input/post_apollo_autoscroll_runtime.c",
           }
           assert not (paths & forbidden), sorted(paths & forbidden)
+          if "sway/tree/output.c" in paths:
+              output = Path("sway/tree/output.c").read_text()
+              assert "pa_autoscroll_lifetime_bind(" in output
+              assert "pa_autoscroll_lifetime_revoke(" in output
+              assert Path("tests/autoscroll/test_v5e_d3b_output_lifecycle.py").is_file()
           runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime
