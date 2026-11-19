@@ -46,13 +46,15 @@ class SharedOriginSeam(unittest.TestCase):
         self.assertIn("libinput_device_config_scroll_get_method(handle)",
                       SOURCE)
         self.assertIn("LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN", SOURCE)
-        self.assertIn("#if WLR_HAS_LIBINPUT_BACKEND", SOURCE)
+        self.assertIn("wlr/backend/libinput.h", SOURCE)
         self.assertIn("pa_autoscroll_origin_classify(origin)", RUNTIME)
         self.assertIn("PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE",
                       RUNTIME)
         self.assertNotIn("const bool physical_verified = true;", RUNTIME)
         self.assertNotIn("pa_autoscroll_source_probe(", POLICY)
-        self.assertIn("'input/post_apollo_autoscroll_source.c'", MESON)
+        self.assertIn("if wlroots_features['libinput_backend']", MESON)
+        self.assertIn("sway_sources += 'input/post_apollo_autoscroll_source.c'", MESON)
+        self.assertIn("sway_sources += 'input/post_apollo_autoscroll_source_stub.c'", MESON)
         self.assertIn("'input/post_apollo_autoscroll_origin_policy.c'",
                       MESON)
 
