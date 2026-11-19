@@ -1,0 +1,112 @@
+name: SwayPX / V5E-C Kernel Topology + Lifetime Tokens (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_topology.h'
+      - 'sway/input/post_apollo_autoscroll_topology.c'
+      - 'tests/post_apollo_autoscroll_topology_test.c'
+      - 'include/sway/input/post_apollo_autoscroll_lifetime.h'
+      - 'sway/input/post_apollo_autoscroll_lifetime.c'
+      - 'tests/post_apollo_autoscroll_lifetime_test.c'
+      - 'sway/input/post_apollo_autoscroll_source.c'
+      - 'sway/meson.build'
+      - 'tests/autoscroll/test_v5e_shared_ingress.py'
+      - 'MODEL/autoscroll-v5e-c-topology-lifetime.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-origin-and-lifetimes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch and its parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Refuse shared cursor/seat and active runtime changes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5e-b-shared-cursor-probe-20261119"],
+              text=True).strip()
+          paths=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "include/sway/input/post_apollo_autoscroll_topology.h",
+              "sway/input/post_apollo_autoscroll_topology.c",
+              "tests/post_apollo_autoscroll_topology_test.c",
+              "include/sway/input/post_apollo_autoscroll_lifetime.h",
+              "sway/input/post_apollo_autoscroll_lifetime.c",
+              "tests/post_apollo_autoscroll_lifetime_test.c",
+              "sway/input/post_apollo_autoscroll_source.c",
+              "sway/meson.build",
+              "tests/autoscroll/test_v5e_shared_ingress.py",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              "MODEL/autoscroll-v5e-c-topology-lifetime.md",
+          }
+          assert paths <= allowed, sorted(paths - allowed)
+          for name in ("sway/input/cursor.c","sway/input/seat.c",
+                       "sway/input/seatop_default.c",
+                       "sway/stage_director_company_input.c",
+                       "sway/stage_director_company_scene.c",
+                       "sway/input/post_apollo_autoscroll_runtime.c",
+                       "include/sway/input/post_apollo_autoscroll_runtime.h"):
+              assert name not in paths, name
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          source=Path("sway/input/post_apollo_autoscroll_source.c").read_text()
+          assert "libinput_device_get_udev_device(handle)" in source
+          assert "pa_autoscroll_kernel_tree_candidate(" in source
+          assert "udev_device_unref(udev)" in source
+          print("PA_V5E_C_NO_SHARED_CURSOR_INPUT_ACTUATION_PASS")
+          PY
+      - name: Strict C11 topology and lifetime refusal tests
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_topology.c \
+            tests/post_apollo_autoscroll_topology_test.c \
+            -o /tmp/pa-v5ec-topology
+          timeout 5s /tmp/pa-v5ec-topology
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            tests/post_apollo_autoscroll_lifetime_test.c \
+            -o /tmp/pa-v5ec-lifetime
+          timeout 5s /tmp/pa-v5ec-lifetime
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_default_off_compositor_hook.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5e_shared_ingress.py' -v
+      - name: Install Nix on isolated GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build real production-hard-OFF compositor with topology filter
+        run: |
+          set -euo pipefail
+          sway="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$sway/bin/sway"
+          echo "PA_V5E_C_SOURCE_FILTER_COMPOSITOR_BUILD_PASS"
+      - name: State proof limits
+        if: always()
+        run: |
+          echo "The read-only udev sysfs filter rejects obvious virtual/unknown event topology." >> "$GITHUB_STEP_SUMMARY"
+          echo "A bus-backed event path is ONLY a candidate, never cryptographic genuine hardware proof." >> "$GITHUB_STEP_SUMMARY"
+          echo "Lifetime issuance tests are portable and detached from real create/destroy callbacks." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production autoscroll stays hard OFF; no user workstation changes." >> "$GITHUB_STEP_SUMMARY"
