@@ -94,7 +94,56 @@ def run_missing_compositor_case() -> None:
     print("PASS missing-compositor-preserves-preflight-evidence")
 
 
+def run_fast_exit_case(outcome: int) -> None:
+    """Even a compositor that exits before the first monitor tick must keep its log."""
+    with tempfile.TemporaryDirectory(prefix="social-resize-probe-fast-exit-") as temp:
+        root = Path(temp)
+        bindir = root / "stage/bin"
+        bindir.mkdir(parents=True)
+        probe = bindir / "swaypx-social-resize-probe"
+        probe.write_bytes(PROBE.read_bytes())
+        probe.chmod(0o755)
+        sway = bindir / "sway"
+        sway.write_text(
+            "#!/bin/sh\n"
+            'if [ "${1:-}" = --version ]; then echo "sway mock"; exit 0; fi\n'
+            '[ "${1:-}" = -d ] || exit 90\n'
+            'printf "fast compositor launched\\n"\n'
+            'printf "INFO: fast Quickshell startup\\n" > "$SOCIAL_RESIZE_PROBE_QUICKSHELL_LOG"\n'
+            'exit "$MOCK_RESULT"\n'
+        )
+        sway.chmod(0o755)
+        # Deliberately block the first periodic sample inside pgrep. The final
+        # snapshot, not a lucky monitor scheduling interval, must preserve it.
+        fakebin = root / "fakebin"
+        fakebin.mkdir()
+        pgrep = fakebin / "pgrep"
+        pgrep.write_text("#!/bin/sh\nsleep 3\nexit 1\n")
+        pgrep.chmod(0o755)
+        state = root / "state"
+        qs = root / "quickshell.log"
+        env = os.environ.copy()
+        env.update({
+            "XDG_STATE_HOME": str(state),
+            "SOCIAL_RESIZE_PROBE_QUICKSHELL_LOG": str(qs),
+            "MOCK_RESULT": str(outcome),
+            "PATH": str(fakebin) + os.pathsep + os.environ.get("PATH", ""),
+        })
+        process = subprocess.run([str(probe)], env=env, timeout=8, capture_output=True, text=True)
+        assert process.returncode == outcome, (outcome, process.returncode, process.stderr)
+        latest = state / "swaypx/social-resize-startup/LATEST"
+        run = Path(latest.read_text().strip())
+        assert "fast Quickshell startup" in (run / "quickshell.log").read_text()
+        health = (run / "health.log").read_text()
+        assert f"snapshot=final_exit exit={outcome}" in health, health
+        assert f"exit={outcome}" in (run / "exit.log").read_text()
+        assert oct(run.stat().st_mode & 0o777) == "0o700"
+    print(f"PASS fast-exit-final-log-snapshot-{outcome}")
+
+
 if __name__ == "__main__":
     run_case("successful-compositor-and-current-quickshell", old_log=False, outcome=0)
     run_case("nonzero-exit-and-stale-log-rejected", old_log=True, outcome=42)
     run_missing_compositor_case()
+    run_fast_exit_case(0)
+    run_fast_exit_case(47)
