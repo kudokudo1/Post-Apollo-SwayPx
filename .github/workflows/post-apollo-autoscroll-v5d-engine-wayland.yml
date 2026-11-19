@@ -1,0 +1,96 @@
+name: SwayPX / V5D Real Engine to Virtual Wayland (CI Only)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_engine_virtual_sender.c'
+      - 'tests/autoscroll/ci_engine_virtual_delivery.nix'
+      - 'tests/autoscroll/ci_headless_engine_delivery.sh'
+      - 'MODEL/autoscroll-v5d-engine-virtual-transport.md'
+      - '.github/workflows/post-apollo-autoscroll-v5d-engine-wayland.yml'
+  push:
+    branches:
+      - 'autoscroll/v5c-engine-virtual-delivery-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-engine-virtual-wayland:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact code under test
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Assert V5D only adds isolated tests and production remains OFF
+        run: |
+          set -euo pipefail
+          bash -n tests/autoscroll/ci_headless_engine_delivery.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5c-epoch-readiness-20261118"],
+              text=True).strip()
+          changed = set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed = {
+              "tests/autoscroll/ci_engine_virtual_sender.c",
+              "tests/autoscroll/ci_engine_virtual_delivery.nix",
+              "tests/autoscroll/ci_headless_engine_delivery.sh",
+              "MODEL/autoscroll-v5d-engine-virtual-transport.md",
+              ".github/workflows/post-apollo-autoscroll-v5d-engine-wayland.yml",
+          }
+          assert changed <= allowed, sorted(changed - allowed)
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          cursor=Path("sway/input/cursor.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "ci_engine_virtual_sender" not in runtime
+          assert "ci_engine_virtual_sender" not in cursor
+          assert "ci_engine_virtual_sender" not in meson
+          print("PA_V5D_NO_PRODUCTION_CHANGE_PASS")
+          PY
+      - name: Install Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Build default-OFF SwayPX, existing observer, and engine transport
+        run: |
+          set -euo pipefail
+          compositor="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n 1)"
+          observer="$(nix build --impure --expr 'import ./tests/autoscroll/ci_headless_virtual_denial.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          engine="$(nix build --impure --expr 'import ./tests/autoscroll/ci_engine_virtual_delivery.nix' --no-link --print-out-paths --show-trace | tail -n 1)"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          test -x "$observer/bin/pa-ci-autoscroll-observer"
+          test -x "$engine/bin/pa-ci-autoscroll-engine-virtual"
+          echo "PA_CI_SWAY=$compositor/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_CI_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_CI_OBSERVER=$observer/bin/pa-ci-autoscroll-observer" >> "$GITHUB_ENV"
+          echo "PA_CI_ENGINE_SENDER=$engine/bin/pa-ci-autoscroll-engine-virtual" >> "$GITHUB_ENV"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+      - name: Observe real engine-derived virtual Wayland axis and frame receipts
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_headless_engine_delivery.sh \
+            "$PA_CI_SWAY" "$PA_CI_SWAYMSG" "$PA_CI_OBSERVER" "$PA_CI_ENGINE_SENDER"
+      - name: State evidence limits
+        if: always()
+        run: |
+          echo "Actual V1/V2/V3 autoscroll math was compiled into a separate disposable Wayland sender." >> "$GITHUB_STEP_SUMMARY"
+          echo "The real SwayPX headless receiver must observe exactly two computed vertical axes and frames." >> "$GITHUB_STEP_SUMMARY"
+          echo "The engine's test inputs are SYNTHETIC; the Wayland sender uses zwlr_virtual_pointer_v1, not libinput." >> "$GITHUB_STEP_SUMMARY"
+          echo "No physical mouse authentication, compositor-native engine activation, user desktop change or live release is proven." >> "$GITHUB_STEP_SUMMARY"
