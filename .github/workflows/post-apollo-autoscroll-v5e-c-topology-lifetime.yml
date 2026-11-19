@@ -11,6 +11,11 @@ on:
       - 'tests/post_apollo_autoscroll_lifetime_test.c'
       - 'sway/input/post_apollo_autoscroll_source.c'
       - 'sway/meson.build'
+      - 'sway/input/input-manager.c'
+      - 'include/sway/input/input-manager.h'
+      - 'tests/autoscroll/test_v5e_d1_device_lifecycle.py'
+      - 'MODEL/autoscroll-v5e-d1-device-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml'
       - 'tests/autoscroll/test_v5e_shared_ingress.py'
       - 'MODEL/autoscroll-v5e-c-topology-lifetime.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml'
@@ -50,6 +55,11 @@ jobs:
               "tests/post_apollo_autoscroll_lifetime_test.c",
               "sway/input/post_apollo_autoscroll_source.c",
               "sway/meson.build",
+              "sway/input/input-manager.c",
+              "include/sway/input/input-manager.h",
+              "tests/autoscroll/test_v5e_d1_device_lifecycle.py",
+              "MODEL/autoscroll-v5e-d1-device-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
               "tests/autoscroll/test_v5e_shared_ingress.py",
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
