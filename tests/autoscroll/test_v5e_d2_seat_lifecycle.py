@@ -19,9 +19,9 @@ def between(s, before, after):
 
 class SeatLifetimeOwner(unittest.TestCase):
     def test_single_shared_issuer_comes_before_default_seat(self):
-        created = between(SERVER, "server->input = input_manager_create(server);",
+        created = between(SERVER, "server->dirty_nodes = create_list();",
                           "animation_manager_init(server);")
-        self.assertLess(created.index("input_manager_create("),
+        self.assertLess(created.index("server->input = input_manager_create(server);"),
                         created.index("input_manager_get_default_seat()"))
         manager = between(INPUT, "struct sway_input_manager *input_manager_create(",
                           "void input_manager_finish(")
