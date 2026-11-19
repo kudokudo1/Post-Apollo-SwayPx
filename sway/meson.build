@@ -72,7 +72,6 @@ sway_sources = files(
 	'input/post_apollo_autoscroll_adapter.c',
 	'input/post_apollo_autoscroll_axis_dispatch.c',
 	'input/post_apollo_autoscroll_origin_policy.c',
-	'input/post_apollo_autoscroll_source.c',
 	'input/post_apollo_autoscroll_runtime.c',
 	'input/keyboard.c',
 	'input/seat.c',
@@ -322,6 +321,11 @@ endif
 
 if wlroots_features['libinput_backend']
 	sway_sources += 'input/libinput.c'
+	# Real read-only libinput candidate probe, never a physical credential.
+	sway_sources += 'input/post_apollo_autoscroll_source.c'
+else
+	# A compositor without libinput must reject every source candidate.
+	sway_sources += 'input/post_apollo_autoscroll_source_stub.c'
 endif
 
 # Compile the actual Company scene setters only in a separate disposable
