@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include "sway/input/cursor.h"
 #include "sway/input/input-manager.h"
