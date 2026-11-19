@@ -167,7 +167,7 @@ bool pa_autoscroll_runtime_button(struct pa_autoscroll_runtime *runtime,
             !runtime->dispatch.adapter.enabled ||
             device == NULL || runtime->cursor == NULL ||
             /* A libinput backend CANDIDATE is necessary, not sufficient.
-             * Even forged kernel uinput can reach libinput. */
+             * A synthetic kernel pointer may also reach libinput. */
             pa_autoscroll_origin_classify(origin) !=
                 PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE) {
         return false;
