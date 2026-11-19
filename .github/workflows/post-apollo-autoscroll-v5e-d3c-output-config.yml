@@ -7,6 +7,7 @@ on:
       - 'sway/tree/output.c'
       - 'include/sway/output.h'
       - 'tests/autoscroll/test_v5e_d3c_output_config_epoch.py'
+      - 'tests/autoscroll/test_v5e_d3b_output_lifecycle.py'
       - 'MODEL/autoscroll-v5e-d3c-output-configuration.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml'
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
               "sway/config/output.c","sway/tree/output.c",
               "include/sway/output.h",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
+              "tests/autoscroll/test_v5e_d3b_output_lifecycle.py",
               "MODEL/autoscroll-v5e-d3c-output-configuration.md",
               ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
