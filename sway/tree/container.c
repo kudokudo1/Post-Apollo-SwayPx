@@ -142,6 +142,14 @@ struct sway_container *container_create(struct sway_view *view) {
 	c->animation_state.seat_is_moving_float = false;
 
 	wl_signal_init(&c->events.destroy);
+	/* Only mapped VIEW containers are candidate targets. Split/tiling
+	 * containers do not represent an application surface and stay zero.
+	 * This happens before publication through root->events.new_node. */
+	if (view != NULL && view->surface != NULL && server.input != NULL) {
+		(void)pa_autoscroll_lifetime_bind(
+			&server.input->autoscroll_lifetime_issuer,
+			&c->autoscroll_target_lifetime, PA_LIFETIME_TARGET);
+	}
 	wl_signal_emit_mutable(&root->events.new_node, &c->node);
 
 	container_update(c);
@@ -592,7 +600,20 @@ void container_destroy(struct sway_container *con) {
 	free(con);
 }
 
+uint64_t container_autoscroll_target_lifetime_epoch(
+		const struct sway_container *con) {
+	if (con == NULL || con->node.destroying || con->view == NULL ||
+			con->view->surface == NULL) {
+		return 0;
+	}
+	return pa_autoscroll_lifetime_epoch(
+		&con->autoscroll_target_lifetime, PA_LIFETIME_TARGET);
+}
+
 void container_begin_destroy(struct sway_container *con) {
+	/* Invalidate immediately on view unmap/destroy, before emitting the
+	 * node destroy signal or adjusting any focus/fullscreen state. */
+	pa_autoscroll_lifetime_revoke(&con->autoscroll_target_lifetime);
 	if (con->view) {
 		ipc_event_window(con, "close");
 	}
