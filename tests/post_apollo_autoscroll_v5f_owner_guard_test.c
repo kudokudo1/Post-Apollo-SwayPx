@@ -75,8 +75,12 @@ static void test_four_domain_revocation_and_address_reuse(void) {
     assert(pa_autoscroll_epoch_tick(&guard, &later, &original, 1016));
 
     for (unsigned i = 0; i < SLOT_COUNT; i++) {
-        /* The epoch guard must cancel at the FIRST missing owner slot. */
-        assert(pa_autoscroll_epoch_begin(&guard, &started, &original, 1000));
+        /* Each domain starts from its OWN current four-token baseline.
+         * Otherwise an earlier domain's already-changed epoch could make
+         * all later cancellation cases pass for the wrong reason. */
+        struct pa_autoscroll_object_epochs before =
+            into_guard(read_slots(slots));
+        assert(pa_autoscroll_epoch_begin(&guard, &started, &before, 1000));
         pa_autoscroll_lifetime_revoke(&slots[i]);
         struct pa_autoscroll_object_epochs missing = into_guard(read_slots(slots));
         assert(!pa_autoscroll_epoch_tick(&guard, &later, &missing, 1016));
@@ -87,7 +91,7 @@ static void test_four_domain_revocation_and_address_reuse(void) {
         struct pa_autoscroll_object_epochs replacement =
             into_guard(read_slots(slots));
         assert(!pa_autoscroll_epoch_tick(&guard, &later, &replacement, 1016));
-        assert(pa_autoscroll_epoch_begin(&guard, &started, &original, 1000));
+        assert(pa_autoscroll_epoch_begin(&guard, &started, &before, 1000));
         assert(!pa_autoscroll_epoch_tick(&guard, &later, &replacement, 1016));
         assert(!guard.active);
     }
