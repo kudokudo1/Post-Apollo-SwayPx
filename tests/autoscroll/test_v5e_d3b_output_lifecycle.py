@@ -59,7 +59,7 @@ class OutputLifetimeAvailability(unittest.TestCase):
                         native_destroy.index("output_begin_destroy(output);"))
 
     def test_read_only_accessor_requires_live_enabled_nonfallback(self):
-        access = segment(OUT, "uint64_t output_autoscroll_lifetime_epoch(", "void output_enable(")
+        access = segment(OUT, "uint64_t output_autoscroll_lifetime_epoch(", "void output_autoscroll_config_committed(")
         for condition in ("output == NULL", "!output->enabled",
                           "output->wlr_output == NULL", "root == NULL",
                           "root->fallback_output == output", "output->node.destroying"):
