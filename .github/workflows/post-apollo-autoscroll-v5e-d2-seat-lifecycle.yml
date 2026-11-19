@@ -22,6 +22,14 @@ on:
       - 'tests/autoscroll/test_v5e_d3c_output_config_epoch.py'
       - 'MODEL/autoscroll-v5e-d3c-output-configuration.md'
       - '.github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml'
+      - 'include/sway/input/post_apollo_autoscroll_epoch.h'
+      - 'sway/input/post_apollo_autoscroll_epoch.c'
+      - 'include/sway/input/post_apollo_autoscroll_snapshot.h'
+      - 'sway/input/post_apollo_autoscroll_snapshot.c'
+      - 'tests/post_apollo_autoscroll_f1_guard_join_test.c'
+      - 'tests/autoscroll/test_v5e_f1_real_snapshot.py'
+      - 'MODEL/autoscroll-v5e-f1-real-snapshot.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml'
   workflow_dispatch:
 
 permissions:
@@ -58,6 +66,15 @@ jobs:
               ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
               ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
               "sway/tree/container.c",
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "include/sway/input/post_apollo_autoscroll_snapshot.h",
+              "sway/input/post_apollo_autoscroll_snapshot.c",
+              "tests/post_apollo_autoscroll_f1_guard_join_test.c",
+              "tests/autoscroll/test_v5e_f1_real_snapshot.py",
+              "MODEL/autoscroll-v5e-f1-real-snapshot.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-f1-owner-snapshot.yml",
+              "sway/meson.build",
               "sway/config/output.c",
               "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
               "MODEL/autoscroll-v5e-d3c-output-configuration.md",
@@ -75,7 +92,7 @@ jobs:
           assert changed <= allowed, sorted(changed-allowed)
           assert {"sway/input/seat.c", "include/sway/input/seat.h"} <= changed
           for name in ("sway/input/cursor.c", "sway/input/input-manager.c",
-                       "sway/meson.build", "sway/desktop/xdg_shell.c",
+                       "sway/desktop/xdg_shell.c",
                        "sway/desktop/output.c",
                        "sway/input/seatop_down.c",
                        "sway/stage_director_company_input.c",
@@ -96,6 +113,17 @@ jobs:
               config = Path("sway/config/output.c").read_text()
               assert "output_autoscroll_config_committed(cfg->output)" in config
               assert Path("tests/autoscroll/test_v5e_d3c_output_config_epoch.py").is_file()
+          if "sway/input/post_apollo_autoscroll_snapshot.c" in changed:
+              snapshot = Path("sway/input/post_apollo_autoscroll_snapshot.c").read_text()
+              assert "input_manager_autoscroll_pointer_lifetime_epoch(" in snapshot
+              assert "seat_autoscroll_lifetime_epoch(" in snapshot
+              assert "container_autoscroll_target_lifetime_epoch(" in snapshot
+              assert "output_autoscroll_lifetime_epoch(" in snapshot
+              assert "pa_scroll_dispatch_enable(" not in snapshot
+              meson = Path("sway/meson.build").read_text()
+              assert "'input/post_apollo_autoscroll_snapshot.c'" in meson
+              assert "'input/post_apollo_autoscroll_epoch.c'" in meson
+              assert "'input/post_apollo_autoscroll_witness.c'" in meson
           runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime
