@@ -1,0 +1,58 @@
+name: SwayPX / V5E-A Backend Candidate Policy (Source Only)
+
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_origin_policy.h'
+      - 'sway/input/post_apollo_autoscroll_origin_policy.c'
+      - 'tests/post_apollo_autoscroll_origin_policy_test.c'
+      - 'MODEL/autoscroll-v5e-owner-split.md'
+      - '.github/workflows/post-apollo-autoscroll-v5e-a-origin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Compile strict origin policy and test refusal
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_origin_policy.c \
+            tests/post_apollo_autoscroll_origin_policy_test.c \
+            -o /tmp/pa-v5e-a-origin-policy
+          timeout 5s /tmp/pa-v5e-a-origin-policy
+      - name: Refuse production activation and shared-input edits
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base = subprocess.check_output(
+              ["git","merge-base","HEAD","origin/master"],text=True).strip()
+          paths = set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],
+              text=True).splitlines())
+          allowed = {
+              "include/sway/input/post_apollo_autoscroll_origin_policy.h",
+              "sway/input/post_apollo_autoscroll_origin_policy.c",
+              "tests/post_apollo_autoscroll_origin_policy_test.c",
+              "MODEL/autoscroll-v5e-owner-split.md",
+              ".github/workflows/post-apollo-autoscroll-v5e-a-origin.yml",
+          }
+          assert paths <= allowed, sorted(paths - allowed)
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          for name in ("sway/input/cursor.c", "sway/input/seat.c",
+                       "sway/meson.build"):
+              assert name not in paths, name
+          print("PA_AUTOSCROLL_V5E_A_SEAM_UNTOUCHED_PASS")
+          PY
