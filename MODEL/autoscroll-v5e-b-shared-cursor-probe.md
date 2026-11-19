@@ -16,13 +16,13 @@ A **single limited shared-input block** in sway/input/cursor.c now:
 - Calls the existing private autoscroll function with an explicit, non-authorizing origin facts snapshot.
 - Falls through unchanged to normal cursor/button dispatch if the runtime returns false.
 
-Other new files supply a read-only wlroots/libinput candidate probe. The policy requires the pointer backend to be libinput-backed, a valid handle and readable method, and rejects button-scroll methods (the native Sway Scroll Lock collision).
+Other new files supply a read-only wlroots/libinput candidate probe. Meson compiles the real probe **only** when its wlroots libinput backend feature is enabled; otherwise a separate stub returns all-denied facts. This avoids assuming a generated configuration macro exists in every build. The policy requires the pointer backend to be libinput-backed, a valid handle and readable method, and rejects button-scroll methods (the native Sway Scroll Lock collision).
 
 **DO NOT CLAIM PHYSICAL AUTHENTICATION:** A kernel uinput device may appear libinput-backed. The presence of the backend and a readable libinput method is not a credential. Actual hardware provenance, device lifetime epochs, seat/target/output generation and operator-consent policy need separate trusted compositor proofs. The runtime still has physical_verified=false, native_scroll_lock_active=true, layout_generation=0, and production compile gate 0.
 
 ### Exact B-owned changes
 - **Shared collision:** sway/input/cursor.c, sway/meson.build.
-- **Autoscroll-only:** include/sway/input/post_apollo_autoscroll_source.h; sway/input/post_apollo_autoscroll_source.c; include/sway/input/post_apollo_autoscroll_runtime.h; sway/input/post_apollo_autoscroll_runtime.c; V5E-B tests/workflow/docs.
+- **Autoscroll-only:** include/sway/input/post_apollo_autoscroll_source.h; sway/input/post_apollo_autoscroll_source.c; sway/input/post_apollo_autoscroll_source_stub.c; include/sway/input/post_apollo_autoscroll_runtime.h; sway/input/post_apollo_autoscroll_runtime.c; V5E-B tests/workflow/docs.
 - **Unchanged:** sway/input/seat.c; seatop_default.c; Company scene/input/popup geometry policies; other workers' PR branches; operator Fedora runtime.
 
 ## HOW TO USE
