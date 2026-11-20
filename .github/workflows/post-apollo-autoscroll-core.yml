@@ -92,7 +92,22 @@ jobs:
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "pa_autoscroll_witness_" not in runtime
           assert "pa_autoscroll_witness_" not in cursor
-          assert "post_apollo_autoscroll_witness.c" not in meson
+          # F-B links the originally portable V5C policy, but native positive
+          # origin, layout and Scroll Lock are still explicitly denied.
+          import os
+          branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME")
+          if branch == "autoscroll/v5f-b-guard-bridge-20261119":
+              for source in ("post_apollo_autoscroll_epoch.c",
+                             "post_apollo_autoscroll_witness.c",
+                             "post_apollo_autoscroll_guard_bridge.c"):
+                  assert ("'input/" + source + "'") in meson
+              bridge = Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+              assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+              assert ".layout_generation_verified = false" in bridge
+              assert ".native_scroll_lock_active = true" in bridge
+              assert "native_unverified_witness(&owner, 0)" in bridge
+          else:
+              assert "post_apollo_autoscroll_witness.c" not in meson
           for banned in ("wlr_seat_pointer_notify", "wl_event_loop_add_timer",
                          "uinput", "swaymsg", "libinput_device_"):
               assert banned not in witness, banned
@@ -108,10 +123,9 @@ jobs:
           import subprocess
           branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME")
           if branch == "autoscroll/v5f-a-owner-snapshot-20261119":
-              # Merged D1-D3 source lives on a feature chain, not on master.
-              # Keep a strict F-A manifest instead of falsely calling its
-              # already-reviewed seat.c parent history a new core edit.
               base_ref = "origin/autoscroll/v5e-d3c-output-config-epoch-20261119"
+          elif branch == "autoscroll/v5f-b-guard-bridge-20261119":
+              base_ref = "origin/autoscroll/v5f-a-owner-snapshot-20261119"
           else:
               base_ref = "origin/master"
           base = subprocess.check_output(
@@ -120,7 +134,8 @@ jobs:
           changed = subprocess.check_output(
               ["git", "diff", "--name-only", base, "HEAD"], text=True
           ).splitlines()
-          if branch == "autoscroll/v5f-a-owner-snapshot-20261119":
+          if branch in ("autoscroll/v5f-a-owner-snapshot-20261119",
+                        "autoscroll/v5f-b-guard-bridge-20261119"):
               allowed_fa = {
                   "sway/input/post_apollo_autoscroll_owner_snapshot.c",
                   "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
@@ -138,6 +153,17 @@ jobs:
                   ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
                   ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
               }
+              if branch == "autoscroll/v5f-b-guard-bridge-20261119":
+                  allowed_fa.update({
+                      "sway/input/post_apollo_autoscroll_guard_bridge.c",
+                      "include/sway/input/post_apollo_autoscroll_guard_bridge.h",
+                      "sway/input/post_apollo_autoscroll_epoch.c",
+                      "include/sway/input/post_apollo_autoscroll_epoch.h",
+                      "sway/input/post_apollo_autoscroll_runtime.c",
+                      "tests/autoscroll/test_v5f_b_guard_bridge.py",
+                      "MODEL/autoscroll-v5f-b-native-guard.md",
+                      ".github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml",
+                  })
               assert set(changed) <= allowed_fa, sorted(set(changed)-allowed_fa)
               source = Path("sway/input/post_apollo_autoscroll_owner_snapshot.c").read_text()
               assert "find_live_native_pointer(event_device)" in source
