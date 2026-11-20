@@ -11,6 +11,14 @@ on:
       - 'MODEL/autoscroll-v5f-a-owner-snapshot.md'
       - '.github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml'
       - '.github/workflows/post-apollo-autoscroll-core.yml'
+      - 'include/sway/input/post_apollo_autoscroll_epoch.h'
+      - 'sway/input/post_apollo_autoscroll_epoch.c'
+      - 'include/sway/input/post_apollo_autoscroll_guard_bridge.h'
+      - 'sway/input/post_apollo_autoscroll_guard_bridge.c'
+      - 'sway/input/post_apollo_autoscroll_runtime.c'
+      - 'tests/autoscroll/test_v5f_b_guard_bridge.py'
+      - 'MODEL/autoscroll-v5f-b-native-guard.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml'
   workflow_dispatch:
 
 permissions:
@@ -39,6 +47,15 @@ jobs:
           changed=set(subprocess.check_output(
               ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
           allowed={
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "include/sway/input/post_apollo_autoscroll_guard_bridge.h",
+              "sway/input/post_apollo_autoscroll_guard_bridge.c",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+              "tests/autoscroll/test_v5f_b_guard_bridge.py",
+              "MODEL/autoscroll-v5f-b-native-guard.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml",
+
               ".github/workflows/post-apollo-autoscroll-core.yml",
               "sway/input/post_apollo_autoscroll_owner_snapshot.c",
               "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
@@ -67,11 +84,18 @@ jobs:
               "sway/tree/container.c","sway/tree/output.c",
               "sway/config/output.c","sway/desktop/xdg_shell.c",
               "sway/desktop/transaction.c","sway/input/seatop_down.c",
-              "sway/input/post_apollo_autoscroll_runtime.c",
               "sway/stage_director_company_input.c",
               "sway/stage_director_company_scene.c",
           }
           assert not (changed & forbidden), sorted(changed & forbidden)
+          if "sway/input/post_apollo_autoscroll_runtime.c" in changed:
+              bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+              assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+              assert ".layout_generation_verified = false" in bridge
+              assert ".native_scroll_lock_active = true" in bridge
+              assert "native_unverified_witness(&owner, 0)" in bridge
+              assert "pa_autoscroll_guard_bridge_tick(" in Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+              assert Path("tests/autoscroll/test_v5f_b_guard_bridge.py").is_file()
           runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
           assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
           assert "const bool physical_verified = false;" in runtime
