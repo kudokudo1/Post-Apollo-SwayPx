@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 45
     env:
       PA_AUTOSCROLL_CI_NATIVE_TRACE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Checkout exact head including parent
         uses: actions/checkout@v4
