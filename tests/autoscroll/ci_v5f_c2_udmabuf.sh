@@ -28,14 +28,13 @@ if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
       "${RUNNER_TEMP:-}" != /home/runner/work/_temp ||
       "$uid" == 0 || "${PA_FC2_SWAY:-}" != /nix/store/* ||
       "${PA_FC2_CLIENT:-}" != "$RUNNER_TEMP"/* ||
-      "${PA_FC2_MESA:-}" != /nix/store/* ||
       "${PA_FC2_MESA:-}" != /nix/store/* ]]; then
-  echo "BLOCKED_FC1_UDMABUF_NOT_DISPOSABLE_CI" >&2
+  echo "BLOCKED_FC2_UDMABUF_NOT_DISPOSABLE_CI" >&2
   exit 2
 fi
 if [[ ! -c "$device" || ! -x "$PA_FC2_SWAY" ||
       "$(stat -Lc '%u' "$device")" != 0 ]]; then
-  echo "BLOCKED_FC1_UNSAFE_UDMABUF_OR_BINARY" >&2
+  echo "BLOCKED_FC2_UNSAFE_UDMABUF_OR_BINARY" >&2
   exit 2
 fi
 can_open() {
@@ -44,11 +43,11 @@ can_open() {
 }
 if ! can_open; then
   if ! command -v getfacl >/dev/null || ! command -v setfacl >/dev/null; then
-    echo "BLOCKED_FC1_ACL_TOOLS_NOT_PRESENT" >&2
+    echo "BLOCKED_FC2_ACL_TOOLS_NOT_PRESENT" >&2
     exit 2
   fi
   if getfacl -cp "$device" | grep -Eq "^user:$uid:"; then
-    echo "BLOCKED_FC1_PREEXISTING_RUNNER_ACL" >&2
+    echo "BLOCKED_FC2_PREEXISTING_RUNNER_ACL" >&2
     exit 2
   fi
   acl_snapshot="$(mktemp "$RUNNER_TEMP/pa-fc2-acl.XXXXXXXX")"
@@ -56,7 +55,7 @@ if ! can_open; then
   acl_changed=1
   sudo -n setfacl -m "u:$uid:rw" "$device"
   if ! can_open; then
-    echo "BLOCKED_FC1_UDMABUF_STILL_DENIED" >&2
+    echo "BLOCKED_FC2_UDMABUF_STILL_DENIED" >&2
     exit 2
   fi
   echo "PA_FC2_UDMABUF temporary_CI_only_access=GRANTED"
