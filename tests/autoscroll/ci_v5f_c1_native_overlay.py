@@ -22,8 +22,8 @@ def replace_one(src: str, old: str, new: str, label: str) -> str:
 
 def target_patch(src: str) -> str:
     src = replace_one(src,
-        '#include "sway/tree/container.h"\n',
-        '#include "sway/tree/container.h"\n#include <inttypes.h>\n',
+        '#include "sway/output.h"\n',
+        '#include "sway/output.h"\n#include <inttypes.h>\n',
         "target_include")
     src = replace_one(src,
         "\t}\n\twl_signal_emit_mutable(&root->events.new_node, &c->node);",
