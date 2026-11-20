@@ -1,0 +1,136 @@
+name: SwayPX / V5F-G2 Native Virtual Middle-Click Denial (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g2_virtual_middle_client.c'
+      - 'tests/autoscroll/ci_v5f_g2_native_button.py'
+      - 'tests/autoscroll/ci_v5f_g2_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_g2_virtual_middle.py'
+      - 'MODEL/autoscroll-v5f-g2-native-middle-denial.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g2-native-button.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-virtual-middle-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_G2_NATIVE_BUTTON: "2"
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "2"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact child with no persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Enforce six-file scope, hard OFF and source contracts
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base = subprocess.check_output(
+              ["git", "merge-base", "HEAD",
+               "origin/autoscroll/v5f-g1-provenance-boundary-20261120"],
+              text=True).strip()
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          allowed = {
+              "tests/autoscroll/ci_v5f_g2_virtual_middle_client.c",
+              "tests/autoscroll/ci_v5f_g2_native_button.py",
+              "tests/autoscroll/ci_v5f_g2_udmabuf.sh",
+              "tests/autoscroll/test_v5f_g2_virtual_middle.py",
+              "MODEL/autoscroll-v5f-g2-native-middle-denial.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g2-native-button.yml",
+          }
+          assert changed == allowed, (sorted(changed - allowed), sorted(allowed - changed))
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge = Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          cursor = Path("sway/input/cursor.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert "PA_G2_NATIVE" not in cursor
+          print("PA_G2_EXACT_SIX_FILES_NO_PRODUCTION_OR_COMPANY_CHANGE_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g2_virtual_middle.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_c2_native_lifecycle.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g1_provenance_boundary.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Install pinned Nix in disposable GitHub environment
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Instrument copied C2 owner and actual cursor callback only
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g2_native_button.py overlay
+          test -z "$(git status --porcelain)"
+      - name: Build actual headless SwayPX and pinned Wayland virtual-button client
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc2-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          proto="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wayland-protocols' --no-link --print-out-paths | tail -n1)"
+          wlr_src="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wlroots_0_20.src' --no-link --print-out-paths | tail -n1)"
+          transient="$proto/share/wayland-protocols/staging/ext-transient-seat/ext-transient-seat-v1.xml"
+          pointer="$wlr_src/protocol/wlr-virtual-pointer-unstable-v1.xml"
+          test -x "$sway/bin/sway"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -r "$transient"
+          test -r "$pointer"
+          build="$RUNNER_TEMP/pa-g2-client-build"
+          mkdir -m 700 "$build"
+          (
+            cd "$src"
+            nix develop --command bash -euo pipefail -c '
+              build="$1"; transient="$2"; pointer="$3"; client="$4"
+              wayland-scanner client-header "$transient" \
+                "$build/ext-transient-seat-v1-client-protocol.h"
+              wayland-scanner private-code "$transient" \
+                "$build/ext-transient-seat-v1-protocol.c"
+              wayland-scanner client-header "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-client-protocol.h"
+              wayland-scanner private-code "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c"
+              cc -std=c11 -Wall -Wextra -Werror -pedantic \
+                -I"$build" "$client" \
+                "$build/ext-transient-seat-v1-protocol.c" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c" \
+                $(pkg-config --cflags --libs wayland-client) \
+                -o "$build/pa-g2-virtual-middle"
+            ' _ "$build" "$transient" "$pointer" \
+              "$GITHUB_WORKSPACE/tests/autoscroll/ci_v5f_g2_virtual_middle_client.c"
+          )
+          test -x "$build/pa-g2-virtual-middle"
+          echo "PA_G2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_G2_CLIENT=$build/pa-g2-virtual-middle" >> "$GITHUB_ENV"
+          echo "PA_G2_MESA=$mesa" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G2_PINNED_REAL_COMPOSITOR_AND_WAYLAND_CLIENT_BUILD_PASS"
+      - name: Send real virtual middle press and release to native compositor
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_g2_udmabuf.sh
+          test -z "$(git status --porcelain)"
+      - name: Preserve proof boundaries
+        if: always()
+        run: |
+          echo "G2 verifies compositor ingress and native seatop dispatch for actual virtual-pointer press and release, while autoscroll runtime is absent." >> "$GITHUB_STEP_SUMMARY"
+          echo "This does not prove delivery to a focused application, real physical mouse provenance, or positive autoscroll authorization." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production stays HARD OFF; no host changes, no Company Map #126 ownership transfer, no manual activation or merge." >> "$GITHUB_STEP_SUMMARY"
