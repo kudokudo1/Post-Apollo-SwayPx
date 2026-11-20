@@ -1,0 +1,85 @@
+name: SwayPX / V5F-G1 Physical Provenance Boundary Audit (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g1_provenance_boundary.c'
+      - 'tests/autoscroll/test_v5f_g1_provenance_boundary.py'
+      - 'MODEL/autoscroll-v5f-g1-provenance-boundary.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g1-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-source-adversarial-provenance-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Read-only checkout of exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Enforce four-file test/docs only against exact V5F-C2 parent
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-c2-native-device-seat-evidence-20261120"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_g1_provenance_boundary.c",
+              "tests/autoscroll/test_v5f_g1_provenance_boundary.py",
+              "MODEL/autoscroll-v5f-g1-provenance-boundary.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g1-provenance.yml",
+          }
+          assert changed <= allowed, sorted(changed - allowed)
+          assert {"tests/autoscroll/ci_v5f_g1_provenance_boundary.c",
+                  "tests/autoscroll/test_v5f_g1_provenance_boundary.py"} <= changed
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "native_unverified_witness(&owner, 0)" in bridge
+          print("PA_G1_FOUR_FILE_NO_PRODUCTION_OR_COMPANY_CHANGE_PASS")
+          PY
+      - name: Run source trust boundary tests, no input device access
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g1_provenance_boundary.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_b_guard_bridge.py' -v
+      - name: Compile actual origin/topology/witness/epoch C source and run attack matrix
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/pa-g1-portable"
+          mkdir -m 700 "$build"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            tests/autoscroll/ci_v5f_g1_provenance_boundary.c \
+            sway/input/post_apollo_autoscroll_origin_policy.c \
+            sway/input/post_apollo_autoscroll_topology.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            -o "$build/pa-g1-provenance"
+          "$build/pa-g1-provenance"
+          test -z "$(git status --porcelain)"
+      - name: Record explicit native authorization limits
+        if: always()
+        run: |
+          echo "Portable C tests demonstrate candidate-versus-credential boundary, negative gates, replay/cross-owner refusal and detached caller-forgery risk." >> "$GITHUB_STEP_SUMMARY"
+          echo "This is NOT a real hardware input witness, not a production code change, and not a positive provenance source." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production native bridge remains UNKNOWN/HARD OFF; Company Map #126 retains source ownership." >> "$GITHUB_STEP_SUMMARY"
