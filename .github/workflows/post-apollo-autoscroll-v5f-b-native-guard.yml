@@ -1,0 +1,160 @@
+name: SwayPX / V5F-B Native Four-Owner Guard (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'sway/input/post_apollo_autoscroll_guard_bridge.c'
+      - 'include/sway/input/post_apollo_autoscroll_guard_bridge.h'
+      - 'sway/input/post_apollo_autoscroll_epoch.c'
+      - 'include/sway/input/post_apollo_autoscroll_epoch.h'
+      - 'sway/input/post_apollo_autoscroll_runtime.c'
+      - 'sway/meson.build'
+      - 'tests/autoscroll/test_v5f_b_guard_bridge.py'
+      - 'MODEL/autoscroll-v5f-b-native-guard.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-owner-epoch-guard-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact branch and parent history
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require exact F-B native guard split and production hard-OFF
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-a-owner-snapshot-20261119"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "sway/input/post_apollo_autoscroll_guard_bridge.c",
+              "include/sway/input/post_apollo_autoscroll_guard_bridge.h",
+              "sway/input/post_apollo_autoscroll_epoch.c",
+              "include/sway/input/post_apollo_autoscroll_epoch.h",
+              "sway/input/post_apollo_autoscroll_runtime.c",
+              "sway/meson.build",
+              "tests/autoscroll/test_v5f_b_guard_bridge.py",
+              "MODEL/autoscroll-v5f-b-native-guard.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml",
+              ".github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml",
+              ".github/workflows/post-apollo-autoscroll-core.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+              ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert {"sway/input/post_apollo_autoscroll_guard_bridge.c",
+                  "sway/input/post_apollo_autoscroll_runtime.c",
+                  "sway/input/post_apollo_autoscroll_epoch.c",
+                  "sway/meson.build"} <= changed
+          forbidden={
+              "sway/input/cursor.c", "sway/input/seat.c",
+              "include/sway/input/seat.h",
+              "sway/input/input-manager.c", "sway/tree/container.c",
+              "sway/tree/output.c", "sway/config/output.c",
+              "sway/desktop/xdg_shell.c", "sway/desktop/transaction.c",
+              "sway/stage_director_company_scene.c",
+              "sway/stage_director_company_input.c",
+          }
+          assert not (changed & forbidden), sorted(changed & forbidden)
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert ".native_scroll_lock_active = true" in bridge
+          assert "native_unverified_witness(&owner, 0)" in bridge
+          assert "pa_autoscroll_guard_bridge_tick(" in runtime
+          assert "pa_autoscroll_guard_bridge_begin(" in runtime
+          print("PA_V5F_B_NATIVE_GUARD_CONSUMER_HARD_OFF_PASS")
+          PY
+      - name: Pin the exact V5C guard logic from master
+        run: |
+          set -euo pipefail
+          pin=fb064cf3c82aa7b9e8d2375bb631773d5eb5a12f
+          if ! git cat-file -e "$pin"; then
+            git fetch --no-tags origin "$pin"
+          fi
+          for file in sway/input/post_apollo_autoscroll_epoch.c \
+                      include/sway/input/post_apollo_autoscroll_epoch.h \
+                      sway/input/post_apollo_autoscroll_witness.c \
+                      include/sway/input/post_apollo_autoscroll_witness.h; do
+            expect="$(git rev-parse "$pin:$file")"
+            actual="$(git hash-object "$file")"
+            test "$expect" = "$actual" || {
+              echo "::error::V5C master policy bytes drifted: $file"
+              exit 1
+            }
+          done
+          echo "PA_V5F_B_PINNED_V5C_GUARD_POLICY_IDENTICAL_PASS"
+      - name: Real native source ordering and inherited owner tests
+        run: |
+          set -euo pipefail
+          for test in test_v5f_b_guard_bridge.py \
+                      test_v5f_owner_snapshot.py \
+                      test_v5e_d3c_output_config_epoch.py \
+                      test_v5e_d3b_output_lifecycle.py \
+                      test_v5e_d3a_target_lifecycle.py \
+                      test_v5e_d2_seat_lifecycle.py \
+                      test_v5e_d1_device_lifecycle.py \
+                      test_default_off_compositor_hook.py \
+                      test_v5e_shared_ingress.py; do
+            python3 -m unittest discover -s tests/autoscroll -p "$test" -v
+          done
+      - name: Portable actual-linked V5C policy and four-domain revocation
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            tests/post_apollo_autoscroll_v5f_owner_guard_test.c \
+            -o /tmp/v5fb-owner-guard
+          timeout 5s /tmp/v5fb-owner-guard
+          pin=fb064cf3c82aa7b9e8d2375bb631773d5eb5a12f
+          git show "$pin:tests/post_apollo_autoscroll_epoch_test.c" > /tmp/v5fb-pinned-v5c-legacy-test.c
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            /tmp/v5fb-pinned-v5c-legacy-test.c \
+            -o /tmp/v5fb-old-guard
+          timeout 5s /tmp/v5fb-old-guard
+      - name: Install Nix on disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Link production-HARD-OFF SwayPX with real guard gate
+        run: |
+          set -euo pipefail
+          out="$(nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          test -x "$out/bin/sway"
+          echo "PA_V5F_B_REAL_SWAYPX_V5C_GUARD_LINK_PASS"
+      - name: Preserve proof boundaries
+        if: always()
+        run: |
+          echo "V5C policy is linked and checked before native axis intents, but bridge offers only an intentionally inadmissible witness." >> "$GITHUB_STEP_SUMMARY"
+          echo "No dynamic positive physical input or native headless window/device/layout lifecycle receipt. No actual scrolling authorized." >> "$GITHUB_STEP_SUMMARY"
+          echo "No desktop writes, Company owner transfer, merge or production activation." >> "$GITHUB_STEP_SUMMARY"
