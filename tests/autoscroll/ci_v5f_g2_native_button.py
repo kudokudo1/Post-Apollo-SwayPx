@@ -23,7 +23,7 @@ CURSOR = "sway/input/cursor.c"
 COPY_NAME = "pa-fc2-native-src"
 
 def replace_one(source: str, anchor: str, replacement: str, label: str) -> str:
-    if source.count(anchor) != 1 or "PA_G2_NATIVE" in source:
+    if source.count(anchor) != 1 or replacement in source:
         raise RuntimeError("PA_G2_OVERLAY_ANCHOR_DRIFT " + label)
     return source.replace(anchor, replacement, 1)
 
