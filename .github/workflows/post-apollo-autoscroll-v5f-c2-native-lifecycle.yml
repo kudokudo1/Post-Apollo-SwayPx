@@ -1,0 +1,140 @@
+name: SwayPX / V5F-C2 Real Transient Seat + Virtual Pointer Lifetimes (OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_c2_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_c2_protocol_client.c'
+      - 'tests/autoscroll/ci_v5f_c2_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_c2_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_c2_native_lifecycle.py'
+      - 'MODEL/autoscroll-v5f-c2-native-device-seat.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-c2-native-lifecycle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-disposable-device-seat-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "2"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact parent and native source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Strict seven-file manifest, native negative origin and source safety
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-c1-native-target-output-evidence-20261119"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_c2_native_overlay.py",
+              "tests/autoscroll/ci_v5f_c2_protocol_client.c",
+              "tests/autoscroll/ci_v5f_c2_native_trace.py",
+              "tests/autoscroll/ci_v5f_c2_udmabuf.sh",
+              "tests/autoscroll/test_v5f_c2_native_lifecycle.py",
+              "MODEL/autoscroll-v5f-c2-native-device-seat.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-c2-native-lifecycle.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert {"tests/autoscroll/ci_v5f_c2_native_overlay.py",
+                  "tests/autoscroll/ci_v5f_c2_protocol_client.c",
+                  "tests/autoscroll/ci_v5f_c2_native_trace.py"} <= changed
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          inputc=Path("sway/input/input-manager.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "input_device == NULL || input_device->is_virtual" in inputc
+          assert all("PA_FC2_NATIVE" not in Path(p).read_text()
+                     for p in ("sway/input/input-manager.c",
+                               "sway/input/seat.c",
+                               "sway/input/post_apollo_autoscroll_runtime.c"))
+          print("PA_FC2_STRICT_CI_ONLY_OWNER_NEGATIVE_HARD_OFF_PASS")
+          PY
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_c2_native_lifecycle.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_b_guard_bridge.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Install pinned Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Instrument only disposable native device and seat owner callbacks
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_c2_native_overlay.py
+          test -z "$(git status --porcelain)"
+      - name: Compile actual test-only SwayPX and pinned Wayland protocol client
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc2-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          proto="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wayland-protocols' --no-link --print-out-paths | tail -n1)"
+          wlr_src="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wlroots_0_20.src' --no-link --print-out-paths | tail -n1)"
+          transient="$proto/share/wayland-protocols/staging/ext-transient-seat/ext-transient-seat-v1.xml"
+          pointer="$wlr_src/protocol/wlr-virtual-pointer-unstable-v1.xml"
+          test -x "$sway/bin/sway"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -r "$transient"
+          test -r "$pointer"
+          build="$RUNNER_TEMP/pa-fc2-client-build"
+          mkdir -m 700 "$build"
+          (
+            cd "$src"
+            nix develop --command bash -euo pipefail -c '
+              build="$1"; transient="$2"; pointer="$3"; client="$4"
+              wayland-scanner client-header "$transient" \
+                "$build/ext-transient-seat-v1-client-protocol.h"
+              wayland-scanner private-code "$transient" \
+                "$build/ext-transient-seat-v1-protocol.c"
+              wayland-scanner client-header "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-client-protocol.h"
+              wayland-scanner private-code "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c"
+              cc -std=c11 -Wall -Wextra -Werror -pedantic \
+                -I"$build" "$client" \
+                "$build/ext-transient-seat-v1-protocol.c" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c" \
+                $(pkg-config --cflags --libs wayland-client) \
+                -o "$build/pa-fc2-protocol-client"
+            ' _ "$build" "$transient" "$pointer" \
+              "$GITHUB_WORKSPACE/tests/autoscroll/ci_v5f_c2_protocol_client.c"
+          )
+          test -x "$build/pa-fc2-protocol-client"
+          echo "PA_FC2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_FC2_CLIENT=$build/pa-fc2-protocol-client" >> "$GITHUB_ENV"
+          echo "PA_FC2_MESA=$mesa" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_FC2_REAL_NATIVE_COMPOSITOR_AND_PROTOCOL_CLIENT_BUILD_PASS"
+      - name: Observe two real transient-seat and virtual-pointer create/revoke cycles
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_c2_udmabuf.sh
+          test -z "$(git status --porcelain)"
+      - name: State hard proof limits
+        if: always()
+        run: |
+          echo "Real native Wayland protocol resources for virtual pointers and transient seats are observed through owner callbacks in a disposable compositor." >> "$GITHUB_STEP_SUMMARY"
+          echo "Virtual input has lifetime identity but is never accepted as physical; eligible=0. No physical input, no positive guard, no Wayland axis/frame or user desktop changes." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production source files stay unchanged; PA_AUTOSCROLL_LIVE_ACTIVATION remains 0. Company Map #126 retains full ownership." >> "$GITHUB_STEP_SUMMARY"
