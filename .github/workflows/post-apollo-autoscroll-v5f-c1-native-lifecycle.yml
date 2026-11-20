@@ -1,0 +1,108 @@
+name: SwayPX / V5F-C1 Real XDG + Output Lifetime Receipts (OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_c1_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_c1_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_c1_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_c1_overlay_safety.py'
+      - 'MODEL/autoscroll-v5f-c1-native-lifecycle.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-c1-native-lifecycle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-disposable-owner-callback-receipts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact head including parent
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require CI-only files, no production source or Map collision
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-b-guard-bridge-20261119"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_c1_native_overlay.py",
+              "tests/autoscroll/ci_v5f_c1_native_trace.py",
+              "tests/autoscroll/ci_v5f_c1_udmabuf.sh",
+              "tests/autoscroll/test_v5f_c1_overlay_safety.py",
+              "MODEL/autoscroll-v5f-c1-native-lifecycle.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-c1-native-lifecycle.yml",
+          }
+          assert changed <= allowed, sorted(changed-allowed)
+          assert {
+              "tests/autoscroll/ci_v5f_c1_native_overlay.py",
+              "tests/autoscroll/ci_v5f_c1_native_trace.py",
+              "tests/autoscroll/ci_v5f_c1_udmabuf.sh",
+          } <= changed
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "PA_POINTER_ORIGIN_UNKNOWN" in Path(
+              "sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          print("PA_FC1_CI_ONLY_NO_PRODUCTION_OR_COMPANY_CHANGE_PASS")
+          PY
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_c1_overlay_safety.py' -v
+          python3 -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_b_guard_bridge.py' -v
+      - name: Install Nix in isolated GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Copy verified source and instrument actual owner callbacks, CI-only
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_c1_native_overlay.py
+          test -z "$(git status --porcelain)"
+      - name: Build disposable instrumented SwayPX, pinned foot and Mesa
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc1-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "PA_FC1_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_FC1_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_FC1_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "PA_FC1_MESA=$mesa" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_FC1_NATIVE_INSTRUMENTED_ISOLATED_BINARY_BUILT_PASS"
+      - name: Observe real XDG map/unmap and display configuration/disable
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_c1_udmabuf.sh
+          test -z "$(git status --porcelain)"
+      - name: Record limits of observed native receipts
+        if: always()
+        run: |
+          echo "Actual mapped XDG target and output lifetime callbacks observed in CI-only instrumented copy, NOT in original unmodified production checkout." >> "$GITHUB_STEP_SUMMARY"
+          echo "No real physical HID, transient seat, positive V5C guard, axis/frame dispatch, Escape or indicator evidence in this package." >> "$GITHUB_STEP_SUMMARY"
+          echo "All production files stay unchanged and PA_AUTOSCROLL_LIVE_ACTIVATION remains 0. Company Map PR #126 retains ownership." >> "$GITHUB_STEP_SUMMARY"
