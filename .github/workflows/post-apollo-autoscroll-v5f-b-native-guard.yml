@@ -132,10 +132,12 @@ jobs:
             tests/post_apollo_autoscroll_v5f_owner_guard_test.c \
             -o /tmp/v5fb-owner-guard
           timeout 5s /tmp/v5fb-owner-guard
+          pin=fb064cf3c82aa7b9e8d2375bb631773d5eb5a12f
+          git show "$pin:tests/post_apollo_autoscroll_epoch_test.c" > /tmp/v5fb-pinned-v5c-legacy-test.c
           cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
             sway/input/post_apollo_autoscroll_epoch.c \
             sway/input/post_apollo_autoscroll_witness.c \
-            tests/post_apollo_autoscroll_epoch_test.c \
+            /tmp/v5fb-pinned-v5c-legacy-test.c \
             -o /tmp/v5fb-old-guard
           timeout 5s /tmp/v5fb-old-guard
       - name: Install Nix on disposable GitHub runner
