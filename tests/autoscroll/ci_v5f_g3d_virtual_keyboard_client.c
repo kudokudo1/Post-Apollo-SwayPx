@@ -100,11 +100,52 @@ int main(void) {
         fputs("PA_G3D_KEYMAP_SETUP_FAILED\n",stderr);
         return 4;
     }
-    s.keymap=xkb_keymap_new_from_names(s.context,NULL,XKB_KEYMAP_COMPILE_NO_FLAGS);
+    /* The default XKB rules expose a Scroll Lock LED, but the SCLK key
+     * does not necessarily map to a locking modifier. Test-only map:
+     * bind SCLK to Mod3 so a real XKB press/release toggles the LED.
+     * This map is transmitted ONLY by this disposable VIRTUAL client;
+     * it is NOT physical hardware, production policy or permission.
+     */
+    struct xkb_keymap *default_map=xkb_keymap_new_from_names(
+        s.context,NULL,XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (!default_map) {
+        fputs("PA_G3D_DEFAULT_XKB_KEYMAP_FAILED\n",stderr);
+        return 5;
+    }
+    char *original=xkb_keymap_get_as_string(
+        default_map,XKB_KEYMAP_FORMAT_TEXT_V1);
+    xkb_keymap_unref(default_map);
+    if (!original) {
+        fputs("PA_G3D_DEFAULT_KEYMAP_NOT_SERIALIZABLE\n",stderr);
+        return 5;
+    }
+    char *sclk=strstr(original,"key <SCLK>");
+    char *end=sclk==NULL?NULL:strchr(sclk,';');
+    if (end==NULL || strstr(end+1,"key <SCLK>")!=NULL) {
+        fputs("PA_G3D_CI_SCLK_TEST_KEYMAP_AMBIGUOUS\n",stderr);
+        free(original);
+        return 5;
+    }
+    const char injection[]="\n    modifier_map Mod3 { <SCLK> };";
+    size_t prefix=(size_t)(end-original)+1;
+    size_t total=strlen(original)+strlen(injection)+1;
+    char *patched=malloc(total);
+    if (!patched) {
+        free(original);
+        return 5;
+    }
+    memcpy(patched,original,prefix);
+    memcpy(patched+prefix,injection,strlen(injection));
+    strcpy(patched+prefix+strlen(injection),original+prefix);
+    free(original);
+    s.keymap=xkb_keymap_new_from_string(
+        s.context,patched,XKB_KEYMAP_FORMAT_TEXT_V1,
+        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    free(patched);
     if (!s.keymap ||
             xkb_keymap_led_get_index(s.keymap,XKB_LED_NAME_SCROLL)
                 == XKB_LED_INVALID) {
-        fputs("PA_G3D_NATIVE_SCROLL_LED_NOT_IN_CLIENT_KEYMAP\n",stderr);
+        fputs("PA_G3D_CI_SCLK_TEST_MODIFIER_KEYMAP_INVALID\n",stderr);
         return 5;
     }
     s.xkb=xkb_state_new(s.keymap);
