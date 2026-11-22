@@ -49,10 +49,19 @@ v = replace_once(
     "VIEW_INCLUDE",
 )
 v = replace_once(
-    v, "\tstage_director_view_mapped(view);",
-    "\tstage_director_view_mapped(view);\n"
-    "\ttimew_scope_a_ci_real_xdg_after_map(view);",
-    "REAL_VIEW_MAP",
+    v,
+    "void view_update_size(struct sway_view *view) {\n"
+    "\tstruct sway_container *con = view->container;\n"
+    "\tcon->pending.content_width = view->geometry.width;\n"
+    "\tcon->pending.content_height = view->geometry.height;\n"
+    "\tcontainer_set_geometry_from_content(con);\n}",
+    "void view_update_size(struct sway_view *view) {\n"
+    "\tstruct sway_container *con = view->container;\n"
+    "\tcon->pending.content_width = view->geometry.width;\n"
+    "\tcon->pending.content_height = view->geometry.height;\n"
+    "\tcontainer_set_geometry_from_content(con);\n"
+    "\ttimew_scope_a_ci_real_xdg_after_map(view);\n}",
+    "REAL_COMMITTED_XDG_GEOMETRY",
 )
 v = replace_once(
     v, "\twl_signal_emit_mutable(&view->events.unmap, view);",
