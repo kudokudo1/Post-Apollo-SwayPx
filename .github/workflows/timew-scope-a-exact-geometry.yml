@@ -1,0 +1,71 @@
+name: SwayPX TimeW Scope A Exact Fractional Geometry (CI only)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_exact_geometry.h"
+      - "sway/timew_scope_a_exact_geometry.c"
+      - "tests/timew/test_timew_scope_a_exact_geometry.c"
+      - ".github/workflows/timew-scope-a-exact-geometry.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-binary64-candidate-values:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read exact PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Guard production and authorization boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          source = Path("sway/timew_scope_a_exact_geometry.c").read_text()
+          header = Path("include/sway/timew_scope_a_exact_geometry.h").read_text()
+          assert "'timew_scope_a_exact_geometry.c'" not in meson
+          assert "TIMEW_SCOPE_A_GEOMETRY_PENDING" in header
+          assert "TIMEW_SCOPE_A_GEOMETRY_CURRENT" in header
+          assert "TIMEW_SCOPE_A_EXACT_GEOMETRY_VERSION = 1" in header
+          assert "memcpy(&bits, &value" in source
+          assert "memcpy(&value, &bits" in source
+          assert "isfinite(x)" in source
+          assert "INT32_MIN" in source and "INT32_MAX" in source
+          for forbidden in (
+              "ipc_send_reply(", "cmd_resize(", "cmd_move(",
+              "container_floating_move_to(", "transaction_commit_dirty(",
+              "wl_signal_add(", "seat_set_focus(",
+          ):
+              assert forbidden not in source, forbidden
+          print("TIMEW_EXACT_GEOMETRY_CI_ONLY: no production or native authority")
+          PY
+
+      - name: Compile and run strict binary64 value and invalid-bit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/timew_scope_a_exact_geometry.c \
+            tests/timew/test_timew_scope_a_exact_geometry.c \
+            -lm -o "$RUNNER_TEMP/timew-exact-geometry-test"
+          "$RUNNER_TEMP/timew-exact-geometry-test"
+
+      - name: Recheck without optimization and with UB sanitizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O0 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            -Iinclude sway/timew_scope_a_exact_geometry.c \
+            tests/timew/test_timew_scope_a_exact_geometry.c \
+            -lm -o "$RUNNER_TEMP/timew-exact-geometry-ubsan"
+          "$RUNNER_TEMP/timew-exact-geometry-ubsan"
+          echo "TIMEW_EXACT_GEOMETRY: strict optimized + UBSan PASS; no wire or native geometry authority"
