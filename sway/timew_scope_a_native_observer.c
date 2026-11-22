@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
 #include "sway/timew_scope_a_native_observer.h"
@@ -52,7 +53,8 @@ timew_scope_a_observe_pointer_candidate(struct sway_seat *seat) {
 			con->scratchpad) {
 		return result;
 	}
-	/* XWayland and unrelated popup roots are excluded. A normal XDG\n\t * subsurface can still resolve to its exact mapped toplevel root. */
+	/* XWayland and unrelated popup roots are excluded. A normal XDG
+	 * subsurface can still resolve to its exact mapped toplevel root. */
 	if (view->type != SWAY_VIEW_XDG_SHELL ||
 			!view->wlr_xdg_toplevel ||
 			!view->wlr_xdg_toplevel->base ||
