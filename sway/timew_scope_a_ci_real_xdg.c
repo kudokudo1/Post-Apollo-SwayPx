@@ -11,6 +11,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 
 #include "sway/timew_scope_a_ci_real_xdg.h"
+#include "sway/timew_scope_a_exact_geometry.h"
 #include "sway/timew_scope_a_lifetime_candidate.h"
 #include "sway/timew_scope_a_lifecycle_signals.h"
 #include "sway/input/input-manager.h"
@@ -83,6 +84,29 @@ void timew_scope_a_ci_real_xdg_after_map(struct sway_view *view) {
 		fflush(stderr);
 		return;
 	}
+	/* Read-only value bridge: the actual fractional SwayPX pending rect is
+	 * preserved without integer truncation. This is not C5 consent, a
+	 * selected-surface identity, a settled frame or a protected receipt. */
+	struct timew_scope_a_exact_geometry exact = {0};
+	if (!timew_scope_a_exact_geometry_capture(&exact,
+			TIMEW_SCOPE_A_GEOMETRY_PENDING,
+			con->pending.x, con->pending.y,
+			con->pending.width, con->pending.height)) {
+		fail("fractional_binary64_capture_denied");
+	}
+	double rx, ry, rw, rh;
+	if (!timew_scope_a_exact_geometry_read(&exact, &rx, &ry, &rw, &rh) ||
+			rx != con->pending.x || ry != con->pending.y ||
+			rw != con->pending.width || rh != con->pending.height ||
+			exact.phase != TIMEW_SCOPE_A_GEOMETRY_PENDING) {
+		fail("fractional_binary64_roundtrip_changed");
+	}
+	fprintf(stderr,
+		"TIMEW_CI_REAL_XDG_EXACT_GEOMETRY pending=%g,%g %gx%g "
+		"binary64_roundtrip=1 phase=PENDING protected_geometry=0 "
+		"authority=NONE\\n",
+		rx, ry, rw, rh);
+	fflush(stderr);
 	const bool geometry_eligible = timew_scope_a_checked_pending_rect(
 		con->pending.x, con->pending.y, con->pending.width,
 		con->pending.height, &x, &y, &width, &height);
