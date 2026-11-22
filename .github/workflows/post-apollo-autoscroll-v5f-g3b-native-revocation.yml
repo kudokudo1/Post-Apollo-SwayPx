@@ -1,0 +1,115 @@
+name: SwayPX / V5F-G3B Real Native Target + Output Revocation (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3b_native_probe.c'
+      - 'tests/autoscroll/ci_v5f_g3b_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_g3b_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_g3b_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_g3b_native_revocation.py'
+      - 'MODEL/autoscroll-v5f-g3b-native-revocation.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3b-native-revocation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-target-output-revocation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "1"
+      PA_G3B_NATIVE_REVOCATION: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout current exact G3B head without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Enforce seven-file CI-only scope, hard OFF and owner source safety
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git", "merge-base", "HEAD",
+               "origin/autoscroll/v5f-g3a-stationary-continuity-20261122"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git", "diff", "--name-only", base, "HEAD"],
+              text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_g3b_native_probe.c",
+              "tests/autoscroll/ci_v5f_g3b_native_overlay.py",
+              "tests/autoscroll/ci_v5f_g3b_native_trace.py",
+              "tests/autoscroll/ci_v5f_g3b_udmabuf.sh",
+              "tests/autoscroll/test_v5f_g3b_native_revocation.py",
+              "MODEL/autoscroll-v5f-g3b-native-revocation.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3b-native-revocation.yml",
+          }
+          assert changed == allowed, (sorted(changed-allowed), sorted(allowed-changed))
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert all("ci_v5f_g3b_native_probe" not in p
+                     for p in (runtime, bridge, meson))
+          assert "post_apollo_autoscroll_continuity.c" not in meson
+          print("PA_G3B_SEVEN_FILES_NO_PRODUCTION_OR_COMPANY_EDIT_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3b_native_revocation.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3a_continuity.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_c1_overlay_safety.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Install pinned Nix on disposable GitHub runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Copy and instrument real native target/output callbacks only on disposable runner
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g3b_native_overlay.py
+          test -z "$(git status --porcelain)"
+      - name: Build disposable native SwayPX, detached G3A probe and pinned Foot
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc1-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          echo "PA_FC1_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_FC1_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_FC1_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "PA_FC1_MESA=$mesa" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G3B_REAL_COMPOSITOR_DISPOSABLE_TEST_ONLY_POLICY_BUILT_PASS"
+      - name: Observe three real native target/output token revocations denying detached guard
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_g3b_udmabuf.sh
+          test -z "$(git status --porcelain)"
+      - name: Report explicit negative proof boundaries
+        if: always()
+        run: |
+          echo "G3B temporarily compiles the detached G3A policy and test-only probe ONLY into a disposable runner compositor copy." >> "$GITHUB_STEP_SUMMARY"
+          echo "Real native target/output epochs and actual XDG/output callbacks are tested against an intentionally FORGED synthetic start, device/seat and layout test fixture. Not hardware or positive authorization." >> "$GITHUB_STEP_SUMMARY"
+          echo "No physical or virtual input, axis/frame output, original source/Meson changes, host mutation, Company Map ownership transfer, production enablement, or operator approval is implied." >> "$GITHUB_STEP_SUMMARY"
