@@ -76,7 +76,15 @@ void timew_scope_a_ci_real_xdg_after_map(struct sway_view *view) {
 	if (!timew_scope_a_checked_pending_rect(
 			con->pending.x, con->pending.y, con->pending.width,
 			con->pending.height, &x, &y, &width, &height)) {
-		fail("invalid_pending_geometry");
+		/* A real XDG can commit while geometry is initially unavailable.
+		 * Skip without reserving or weakening #170's exact conversion.
+		 * The end-to-end runner FAILS if a valid later commit never occurs. */
+		fprintf(stderr,
+			"TIMEW_CI_REAL_XDG_DEFER pending=%g,%g %gx%g no_candidate=1\n",
+			con->pending.x, con->pending.y,
+			con->pending.width, con->pending.height);
+		fflush(stderr);
+		return;
 	}
 	/* Only the *disposable* in-process fixture creates these identities.
 	 * They prove callback correlation, never input or producer provenance. */
