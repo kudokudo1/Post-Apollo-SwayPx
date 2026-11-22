@@ -104,7 +104,7 @@ void timew_scope_a_ci_real_xdg_after_map(struct sway_view *view) {
 	fprintf(stderr,
 		"TIMEW_CI_REAL_XDG_EXACT_GEOMETRY pending=%g,%g %gx%g "
 		"binary64_roundtrip=1 phase=PENDING protected_geometry=0 "
-		"authority=NONE\\n",
+		"authority=NONE\n",
 		rx, ry, rw, rh);
 	fflush(stderr);
 	const bool geometry_eligible = timew_scope_a_checked_pending_rect(
