@@ -1,0 +1,93 @@
+name: SwayPX / V5F-G3A Stationary Scene Continuity (DETACHED HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_continuity.h'
+      - 'sway/input/post_apollo_autoscroll_continuity.c'
+      - 'tests/autoscroll/ci_v5f_g3a_continuity.c'
+      - 'tests/autoscroll/test_v5f_g3a_continuity.py'
+      - 'MODEL/autoscroll-v5f-g3a-stationary-continuity.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3a-continuity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detached-continuity-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact G3A child with no persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Enforce exact six files and hard OFF invariants
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base = subprocess.check_output([
+              "git", "merge-base", "HEAD",
+              "origin/autoscroll/v5f-g2-native-virtual-middle-denial-20261120"
+          ], text=True).strip()
+          changed = set(subprocess.check_output([
+              "git", "diff", "--name-only", base, "HEAD"
+          ], text=True).splitlines())
+          allowed = {
+              "include/sway/input/post_apollo_autoscroll_continuity.h",
+              "sway/input/post_apollo_autoscroll_continuity.c",
+              "tests/autoscroll/ci_v5f_g3a_continuity.c",
+              "tests/autoscroll/test_v5f_g3a_continuity.py",
+              "MODEL/autoscroll-v5f-g3a-stationary-continuity.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3a-continuity.yml",
+          }
+          assert changed == allowed, (sorted(changed - allowed), sorted(allowed - changed))
+          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge = Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert all("post_apollo_autoscroll_continuity" not in x
+                     for x in (runtime, bridge, meson))
+          print("PA_G3A_SIX_FILE_DETACHED_NO_COMPANY_OR_RUNTIME_WIRING_PASS")
+          PY
+      - name: Run detached source safety contracts and inherited G1/G2 invariants
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3a_continuity.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g2_virtual_middle.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g1_provenance_boundary.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Compile real V5C plus detached G3A candidate and execute adversarial matrix
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/pa-g3a-continuity"
+          mkdir -m 700 "$build"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            tests/autoscroll/ci_v5f_g3a_continuity.c \
+            sway/input/post_apollo_autoscroll_continuity.c \
+            sway/input/post_apollo_autoscroll_epoch.c \
+            sway/input/post_apollo_autoscroll_witness.c \
+            -o "$build/pa-g3a-continuity"
+          "$build/pa-g3a-continuity"
+          test -z "$(git status --porcelain)"
+      - name: State exact trust and production limitations
+        if: always()
+        run: |
+          echo "G3A is a detached, NOT Meson-linked time/scene continuity candidate compiled against real V5C source." >> "$GITHUB_STEP_SUMMARY"
+          echo "Synthetic positive witness is not hardware provenance; no actual physical/virtual device was accessed by G3A." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production timer or axis/frame dispatch was enabled. Company Map #126 retains source ownership; positive trust model requires independent review and operator decision." >> "$GITHUB_STEP_SUMMARY"
