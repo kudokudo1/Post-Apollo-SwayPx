@@ -78,10 +78,10 @@ class G3DNativeReadOnly(unittest.TestCase):
         for token in (
             "zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(",
             "zwp_virtual_keyboard_v1_keymap(",
-            "zwp_virtual_keyboard_v1_key(",
             "zwp_virtual_keyboard_v1_modifiers(",
-            "xkb_state_update_key(",
-            "KEY_SCROLLLOCK",
+            "xkb_state_update_mask(",
+            "xkb_keymap_mod_get_index(",
+            "XKB_STATE_MODS_LOCKED",
             "XKB_LED_NAME_SCROLL",
             "modifier_map Mod3 { <SCLK> };",
             "PA_G3D_CI_SCLK_TEST_KEYMAP_AMBIGUOUS",
@@ -94,6 +94,7 @@ class G3DNativeReadOnly(unittest.TestCase):
             "zwlr_virtual_pointer_v1_button(",
             "zwlr_virtual_pointer_v1_axis(",
             "zwlr_virtual_pointer_v1_motion(",
+            "zwp_virtual_keyboard_v1_key(",
         ):
             self.assertNotIn(forbidden,CLIENT)
         for token in (
