@@ -1,0 +1,136 @@
+name: SwayPX / V5F-G3D Real Scene and Scroll Lock LED Audit (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3d_native_probe.c'
+      - 'tests/autoscroll/ci_v5f_g3d_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_g3d_virtual_keyboard_client.c'
+      - 'tests/autoscroll/ci_v5f_g3d_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_g3d_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_g3d_native_scene_led.py'
+      - 'MODEL/autoscroll-v5f-g3d-native-scene-scroll-lock.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3d-native-scene-led.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-scene-and-scroll-lock-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "1"
+      PA_G3D_NATIVE_SCENE_AUDIT: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact G3D head without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require eight test-only files, no production input changes
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          parent=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3c-real-four-owner-negative-20261122"],
+              text=True).strip()
+          diff=set(subprocess.check_output(
+              ["git","diff","--name-only",parent,"HEAD"],
+              text=True).splitlines())
+          allow={
+              "tests/autoscroll/ci_v5f_g3d_native_probe.c",
+              "tests/autoscroll/ci_v5f_g3d_native_overlay.py",
+              "tests/autoscroll/ci_v5f_g3d_virtual_keyboard_client.c",
+              "tests/autoscroll/ci_v5f_g3d_native_trace.py",
+              "tests/autoscroll/ci_v5f_g3d_udmabuf.sh",
+              "tests/autoscroll/test_v5f_g3d_native_scene_led.py",
+              "MODEL/autoscroll-v5f-g3d-native-scene-scroll-lock.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3d-native-scene-led.yml",
+          }
+          assert diff==allow,(sorted(diff-allow),sorted(allow-diff))
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert "ci_v5f_g3d_native_probe" not in meson
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          print("PA_G3D_EIGHT_FILE_CI_ONLY_NO_COMPANY_OR_PRODUCTION_EDIT_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3d_native_scene_led.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3c_native_four_owner.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Install Nix only in disposable hosted runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Copy SwayPX and instrument diagnostic cursor command only in private runner
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g3d_native_overlay.py
+          test -z "$(git status --porcelain)"
+      - name: Build real disposable SwayPX and XKB virtual keyboard protocol client
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-g3d-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          wlr_src="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wlroots_0_20.src' --no-link --print-out-paths | tail -n1)"
+          keyboard="$wlr_src/protocol/wlr-virtual-keyboard-unstable-v1.xml"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$keyboard"
+          build="$RUNNER_TEMP/pa-g3d-kb-build"
+          mkdir -m 700 "$build"
+          (
+            cd "$src"
+            nix develop --command bash -euo pipefail -c '
+              build="$1"; keyboard="$2"; client="$3"
+              wayland-scanner client-header "$keyboard" \
+                "$build/wlr-virtual-keyboard-unstable-v1-client-protocol.h"
+              wayland-scanner private-code "$keyboard" \
+                "$build/wlr-virtual-keyboard-unstable-v1-protocol.c"
+              cc -std=c11 -Wall -Wextra -Werror -pedantic \
+                -I"$build" "$client" \
+                "$build/wlr-virtual-keyboard-unstable-v1-protocol.c" \
+                $(pkg-config --cflags --libs wayland-client xkbcommon) \
+                -o "$build/pa-g3d-native-xkb-virtual-client"
+            ' _ "$build" "$keyboard" \
+              "$GITHUB_WORKSPACE/tests/autoscroll/ci_v5f_g3d_virtual_keyboard_client.c"
+          )
+          test -x "$build/pa-g3d-native-xkb-virtual-client"
+          echo "PA_FC1_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_FC1_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_FC1_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "PA_FC1_MESA=$mesa" >> "$GITHUB_ENV"
+          echo "PA_G3D_VK_CLIENT=$build/pa-g3d-native-xkb-virtual-client" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G3D_DISPOSABLE_NATIVE_COMPOSITOR_AND_XKB_CLIENT_BUILD_PASS"
+      - name: Observe real scene hit/miss and native ScrollLock OFF ON OFF UNKNOWN
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_g3d_udmabuf.sh
+          test -z "$(git status --porcelain)"
+      - name: Record negative-only diagnostic proof limits
+        if: always()
+        run: |
+          echo "G3D reads native scene hit and XKB Scroll Lock LED only in a disposable copied compositor. Its virtual keyboard can change the diagnostic LED but NEVER establishes real physical provenance." >> "$GITHUB_STEP_SUMMARY"
+          echo "Direct XDG target/layout match is an instant read, NOT an independently verified output-layout generation or atomic check-to-axis authority." >> "$GITHUB_STEP_SUMMARY"
+          echo "No middle-click, autoscroll start, G3A guard enable, application axis/frame, original source change, Company Map ownership transfer, desktop action or merge was performed." >> "$GITHUB_STEP_SUMMARY"
