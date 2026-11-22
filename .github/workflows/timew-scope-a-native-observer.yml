@@ -1,0 +1,65 @@
+name: SwayPX TimeW Scope A Native Observer (dormant)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_native_observer.h"
+      - "sway/timew_scope_a_native_observer.c"
+      - "tests/timew/test_timew_native_observer_source.py"
+      - ".github/workflows/timew-scope-a-native-observer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-only-native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact proposed code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify source-only and no authority flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_timew_native_observer_source.py
+          git diff --exit-code -- sway/meson.build
+
+      - name: Install Nix on disposable CI runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compile observer against real pinned SwayPX and wlroots
+        shell: bash
+        run: |
+          set -euo pipefail
+          # CI-only injection into a disposable checkout. This change is
+          # NOT committed and the feature remains unlinked on master/PR.
+          python3 - <<'PY'
+          from pathlib import Path
+          meson_path = Path("sway/meson.build")
+          original = meson_path.read_text()
+          target = "\t'stage_director_social_native.c',"
+          assert original.count(target) == 1
+          assert "'timew_scope_a_native_observer.c'," not in original
+          patched = original.replace(
+              target,
+              target + "\n\t'timew_scope_a_native_observer.c',",
+              1,
+          )
+          meson_path.write_text(patched)
+          assert "'timew_scope_a_native_observer.c'," in patched
+          print("CI_ONLY: temporarily build read-only native observer")
+          PY
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-observer-build-output.txt"
+          output="$(tail -n 1 "$RUNNER_TEMP/timew-observer-build-output.txt")"
+          test -x "$output/bin/sway"
+          echo "TIMEW_SCOPE_A_NATIVE_OBSERVER: exact SwayPX/wlroots build PASS; runtime wire OFF"
