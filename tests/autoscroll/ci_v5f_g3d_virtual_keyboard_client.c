@@ -66,6 +66,9 @@ static bool toggle(struct state *s) {
     (void)xkb_state_update_mask(s->xkb,0,0,next,0,0,0);
     int observed=xkb_state_led_name_is_active(s->xkb,XKB_LED_NAME_SCROLL);
     if (observed<0 || observed!=((next & (UINT32_C(1)<<idx))!=0)) {
+        fprintf(stderr,
+            "PA_G3D_CI_NATIVE_TEST_MODIFIER_MISMATCH idx=%u old=%u "
+            "new=%u led=%d\\n",(unsigned)idx,old,next,observed);
         return false;
     }
     zwp_virtual_keyboard_v1_modifiers(s->keyboard,0,0,next,0);
@@ -95,7 +98,7 @@ int main(void) {
     }
     /* The default XKB rules expose a Scroll Lock LED, but the SCLK key
      * does not necessarily map to a locking modifier. Test-only map:
-     * bind SCLK to Mod3 so a real XKB press/release toggles the LED.
+     * bind SCLK and the disposable LED indicator directly to Mod3.
      * This map is transmitted ONLY by this disposable VIRTUAL client;
      * it is NOT physical hardware, production policy or permission.
      */
@@ -131,6 +134,22 @@ int main(void) {
     memcpy(patched+prefix,injection,strlen(injection));
     strcpy(patched+prefix+strlen(injection),original+prefix);
     free(original);
+    /* Also pin the TEST LED rule directly to Mod3. Some distributions
+     * map ScrollLock as a virtual modifier without a real backing bit.
+     * This conversion affects ONLY the disposable client keymap. */
+    char *indicator=strstr(patched,"indicator \"Scroll Lock\" {");
+    char *indicator_end=indicator==NULL?NULL:strstr(indicator,"};");
+    const char old_rule[]="modifiers= ScrollLock;";
+    const char new_rule[]="modifiers= Mod3;";
+    char *rule=indicator==NULL?NULL:strstr(indicator,old_rule);
+    if (indicator_end==NULL || rule==NULL || rule>=indicator_end) {
+        fputs("PA_G3D_CI_TEST_LED_INDICATOR_RULE_MISSING\\n",stderr);
+        free(patched);
+        return 5;
+    }
+    memmove(rule+strlen(new_rule),rule+strlen(old_rule),
+        strlen(rule+strlen(old_rule))+1);
+    memcpy(rule,new_rule,strlen(new_rule));
     s.keymap=xkb_keymap_new_from_string(
         s.context,patched,XKB_KEYMAP_FORMAT_TEXT_V1,
         XKB_KEYMAP_COMPILE_NO_FLAGS);
