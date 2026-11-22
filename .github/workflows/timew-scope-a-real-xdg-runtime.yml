@@ -1,0 +1,105 @@
+name: SwayPX TimeW Scope A Real Mapped XDG Lifecycle (CI only)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_ci_real_xdg.h"
+      - "sway/timew_scope_a_ci_real_xdg.c"
+      - "tests/timew/ci_inject_real_xdg_lifecycle.py"
+      - ".github/workflows/timew-scope-a-real-xdg-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-real-xdg-lifetime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact stacked SwayPX sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Enforce unlinked production and no input/command hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          view = Path("sway/tree/view.c").read_text()
+          helper = Path("sway/timew_scope_a_ci_real_xdg.c").read_text()
+          for filename in (
+              "timew_scope_a_lifetime_candidate.c",
+              "timew_scope_a_native_observer.c",
+              "timew_scope_a_lifecycle_signals.c",
+              "timew_scope_a_native_lifecycle.c",
+              "timew_scope_a_ci_real_xdg.c",
+          ):
+              assert f"'{filename}'" not in meson
+          assert 'timew_scope_a_ci_real_xdg_after_map(' not in view
+          assert 'timew_scope_a_ci_real_xdg_after_unmap_signal(' not in view
+          for forbidden in (
+              'container_floating_move_to(', 'cmd_move(',
+              'cmd_resize(', 'seat_set_focus(', 'ipc_send_reply(',
+              'sway_cursor_warp(', 'transaction_commit_dirty(',
+          ):
+              assert forbidden not in helper, forbidden
+          assert "timew_scope_a_lifecycle_signals_bind" in helper
+          assert "view->events.unmap" in helper
+          assert "con->node.events.destroy" in helper
+          assert "view->surface->events.destroy" in helper
+          print("TIMEW_REAL_XDG_PRECHECK PASS: production wiring none; geometry authority NONE")
+          PY
+
+      - name: Install Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Inject CI-only view lifecycle hooks and compile pinned SwayPX
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_xdg_lifecycle.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-real-xdg-sway-store-path.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-xdg-sway-store-path.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_REAL_XDG_COMPILED: pinned compositor compiled with disposable callbacks only"
+
+      - name: Resolve pinned Mesa and native XDG test actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -f "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-xdg-sway-store-path.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+
+      - name: Exercise real XDG map and unmap twice in isolated headless SwayPX
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-xdg-sway-store-path.txt")"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          echo "TIMEW_REAL_XDG_RUNTIME PASS: real mapped app twice; automatic unmap signal revoked before native destroy"
+
+      - name: Record CI-only acceptance scope
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A // CI-only mapped-XDG revocation" >> "$GITHUB_STEP_SUMMARY"
+          echo "Disposable runner only, real SwayPX headless XDG map/unmap, no operator selection or native Restore." >> "$GITHUB_STEP_SUMMARY"
+          echo "No committed production Meson, view lifecycle, seat, input, command, IPC or Fedora changes." >> "$GITHUB_STEP_SUMMARY"
