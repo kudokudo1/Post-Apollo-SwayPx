@@ -18,6 +18,7 @@ This room provides the semantic **MODEL** view while preserving the compositor's
 
 - renderer / compositor architecture
 - **PROPOSED // Stage Director provider-neutral native XDG window grouping:** [role admission, consumer matrix, safety gates and rollout contract](./stage-director-provider-neutral-window-group-v0.md). No runtime authority or activation in this proposal.
+- **PROPOSED // TimeW Scope A protected live-surface witness:** [SwayPX owner REVISE contract for explicit operator selection, lifetime revocation, guarded resize/move, real post-resize x/y and receipt gates](./timew-scope-a-protected-selected-surface-v0.md). Source-only; no native authority or host activation.
 - animation and effects model
 - protocol / IPC relationships
 
