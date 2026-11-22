@@ -50,6 +50,10 @@ void timew_scope_a_ci_real_xdg_after_map(struct sway_view *view) {
 		timew_scope_a_lifecycle_signals_init(&ci_watch);
 		ci_initialized = true;
 	}
+	if (ci_view == view && ci_watch.attached) {
+		/* Later valid XDG geometry updates do not reissue a lifetime. */
+		return;
+	}
 	if (ci_watch.attached || ci_view) {
 		fail("overlapping_candidate");
 	}
