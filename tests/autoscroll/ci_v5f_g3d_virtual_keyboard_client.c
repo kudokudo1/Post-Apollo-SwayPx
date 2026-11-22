@@ -50,33 +50,26 @@ static const struct wl_registry_listener registry_listener = {
     .global = global, .global_remove = global_remove,
 };
 
-static uint32_t locked(const struct state *s) {
-    return xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_LOCKED);
-}
 static bool toggle(struct state *s) {
-    const xkb_keycode_t key = KEY_SCROLLLOCK+8;
-    if (xkb_state_update_key(s->xkb,key,XKB_KEY_DOWN) == 0) {
-        /* xkb change mask may be zero on press; release is decisive. */
-    }
-    zwp_virtual_keyboard_v1_key(s->keyboard,100,KEY_SCROLLLOCK,
-                                 WL_KEYBOARD_KEY_STATE_PRESSED);
-    zwp_virtual_keyboard_v1_modifiers(s->keyboard,
-        xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_DEPRESSED),
-        xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_LATCHED),
-        locked(s),
-        xkb_state_serialize_layout(s->xkb,XKB_STATE_LAYOUT_EFFECTIVE));
-    xkb_state_update_key(s->xkb,key,XKB_KEY_UP);
-    zwp_virtual_keyboard_v1_key(s->keyboard,101,KEY_SCROLLLOCK,
-                                 WL_KEYBOARD_KEY_STATE_RELEASED);
-    zwp_virtual_keyboard_v1_modifiers(s->keyboard,
-        xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_DEPRESSED),
-        xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_LATCHED),
-        locked(s),
-        xkb_state_serialize_layout(s->xkb,XKB_STATE_LAYOUT_EFFECTIVE));
-    if (wl_display_roundtrip(s->display) < 0) {
+    /* A default XKB map may not implement any ScrollLock key action,
+     * even when it exports the Scroll Lock LED. A disposable virtual
+     * keyboard can explicitly send locked modifier state instead:
+     * after test-only SCLK -> Mod3 mapping, the native Scroll Lock LED
+     * is driven by the xkb_state LOCKED Mod3 bit. No key or mouse events.
+     */
+    xkb_mod_index_t idx=xkb_keymap_mod_get_index(s->keymap,"Mod3");
+    if (idx==XKB_MOD_INVALID || idx>=32) {
         return false;
     }
-    return true;
+    uint32_t old=xkb_state_serialize_mods(s->xkb,XKB_STATE_MODS_LOCKED);
+    uint32_t next=old ^ (UINT32_C(1)<<idx);
+    (void)xkb_state_update_mask(s->xkb,0,0,next,0,0,0);
+    int observed=xkb_state_led_name_is_active(s->xkb,XKB_LED_NAME_SCROLL);
+    if (observed<0 || observed!=((next & (UINT32_C(1)<<idx))!=0)) {
+        return false;
+    }
+    zwp_virtual_keyboard_v1_modifiers(s->keyboard,0,0,next,0);
+    return wl_display_roundtrip(s->display)>=0;
 }
 int main(void) {
     struct state s={0};
