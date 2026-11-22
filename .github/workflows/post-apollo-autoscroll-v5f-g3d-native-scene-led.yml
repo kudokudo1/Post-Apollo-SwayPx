@@ -90,7 +90,7 @@ jobs:
           foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
           mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
           wlr_src="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wlroots_0_20.src' --no-link --print-out-paths | tail -n1)"
-          keyboard="$wlr_src/protocol/wlr-virtual-keyboard-unstable-v1.xml"
+          keyboard="$wlr_src/protocol/virtual-keyboard-unstable-v1.xml"
           test -x "$sway/bin/sway"
           test -x "$sway/bin/swaymsg"
           test -x "$foot/bin/foot"
