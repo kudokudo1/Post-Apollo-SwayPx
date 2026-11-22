@@ -68,9 +68,7 @@ class ContinuityCandidateSafety(unittest.TestCase):
         ):
             self.assertIn(value, TEST)
         self.assertIn("UNLINKED, DETACHED", CANDIDATE)
-        self.assertIn("not physical origin authentication", HEADER.lower().replace(
-            "nothing in this file attests a mouse or grants permission to scroll",
-            "not physical origin authentication"))
+        self.assertIn("nothing in this file attests a mouse", HEADER.lower())
 
 if __name__ == "__main__":
     unittest.main()
