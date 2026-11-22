@@ -52,7 +52,7 @@ timew_scope_a_observe_pointer_candidate(struct sway_seat *seat) {
 			con->scratchpad) {
 		return result;
 	}
-	/* XWayland, popup roots, subsurfaces and synthetic app IDs excluded. */
+	/* XWayland and unrelated popup roots are excluded. A normal XDG\n\t * subsurface can still resolve to its exact mapped toplevel root. */
 	if (view->type != SWAY_VIEW_XDG_SHELL ||
 			!view->wlr_xdg_toplevel ||
 			!view->wlr_xdg_toplevel->base ||
