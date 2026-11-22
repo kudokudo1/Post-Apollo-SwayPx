@@ -128,11 +128,10 @@ def main() -> None:
         seen_target_epochs = set()
 
         # 1: Actual XDG window mapped, then actual output config rotated.
+        old_baselines = all_baselines(log)
         actor = c1.start_foot(foot, runtime, env, "PA-G3B-REAL-OUTPUT-CONFIG")
         id1 = c1.wait_for_window(swaymsg, ipc, env, actor, exists=True)
-        base_t1, base_o1 = wait_baseline(log, id1, all_baselines(log) - {
-            (id1, t, o) for _, t, o in BASELINE.findall(log_text(log))})
-        # The last expression above guarantees no stale accepted id tuple.
+        base_t1, base_o1 = wait_baseline(log, id1, old_baselines)
         seen_ids.add(id1)
         seen_target_epochs.add(base_t1)
         old_denials = all_denials(log)
