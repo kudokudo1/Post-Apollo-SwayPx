@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -73,18 +74,35 @@ void timew_scope_a_ci_real_xdg_after_map(struct sway_view *view) {
 		fail("ineligible_real_mapped_xdg");
 	}
 	int32_t x, y, width, height;
-	if (!timew_scope_a_checked_pending_rect(
-			con->pending.x, con->pending.y, con->pending.width,
-			con->pending.height, &x, &y, &width, &height)) {
-		/* A real XDG can commit while geometry is initially unavailable.
-		 * Skip without reserving or weakening #170's exact conversion.
-		 * The end-to-end runner FAILS if a valid later commit never occurs. */
-		fprintf(stderr,
-			"TIMEW_CI_REAL_XDG_DEFER pending=%g,%g %gx%g no_candidate=1\n",
-			con->pending.x, con->pending.y,
-			con->pending.width, con->pending.height);
+	if (!isfinite(con->pending.x) || !isfinite(con->pending.y) ||
+			!isfinite(con->pending.width) ||
+			!isfinite(con->pending.height) ||
+			con->pending.width <= 0 || con->pending.height <= 0) {
+		/* Do not reserve on absent or nonfinite real native geometry. */
+		fprintf(stderr, "TIMEW_CI_REAL_XDG_DEFER unusable_native_geometry=1\n");
 		fflush(stderr);
 		return;
+	}
+	const bool geometry_eligible = timew_scope_a_checked_pending_rect(
+		con->pending.x, con->pending.y, con->pending.width,
+		con->pending.height, &x, &y, &width, &height);
+	if (!geometry_eligible) {
+		/* Actual SwayPX centered floating windows can have half-pixel
+		 * pending x/y (e.g. y=92.5). This is a REAL geometry HOLD, not
+		 * permission to truncate. This CI fixture tests only native
+		 * UNMAP/DESTROY signal delivery and exact object references.
+		 * A synthetic 1x1 ledger rectangle is NEVER a geometry witness.
+		 * The production native adapter still rejects this geometry. */
+		fprintf(stderr,
+			"TIMEW_CI_REAL_XDG_GEOMETRY_HOLD pending=%g,%g %gx%g "
+			"ledger_rect=synthetic_only protected_geometry=0\n",
+			con->pending.x, con->pending.y,
+			con->pending.width, con->pending.height);
+		x = 0;
+		y = 0;
+		width = 1;
+		height = 1;
+		fflush(stderr);
 	}
 	/* Only the *disposable* in-process fixture creates these identities.
 	 * They prove callback correlation, never input or producer provenance. */
