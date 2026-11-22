@@ -83,6 +83,9 @@ class G3DNativeReadOnly(unittest.TestCase):
             "xkb_state_update_key(",
             "KEY_SCROLLLOCK",
             "XKB_LED_NAME_SCROLL",
+            "modifier_map Mod3 { <SCLK> };",
+            "PA_G3D_CI_SCLK_TEST_KEYMAP_AMBIGUOUS",
+            "xkb_keymap_new_from_string(",
             "PA_G3D_VIRTUAL_KEYBOARD_READY",
             "no_pointer_events=1",
         ):
