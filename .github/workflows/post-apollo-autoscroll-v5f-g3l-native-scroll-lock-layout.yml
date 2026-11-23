@@ -138,15 +138,15 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
             tests/autoscroll/ci_v5f_g3l_keyboard_mouse_actor.c \
             -o "$build/pa-g3l-uinput-actor"
-          test -x "$build/pa-g3k-uinput-actor"
+          test -x "$build/pa-g3l-uinput-actor"
           echo "PA_G2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
           echo "PA_G2_MESA=$mesa" >> "$GITHUB_ENV"
           echo "PA_G3E_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
           echo "PA_G3E_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
           echo "PA_G3J_SEATD=$seatd/bin/seatd" >> "$GITHUB_ENV"
-          echo "PA_G3J_ACTOR_BINARY=$build/pa-g3k-uinput-actor" >> "$GITHUB_ENV"
+          echo "PA_G3J_ACTOR_BINARY=$build/pa-g3l-uinput-actor" >> "$GITHUB_ENV"
           test -z "$(git status --porcelain)"
-          echo "PA_G3K_NATIVE_TEST_BINARIES_PINNED_PASS"
+          echo "PA_G3L_NATIVE_TEST_BINARIES_PINNED_PASS"
 
       - name: Prove actual XKB Scroll Lock key and native output layout change never enable scrolling
         run: |
