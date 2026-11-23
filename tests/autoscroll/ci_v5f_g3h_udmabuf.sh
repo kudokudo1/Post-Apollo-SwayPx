@@ -29,8 +29,8 @@ if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
       "${PA_G2_MESA:-}" != /nix/store/* ||
       "${PA_G3H_REAL_MIDDLE_NEGATIVE:-}" != 1 ||
       "${PA_G3H_NATIVE_OS_DIAG:-}" != 1 ||
-      "${PA_G3H_SWAYMSG:-}" != /nix/store/* ||
-      "${PA_G3H_FOOT:-}" != /nix/store/* ]]; then
+      "${PA_G3E_SWAYMSG:-}" != /nix/store/* ||
+      "${PA_G3E_FOOT:-}" != /nix/store/* ]]; then
   echo "BLOCKED_G3H_UDMABUF_NOT_DISPOSABLE_CI" >&2
   exit 2
 fi
