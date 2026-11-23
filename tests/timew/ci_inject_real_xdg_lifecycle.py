@@ -32,6 +32,7 @@ units = (
     "timew_scope_a_lifecycle_signals.c",
     "timew_scope_a_native_lifecycle.c",
     "timew_scope_a_ci_real_xdg.c",
+    "timew_scope_a_exact_geometry.c",
 )
 for unit in units:
     if f"'{unit}'" in m:
@@ -99,8 +100,13 @@ replacement = """  for cycle in 1 2; do
     tail -n 120 "$log" >&2
     exit 1
   fi
+  exact_count="$(grep -c 'TIMEW_CI_REAL_XDG_EXACT_GEOMETRY pending=' "$log" || true)"
+  if [[ "$exact_count" != 2 ]]; then
+    echo "TIMEW_CI_REAL_XDG_FAIL: expected 2 real exact binary64 pending snapshots; got $exact_count" >&2
+    exit 1
+  fi
   grep -F 'TIMEW_CI_REAL_XDG_' "$log"
-  echo "TIMEW_CI_REAL_XDG_RUNTIME PASS: 2 real mapped XDG lifetimes, synchronous unmap-before-destroy, zero native authority"
+  echo "TIMEW_CI_REAL_XDG_RUNTIME PASS: 2 real mapped XDG lifetimes, synchronous unmap-before-destroy, exact pending binary64=2, zero native authority"
 """
 s = replace_once(s, actor_call, replacement.rstrip("\n"), "REAL_ACTOR")
 # Validate every target before writing even the temporary CI checkout.

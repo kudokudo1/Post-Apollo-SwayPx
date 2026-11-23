@@ -37,6 +37,7 @@ jobs:
               "timew_scope_a_lifecycle_signals.c",
               "timew_scope_a_native_lifecycle.c",
               "timew_scope_a_ci_real_xdg.c",
+              "timew_scope_a_exact_geometry.c",
           ):
               assert f"'{filename}'" not in meson
           assert 'timew_scope_a_ci_real_xdg_after_map(' not in view
@@ -51,6 +52,8 @@ jobs:
           assert "view->events.unmap" in helper
           assert "con->node.events.destroy" in helper
           assert "view->surface->events.destroy" in helper
+          assert "timew_scope_a_exact_geometry_capture" in helper
+          assert "timew_scope_a_exact_geometry_read" in helper
           print("TIMEW_REAL_XDG_PRECHECK PASS: production wiring none; geometry authority NONE")
           PY
 
