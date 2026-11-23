@@ -1,0 +1,76 @@
+name: SwayPX TimeW Scope A Protected Receipt Proof Gaps (DENY only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/timew/ci_scope_a_proof_obligations.py"
+      - "tests/timew/test_ci_scope_a_proof_obligations.py"
+      - "MODEL/timew-scope-a-protected-receipt-proof-obligations-v0.md"
+      - ".github/workflows/timew-scope-a-protected-receipt-proof-gaps.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract-and-denials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify strictly unprivileged source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          source = Path("tests/timew/ci_scope_a_proof_obligations.py").read_text()
+          note = Path("MODEL/timew-scope-a-protected-receipt-proof-obligations-v0.md").read_text()
+          assert 'from ci_assert_real_instruction_outcomes import validate' in source
+          assert '"safe_actions": []' in source
+          assert '"protected_receipt": None' in source
+          assert '"resize_to_move_continuation_allowed": False' in source
+          assert 'claimed_prior_resize_receipt' in source
+          for required in (
+              "NOT A CANONICAL RECEIPT", "C3e/C4b", "C5", "UNKNOWN/HOLD",
+              "operator-selection", "post-resize", "final-frame",
+              "PRE-ACTION SPENT", "production Restore HOLD",
+          ):
+              assert required in note, required
+          for path in (
+              "sway/desktop/transaction.c", "sway/tree/view.c",
+              "sway/meson.build", "sway/input/seat.c",
+              "sway/input/seatop_default.c", "sway/commands/resize.c",
+              "sway/commands/move.c", "sway/ipc-server.c",
+          ):
+              assert "ci_scope_a_proof_obligations" not in Path(path).read_text()
+          for p in ("tests/timew/ci_scope_a_proof_obligations.py",
+                    "tests/timew/test_ci_scope_a_proof_obligations.py"):
+              compile(Path(p).read_text(), p, "exec")
+          print("TIMEW_PROOF_GAPS_SOURCE_ONLY PASS: no native production hook, receipt or command")
+          PY
+
+      - name: Retain reviewed #182 diagnostic chronology regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_outcome_checker.py
+
+      - name: Exercise proposed source-side proof obligations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_scope_a_proof_obligations.py
+          echo "TIMEW_PROOF_GAPS_DENY_ONLY PASS: all matching/forged C5/source/receipt paths remain HOLD"
+
+      - name: Report no production authority
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A source-side receipt proof gap reference" >> "$GITHUB_STEP_SUMMARY"
+          echo "No canonical signed receipt packet, protected issuer, C5 SPENT, operator-selection or real per-window terminal frame exists here." >> "$GITHUB_STEP_SUMMARY"
+          echo "Parent #182 real native callbacks remain CI-only; output is a non-authorizing proof inventory." >> "$GITHUB_STEP_SUMMARY"
