@@ -16,6 +16,7 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_keyboard.h>
 #include "log.h"
 #include "sway/input/cursor.h"
 #include "sway/input/keyboard.h"
@@ -97,4 +98,40 @@ void pa_g3l_native_lock_layout_observe(
         "can_consume=0 can_axis=0",
         event->state==WL_POINTER_BUTTON_STATE_PRESSED,
         keyboard_count,led,x,y,width,height,source_candidate);
+}
+
+
+/* Observe REAL SwayPX keyboard key handling, not just a /dev/uinput
+ * write that the compositor may never receive. Still non-authorizing. */
+void pa_g3l_native_keyboard_key_observe(
+        struct sway_keyboard *keyboard,
+        struct wlr_keyboard_key_event *event) {
+    if (!keyboard || !keyboard->seat_device ||
+            !keyboard->seat_device->input_device || !event) {
+        return;
+    }
+    struct wlr_input_device *dev=
+        keyboard->seat_device->input_device->wlr_device;
+    if (!dev || !wlr_input_device_is_libinput(dev)) {
+        return;
+    }
+    struct libinput_device *handle=wlr_libinput_get_device_handle(dev);
+    if (!handle || !libinput_device_get_name(handle) ||
+            strcmp(libinput_device_get_name(handle),
+            "PA-G3L-SYNTHETIC-KEYBOARD-NOT-HARDWARE")!=0 ||
+            event->keycode!=KEY_SCROLLLOCK) {
+        return;
+    }
+    int led=-1;
+    if (keyboard->wlr && keyboard->wlr->xkb_state) {
+        led=xkb_state_led_name_is_active(
+            keyboard->wlr->xkb_state,XKB_LED_NAME_SCROLL);
+    }
+    sway_log(SWAY_INFO,
+        "PA_G3L_REAL_COMPOSITOR_SCROLLLOCK_KEY "
+        "pressed=%d code=%u xkb_led=%d "
+        "kernel_source=SYNTHETIC native_keyboard=1 "
+        "native_scroll_policy=UNKNOWN_DENY can_axis=0",
+        event->state == WL_KEYBOARD_KEY_STATE_PRESSED,
+        event->keycode, led);
 }
