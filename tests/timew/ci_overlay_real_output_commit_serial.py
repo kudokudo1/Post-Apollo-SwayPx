@@ -67,6 +67,8 @@ source = r"""
  * match an earlier event to a later diagnostic COMMIT record. */
 static uint64_t ci_output_seq_commit_count;
 static uint64_t ci_output_seq_present_count;
+static uint64_t ci_last_output_seq_commit_scene;
+static uint64_t ci_last_output_seq_present_scene;
 
 static bool ci_output_seq_same_candidate(struct sway_output *output) {
 	return ci_view && ci_issuer.live && !ci_issuer.shut_down &&
@@ -84,7 +86,9 @@ static bool ci_output_seq_same_candidate(struct sway_output *output) {
 
 void timew_scope_a_ci_output_commit_serial(struct sway_output *output,
 		uint32_t actual_output_commit_seq) {
-	if (!ci_issuer.live || !ci_last_post_scene_sequence) {
+	if (!ci_issuer.live || !ci_last_post_scene_sequence ||
+			ci_last_render_commit_sequence != ci_last_post_scene_sequence ||
+			ci_last_output_seq_commit_scene == ci_last_post_scene_sequence) {
 		return;
 	}
 	if (!ci_output_seq_same_candidate(output)) {
@@ -97,6 +101,7 @@ void timew_scope_a_ci_output_commit_serial(struct sway_output *output,
 		fail("output_serial_commit_observer_overflow");
 	}
 	++ci_output_seq_commit_count;
+	ci_last_output_seq_commit_scene = ci_last_post_scene_sequence;
 	fprintf(stderr,
 		"TIMEW_CI_OUTPUT_SEQ_COMMIT lifetime=%" PRIu64
 		" sequence=%" PRIu64 " output_commit_seq=%" PRIu32
@@ -111,7 +116,9 @@ void timew_scope_a_ci_output_commit_serial(struct sway_output *output,
 
 void timew_scope_a_ci_output_present_serial(struct sway_output *output,
 		uint32_t event_commit_seq) {
-	if (!ci_issuer.live || !ci_last_post_scene_sequence) {
+	if (!ci_issuer.live || !ci_last_post_scene_sequence ||
+			ci_last_output_present_sequence != ci_last_post_scene_sequence ||
+			ci_last_output_seq_present_scene == ci_last_post_scene_sequence) {
 		return;
 	}
 	if (!ci_output_seq_same_candidate(output)) {
@@ -124,6 +131,7 @@ void timew_scope_a_ci_output_present_serial(struct sway_output *output,
 		fail("output_serial_present_observer_overflow");
 	}
 	++ci_output_seq_present_count;
+	ci_last_output_seq_present_scene = ci_last_post_scene_sequence;
 	fprintf(stderr,
 		"TIMEW_CI_OUTPUT_SEQ_PRESENT lifetime=%" PRIu64
 		" sequence=%" PRIu64 " output_commit_seq=%" PRIu32
@@ -148,6 +156,8 @@ static void ci_output_seq_seal(void) {
 	fflush(stderr);
 	ci_output_seq_commit_count = 0;
 	ci_output_seq_present_count = 0;
+	ci_last_output_seq_commit_scene = 0;
+	ci_last_output_seq_present_scene = 0;
 }
 """
 p = once(p,
