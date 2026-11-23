@@ -171,6 +171,6 @@ jobs:
       - name: Preserve G3M real hotplug, still no global lock authority
         if: always()
         run: |
-          echo "G3M requires real second uinput keyboard registration and removal in actual native SwayPX get_inputs, separate Scroll Lock key callback, and seat keyboard count 1->2->1 during eight real middle-button callbacks." >> "$GITHUB_STEP_SUMMARY"
+          echo "G3M requires real second uinput keyboard registration and removal in actual native SwayPX get_inputs, separate Scroll Lock key callback, and actual seat keyboard baseline->baseline+1->baseline, including preexisting unknown keyboard/groups during eight real middle-button callbacks." >> "$GITHUB_STEP_SUMMARY"
           echo "Both devices are software-created with fake USB bus, never physically attested. Even matching XKB LED readings do not prove global Scroll Lock unlocked; lock_authority=UNKNOWN_DENY; guard always DENIED, original seatop preserved, zero scroll axis." >> "$GITHUB_STEP_SUMMARY"
           echo "Only a disposable compositor COPY is instrumented. No tracked production source edits, no Company Map input/scene changes, no TimeW/Connections changes, no merge, no installed workstation activation. Autoscroll HARD OFF." >> "$GITHUB_STEP_SUMMARY"
