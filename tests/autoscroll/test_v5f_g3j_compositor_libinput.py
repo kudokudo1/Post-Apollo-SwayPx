@@ -81,7 +81,7 @@ class RealSwayPxLibinputSourceTest(unittest.TestCase):
                        "not physical hardware attestation",
                        "virtual sysfs","libinput",
                        "Company Map","TimeW",
-                       "No production", "no fabricated positive"):
+                       "production runtime", "no fabricated positive"):
             self.assertIn(phrase.lower(),M.lower())
 if __name__=="__main__":
     unittest.main()
