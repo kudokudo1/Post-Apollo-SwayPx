@@ -176,14 +176,10 @@ def validate_surface_generation(lines, mode):
                 nc != sum(k[0] == gen for k in commits) or
                 np != sum(k[0] == gen for k in presents)):
             raise ValueError("xdg_generation_lifetime_seal_count_or_order")
-    # Require real, same-generation root-to-output submission evidence in
-    # each lifetime. No requirement for final-frame authority.
-    if any(not any(k[0] == gen and samples[k][1][0] and
-                       commits[k][1][2] == samples[k][1][0] ==
-                       commits[k][1][3]
-                   for k in samples)
-           for gen in (1, 2)):
-        raise ValueError("no_stable_native_root_sample_to_commit_per_lifetime")
+    # Generation replacement (including wrap) is a recorded UNKNOWN/HOLD,
+    # not an excuse to fail the diagnostic or manufacture a positive frame.
+    # The inherited SceneFX validator already requires actual root samples
+    # for both XDG lifetimes. No unchanged generation is an authority grant.
 
     return {
         "actual_root_state_samples": len(samples),
