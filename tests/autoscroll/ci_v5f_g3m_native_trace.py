@@ -161,7 +161,8 @@ def main():
         # CREATE one real synthetic kernel device, before libinput scans udev.
         root_env={key:os.environ[key] for key in (
             "CI","GITHUB_ACTIONS","RUNNER_ENVIRONMENT","RUNNER_TEMP",
-            "PA_G3J_KERNEL_ACTOR","PA_G3K_KERNEL_ACTOR")}
+            "PA_G3J_KERNEL_ACTOR","PA_G3K_KERNEL_ACTOR",
+             "PA_G3M_KERNEL_ACTOR")}
         actor=subprocess.Popen(["sudo","-n","env"]+
             [f"{k}={v}" for k,v in root_env.items()]+[str(actor_bin)],
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,
