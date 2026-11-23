@@ -76,7 +76,7 @@ class NativeKernelUinputNegative(unittest.TestCase):
             "not the compositor", "not prove",
             "BUS_USB", "no mouse-button events",
             "not hardware attestation", "CI",
-            "not production", "Nurse 2"
+            "production authorization", "Nurse 2"
         ):
             self.assertIn(phrase.lower(),MODEL.lower())
 
