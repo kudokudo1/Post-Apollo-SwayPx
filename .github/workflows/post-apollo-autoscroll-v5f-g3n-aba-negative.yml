@@ -1,0 +1,81 @@
+name: SwayPX / V5F-G3N Test-Only Keyboard & Layout ABA Refusal (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3n-aba-negative.yml'
+      - 'MODEL/autoscroll-v5f-g3n-keyboard-layout-aba-negative.md'
+      - 'tests/autoscroll/ci_v5f_g3n_keyboard_layout_aba_oracle.c'
+      - 'tests/autoscroll/test_v5f_g3n_keyboard_layout_aba.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  g3n-negative-aba-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact G3N source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Reject production changes and enforce four-path additive-only scope
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3m-native-multi-keyboard-hotplug-negative-20261123"],
+              text=True).strip()
+          actual=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              ".github/workflows/post-apollo-autoscroll-v5f-g3n-aba-negative.yml",
+              "MODEL/autoscroll-v5f-g3n-keyboard-layout-aba-negative.md",
+              "tests/autoscroll/ci_v5f_g3n_keyboard_layout_aba_oracle.c",
+              "tests/autoscroll/test_v5f_g3n_keyboard_layout_aba.py",
+          }
+          assert actual==allowed,(sorted(actual-allowed),sorted(allowed-actual))
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          cursor=Path("sway/input/cursor.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert "g3n_test_session" not in cursor
+          assert "ci_v5f_g3n_keyboard_layout_aba_oracle.c" not in meson
+          print("PA_G3N_EXACT_FOUR_FILE_PRODUCTION_HARD_OFF_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3n_keyboard_layout_aba.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3m_native_hotplug.py' -v
+          test -z "$(git status --porcelain)"
+      - name: Compile and run isolated C11 adversarial ABA oracle
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/pa-g3n-tests"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion \
+            -pedantic tests/autoscroll/ci_v5f_g3n_keyboard_layout_aba_oracle.c \
+            -o "$RUNNER_TEMP/pa-g3n-tests/g3n-aba-negative"
+          "$RUNNER_TEMP/pa-g3n-tests/g3n-aba-negative" \
+            | tee "$RUNNER_TEMP/pa-g3n-tests/results.txt"
+          test "$(grep -c '^PA_G3N_UNTRUSTED_EPOCH_REVOKED_PASS ' \
+            "$RUNNER_TEMP/pa-g3n-tests/results.txt")" -eq 8
+          grep -Fx 'PA_G3N_ALL_EIGHT_ADVERSARIAL_FRESHNESS_TESTS_PASS simulation=TEST_ONLY native_authorization=NONE no_input_consumption=1 no_axis=1 production=HARD_OFF' \
+            "$RUNNER_TEMP/pa-g3n-tests/results.txt"
+          test -z "$(git status --porcelain)"
+      - name: State precise authority limits
+        if: always()
+        run: |
+          echo "G3N is a C-only untrusted local epoch/ABA model. It does not observe real native input, issue authenticated compositor generations, authorize a hypothetical session, swallow middle buttons or generate scrolling." >> "$GITHUB_STEP_SUMMARY"
+          echo "G3M real multi-keyboard native hotplug was already reviewed independently. Unknown keyboard groups and XKB Scroll Lock LED discrepancy remain UNKNOWN/DENY; Company Map owns production cursor/seat/scene." >> "$GITHUB_STEP_SUMMARY"
+          echo "Autoscroll HARD OFF, TimeW Restore HOLD, Sign-In HOLD. No production file edits, host changes, merge or activation." >> "$GITHUB_STEP_SUMMARY"
