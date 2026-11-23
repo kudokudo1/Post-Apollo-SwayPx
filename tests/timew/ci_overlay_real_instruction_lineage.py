@@ -17,6 +17,7 @@ root = Path(__file__).resolve().parents[2]
 txn = root / "sway/desktop/transaction.c"
 probe = root / "sway/timew_scope_a_ci_real_xdg.c"
 actor = root / "tests/stage_director/ci_native_news_actor_smoke.sh"
+smoke = root / "tests/stage_director/headless_sway_smoke.sh"
 meson = root / "sway/meson.build"
 
 def one(text, original, replacement, label):
@@ -24,7 +25,7 @@ def one(text, original, replacement, label):
         raise SystemExit(f"BLOCKED_SOURCE_DRIFT_{label} matches={text.count(original)}")
     return text.replace(original, replacement, 1)
 
-t, p, a, m = (path.read_text() for path in (txn, probe, actor, meson))
+t, p, a, m, s = (path.read_text() for path in (txn, probe, actor, meson, smoke))
 if "TIMEW_CI_REAL_INSTRUCTION_" in t or "TIMEW_CI_REAL_INSTRUCTION_BIND" in p:
     raise SystemExit("BLOCKED_PREEXISTING_INSTRUCTION_HOOK")
 if "TIMEW_CI_LINEAGE_OPEN" not in p or "'timew_scope_a_observed_lineage.c'" not in m:
@@ -156,10 +157,20 @@ if [[ "${TIMEW_CI_REAL_INSTRUCTION_MODE:-}" == 1 ]]; then
 fi''',
     "ACTOR_FIXTURE_RESIZE",
 )
+# Preserve the parent's real-XDG plus private-lineage checker and append
+# a separate actual transaction instruction membership assertion.
+s = one(
+    s,
+    '  python3 -B tests/timew/ci_assert_real_observed_lineage.py "$log"',
+    '  python3 -B tests/timew/ci_assert_real_observed_lineage.py "$log"\n'
+    '  python3 -B tests/timew/ci_assert_real_instruction_lineage.py "$log"',
+    "REAL_INSTRUCTION_RUNTIME_ASSERT",
+)
 # Validate all anchors before writing any modified disposable file.
 txn.write_text(t)
 probe.write_text(p)
 actor.write_text(a)
+smoke.write_text(s)
 print("TIMEW_CI_REAL_INSTRUCTION_INJECTION_PASS: real commit instruction"
       " bound to private mapped XDG lifetime in disposable runner only;"
       " native command authority NONE")
