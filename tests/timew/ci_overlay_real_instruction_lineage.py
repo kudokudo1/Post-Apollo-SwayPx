@@ -130,8 +130,8 @@ p = one(
     '\tfprintf(stderr,\n'
     '\t\t"TIMEW_CI_REAL_INSTRUCTION_SEAL lifetime=%" PRIu64\n'
     '\t\t" real_commit_count=%" PRIu64\n'
-    '\t\t" real_unmap=1 generation_closed=1"
-    " protected_receipt=0 authority=NONE\\n",\n'
+    '\t\t" real_unmap=1 generation_closed=1"\n'
+    '\t\t" protected_receipt=0 authority=NONE\\n",\n'
     '\t\tci_lifetime.lifetime_sequence, ci_real_matched_this_lifetime);\n'
     '\tfflush(stderr);\n'
     '\tci_real_matched_this_lifetime = 0;\n'
@@ -144,7 +144,7 @@ a = one(
     a,
     'echo "Stage Director real mapped actor smoke: PASS"',
     '''echo "Stage Director real mapped actor smoke: PASS"
-if [[ "\${TIMEW_CI_REAL_INSTRUCTION_MODE:-}" == 1 ]]; then
+if [[ "${TIMEW_CI_REAL_INSTRUCTION_MODE:-}" == 1 ]]; then
   "$swaymsg_binary" -s "$ipc_socket" \\
     '[app_id="post-apollo-weather-news"] resize set width 1290px height 800px' \\
     >"$runtime/timew-ci-real-instruction-resize.log" 2>&1 || {
