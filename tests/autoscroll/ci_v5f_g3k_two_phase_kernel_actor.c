@@ -1,0 +1,118 @@
+/*
+ * V5F-G3K disposable GitHub-hosted CI ONLY. Native Linux uinput mouse actor.
+ * One fake-BUS_USB software mouse, one BTN_MIDDLE press/release pair.
+ * This program NEVER runs on the user workstation. Does not call wlroots,
+ * move cursor, send wheel axes, or grant positive hardware trust.
+ */
+#define _POSIX_C_SOURCE 200809L
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/uinput.h>
+#include <linux/input.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <time.h>
+#include <unistd.h>
+
+static bool ci_guard(void) {
+    const char *c=getenv("CI"), *g=getenv("GITHUB_ACTIONS");
+    const char *r=getenv("RUNNER_ENVIRONMENT"), *t=getenv("RUNNER_TEMP");
+    const char *s=getenv("PA_G3K_KERNEL_ACTOR");
+    return c && strcmp(c,"true")==0 &&
+        g && strcmp(g,"true")==0 &&
+        r && strcmp(r,"github-hosted")==0 &&
+        t && strcmp(t,"/home/runner/work/_temp")==0 &&
+        s && strcmp(s,"1")==0 && geteuid()==0;
+}
+static bool send_event(int fd, unsigned short type,
+        unsigned short code, int value) {
+    const struct input_event e = {.type=type,.code=code,.value=value};
+    return write(fd,&e,sizeof(e))==(ssize_t)sizeof(e);
+}
+static void brief_pause(void) {
+    const struct timespec ts={.tv_sec=0,.tv_nsec=80000000L};
+    (void)nanosleep(&ts,NULL);
+}
+int main(void) {
+    if (!ci_guard()) {
+        fputs("BLOCKED_PA_G3K_NOT_GITHUB_HOSTED_ROOT_TEST\n",stderr);
+        return 2;
+    }
+    int fd=-1,rc=1;
+    bool created=false;
+    char name[128]={0};
+    fd=open("/dev/uinput",O_WRONLY|O_NONBLOCK|O_CLOEXEC);
+    if(fd<0) {perror("G3K open /dev/uinput");goto done;}
+    if(ioctl(fd,UI_SET_EVBIT,EV_KEY)<0 ||
+       ioctl(fd,UI_SET_EVBIT,EV_REL)<0 ||
+       ioctl(fd,UI_SET_KEYBIT,BTN_LEFT)<0 ||
+       ioctl(fd,UI_SET_KEYBIT,BTN_MIDDLE)<0 ||
+       ioctl(fd,UI_SET_KEYBIT,BTN_RIGHT)<0 ||
+       ioctl(fd,UI_SET_RELBIT,REL_X)<0 ||
+       ioctl(fd,UI_SET_RELBIT,REL_Y)<0 ||
+       ioctl(fd,UI_SET_RELBIT,REL_WHEEL)<0){
+        perror("G3K set mouse capabilities");goto done;
+    }
+    struct uinput_setup setup={0};
+    setup.id.bustype=BUS_USB; /* Deliberate synthetic bus claim. */
+    setup.id.vendor=0x1234u;
+    setup.id.product=0x5a3au;
+    setup.id.version=1u;
+    snprintf(setup.name,sizeof(setup.name),
+        "PA-G3K-KERNEL-SYNTHETIC-NOT-PHYSICAL");
+    if(ioctl(fd,UI_DEV_SETUP,&setup)<0 || ioctl(fd,UI_DEV_CREATE)<0){
+        perror("G3K create kernel input");goto done;
+    }
+    created=true;
+    if(ioctl(fd,UI_GET_SYSNAME(sizeof(name)),name)<0 ||
+       strncmp(name,"input",5)!=0){
+        perror("G3K kernel sysname");goto done;
+    }
+    printf("PA_G3K_KERNEL_UINPUT_READY input=%s fake_bus_USB=1\n",name);
+    fflush(stdout);
+    char command[32]={0};
+    /* First press/release while XDG target is mapped.
+     * Second press/release only after test has destroyed that target.
+     * Both events remain the known-synthetic kernel source. */
+    for (int round = 1; round <= 2; ++round) {
+        if(!fgets(command,sizeof(command),stdin) ||
+           strcmp(command,"click\n")!=0){
+            fputs("PA_G3K_ACTOR_REFUSED_UNEXPECTED_INPUT\n",stderr);
+            goto done;
+        }
+        if(!send_event(fd,EV_KEY,BTN_MIDDLE,1) ||
+           !send_event(fd,EV_SYN,SYN_REPORT,0)){
+            fputs("PA_G3K_KERNEL_MIDDLE_PRESS_SEND_FAILED\n",stderr);
+            goto done;
+        }
+        brief_pause();
+        if(!send_event(fd,EV_KEY,BTN_MIDDLE,0) ||
+           !send_event(fd,EV_SYN,SYN_REPORT,0)){
+            fputs("PA_G3K_KERNEL_MIDDLE_RELEASE_SEND_FAILED\n",stderr);
+            goto done;
+        }
+        printf("PA_G3K_KERNEL_MIDDLE_SENT round=%d pressed=1 released=1 axes=0\n",round);
+        fflush(stdout);
+    }
+    if(!fgets(command,sizeof(command),stdin) ||
+       strcmp(command,"stop\n")!=0){
+        fputs("PA_G3K_ACTOR_STOP_EXPECTED\n",stderr);
+        goto done;
+    }
+    rc=0;
+done:
+    if(created && ioctl(fd,UI_DEV_DESTROY)<0){
+        perror("PA_G3K_UINPUT_DESTROY_FAILED");
+        rc=1;
+    }
+    if(fd>=0 && close(fd)<0){
+        perror("PA_G3K_UINPUT_CLOSE_FAILED");
+        rc=1;
+    }
+    if(rc==0)puts("PA_G3K_KERNEL_UINPUT_DESTROYED_PASS");
+    fflush(stdout);
+    return rc;
+}
