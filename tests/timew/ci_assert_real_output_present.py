@@ -18,7 +18,7 @@ SEAL = re.compile(
     r"observed_output_presentations=(\d+) real_unmap=1 "
     r"selected_xdg_frame=UNVERIFIED authority=NONE$"
 )
-UNMAP = re.compile(r"TIMEW_CI_REAL_XDG_UNMAPPED gen=(\d+) ")
+UNMAP = re.compile(r"TIMEW_CI_REAL_XDG_UNMAPPED gen=(\d+)(?:\s|$)")
 
 def validate_output_present(lines, mode):
     prior = validate_scene_geometry(lines, mode)
