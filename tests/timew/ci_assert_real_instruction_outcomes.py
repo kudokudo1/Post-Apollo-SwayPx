@@ -100,6 +100,10 @@ def validate(lines, mode):
         raise ValueError("overlapping_lifetimes")
 
     qualified = {1: 0, 2: 0}
+    # READY plus TIMEOUT may both be observable in a forced native timer run.
+    # This is conflicting outcome evidence: diagnostic UNKNOWN/HOLD, never a
+    # clean qualified READY or TIMEOUT and never a protected action.
+    ambiguous = {1: 0, 2: 0}
     for generation in EXPECTED:
         life_commits = [key for key in commits if key[0] == generation]
         if not life_commits or seals[generation][1] != len(life_commits):
@@ -117,6 +121,14 @@ def validate(lines, mode):
             names = [e for e, _ in events]
             if names[0] != "COMMIT":
                 raise ValueError("missing_commit_anchor")
+            # The disposable native overlay emits its COMMIT observation,
+            # then the parent #179 BIND from the same instruction callback.
+            # A replayed BIND after READY/TIMEOUT/CURRENT/SCENE or after
+            # SEAL cannot authenticate an earlier callback chronologically.
+            bind_at = binds[key]
+            if not (events[0][1] < bind_at < seals[generation][0]) or any(
+                    bind_at >= at for _, at in events[1:]):
+                raise ValueError("parent_bind_chronology")
             if any(not (starts[generation][0] < idx < seals[generation][0])
                    for _, idx in events):
                 raise ValueError("event_outside_lifetime")
@@ -136,20 +148,35 @@ def validate(lines, mode):
                     names.index("TIMEOUT") > names.index("CURRENT")
             ):
                 raise ValueError("late_timeout")
-            if r["configured"] and all(x in names for x in ("CURRENT", "SCENE")):
+            if "READY" in names and "TIMEOUT" in names:
+                # These are two real observations, not two verified terminal
+                # outcomes. Preserve both in the trace but mark this native
+                # instruction UNKNOWN/HOLD and NEVER count it as qualified.
+                # In normal mode any dual result is a contradictory trace.
                 if mode == "normal":
-                    if "READY" in names and "TIMEOUT" not in names:
-                        qualified[generation] += 1
-                else:
-                    if "TIMEOUT" in names:
-                        qualified[generation] += 1
-        if not qualified[generation]:
+                    raise ValueError("contradictory_ready_timeout")
+                if not r["configured"] or not all(
+                        x in names for x in ("CURRENT", "SCENE")):
+                    raise ValueError("incomplete_ambiguous_timeout")
+                ambiguous[generation] += 1
+                continue
+            if r["configured"] and all(x in names for x in ("CURRENT", "SCENE")):
+                if mode == "normal" and "READY" in names:
+                    qualified[generation] += 1
+                elif mode == "forced_timeout" and "TIMEOUT" in names:
+                    qualified[generation] += 1
+        # Forced native txn-wait may observe READY and then TIMEOUT on the
+        # same instruction; the fixture verifies this is explicitly a HOLD,
+        # not a clean timeout, while still requiring real callback evidence.
+        if not qualified[generation] and not (
+                mode == "forced_timeout" and ambiguous[generation]):
             raise ValueError("missing_requested_real_outcome_path_" + mode)
 
     # This integer describes diagnostic callbacks, NOT eligible actions.
     return {"lifetimes": 2, "native_instructions": len(commits),
-            "qualified": sum(qualified.values()), "mode": mode,
-            "safe_actions": [], "settled": False}
+            "qualified": sum(qualified.values()),
+            "ambiguous_ready_timeout_hold": sum(ambiguous.values()),
+            "mode": mode, "safe_actions": [], "settled": False}
 
 def main():
     if len(sys.argv) != 3:
@@ -164,6 +191,8 @@ def main():
           "_PASS actual_xdg_lifetimes=2 native_instructions=" +
           str(r["native_instructions"]) +
           " qualified_correlations=" + str(r["qualified"]) +
+          " ambiguous_ready_timeout_hold=" +
+          str(r["ambiguous_ready_timeout_hold"]) +
           " configured_outcome=DIAGNOSTIC_ONLY" +
           " present=UNVERIFIED settled=0" +
           " selected_operator=NONE enrolled_source=NONE c5_spent=NONE" +
