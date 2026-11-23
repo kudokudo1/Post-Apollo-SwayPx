@@ -1,0 +1,102 @@
+name: SwayPX TimeW Scope A Real Instruction Lineage (CI-only)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_ci_real_instruction.h"
+      - "tests/timew/ci_overlay_real_instruction_lineage.py"
+      - "tests/timew/ci_assert_real_instruction_lineage.py"
+      - ".github/workflows/timew-scope-a-real-instruction-lineage.yml"
+      - "MODEL/timew-scope-a-real-instruction-lineage-v0.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-instruction-native-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact stacked SwayPX PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Guard original native source and privileged authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          txn = Path("sway/desktop/transaction.c").read_text()
+          native = Path("sway/timew_scope_a_ci_real_xdg.c").read_text()
+          meson = Path("sway/meson.build").read_text()
+          actor = Path("tests/stage_director/ci_native_news_actor_smoke.sh").read_text()
+          assert "TIMEW_CI_REAL_INSTRUCTION_" not in txn
+          assert "TIMEW_CI_REAL_INSTRUCTION_BIND" not in native
+          assert "timew_scope_a_ci_real_instruction" not in meson
+          assert "TIMEW_CI_REAL_INSTRUCTION_TRIGGER" not in actor
+          for path in ("sway/input/seat.c", "sway/input/seatop_default.c",
+                       "sway/commands/move.c", "sway/commands/resize.c"):
+              assert "TIMEW_CI_REAL_INSTRUCTION" not in Path(path).read_text()
+          checker = Path("tests/timew/ci_assert_real_instruction_lineage.py").read_text()
+          for required in ("settled=0", "receipt=NONE", "native_move=OFF",
+                           "protected_selection=NONE", "authority=NONE"):
+              assert required in checker
+          print("TIMEW_REAL_INSTRUCTION_SOURCE_ISOLATION PASS: runtime wiring OFF, authority NONE")
+          PY
+
+      - name: Install pinned native build tooling
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Inject only ephemeral real XDG lifetime and transaction commit hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_xdg_lifecycle.py
+          python3 -B tests/timew/ci_overlay_observed_lineage.py
+          python3 -B tests/timew/ci_overlay_real_instruction_lineage.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-real-instruction-sway.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-instruction-sway.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_REAL_INSTRUCTION_NATIVE_BUILD PASS: pinned SwayPX/wlroots, temporary hooks only"
+
+      - name: Resolve pinned Mesa and real Wayland actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-instruction-sway.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+
+      - name: Exercise two actual mapped XDG lifetimes and real transaction commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-instruction-sway.txt")"
+          TIMEW_CI_REAL_INSTRUCTION_MODE=1 \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          echo "TIMEW_CI_REAL_INSTRUCTION_NATIVE_RUNTIME PASS: real transaction instruction correlated with real mapped XDG, source and authority NONE"
+
+      - name: Record narrowly verified boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A // real transaction instruction candidate correlation" >> "$GITHUB_STEP_SUMMARY"
+          echo "This test uses only a disposable compositor and ordinary untrusted XDG fixture resize." >> "$GITHUB_STEP_SUMMARY"
+          echo "The diagnostic commit counter is minted at an actual transaction instruction callback, not an installed protected transaction credential." >> "$GITHUB_STEP_SUMMARY"
+          echo "No operator physical selection, C3e enrolled source, C5 SPENT, ACK/final frame receipt, move or production Restore." >> "$GITHUB_STEP_SUMMARY"
