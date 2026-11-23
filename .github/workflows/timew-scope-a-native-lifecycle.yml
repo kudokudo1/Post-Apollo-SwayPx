@@ -1,0 +1,113 @@
+name: SwayPX TimeW Scope A Native Lifecycle (dormant)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_lifecycle_signals.h"
+      - "include/sway/timew_scope_a_native_lifecycle.h"
+      - "sway/timew_scope_a_lifecycle_signals.c"
+      - "sway/timew_scope_a_native_lifecycle.c"
+      - "tests/timew/test_timew_scope_a_lifecycle_signals.c"
+      - ".github/workflows/timew-scope-a-native-lifecycle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signal-revocation-and-native-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify no runtime binding and exact lifecycle seams
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          for filename in (
+              "timew_scope_a_lifetime_candidate.c",
+              "timew_scope_a_native_observer.c",
+              "timew_scope_a_lifecycle_signals.c",
+              "timew_scope_a_native_lifecycle.c",
+          ):
+              assert "'" + filename + "'" not in meson, filename
+          adapter = Path("sway/timew_scope_a_native_lifecycle.c").read_text()
+          signals = Path("sway/timew_scope_a_lifecycle_signals.c").read_text()
+          for event in ("&view->events.unmap",
+                        "&con->node.events.destroy",
+                        "&view->surface->events.destroy"):
+              assert event in adapter, event
+          assert "timew_scope_a_observe_pointer_candidate" in adapter
+          assert "timew_scope_a_checked_pending_rect" in adapter
+          assert "wl_signal_add(" in signals
+          assert "timew_scope_a_lifetime_revoke" in signals
+          for source in (adapter, signals):
+              for forbidden in ("seat_set_focus(", "ipc_send_reply(",
+                                "transaction_commit_dirty(",
+                                "container_floating_move_to(",
+                                "cmd_resize(", "cmd_move("):
+                  assert forbidden not in source, forbidden
+          print("TIMEW_NATIVE_LIFECYCLE: source unlinked, native authority NONE")
+          PY
+
+      - name: Install Wayland signal headers on disposable runner
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwayland-dev pkg-config
+
+      - name: Compile and run real Wayland signal lifecycle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            $(pkg-config --cflags wayland-server) \
+            sway/timew_scope_a_lifetime_candidate.c \
+            sway/timew_scope_a_lifecycle_signals.c \
+            tests/timew/test_timew_scope_a_lifecycle_signals.c \
+            -o "$RUNNER_TEMP/timew-signal-test" \
+            $(pkg-config --libs wayland-server) -lm
+          "$RUNNER_TEMP/timew-signal-test"
+
+      - name: Install Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compile exact native compositor adapter without production linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("sway/meson.build")
+          text = path.read_text()
+          needle = "\t'stage_director_social_native.c',"
+          assert text.count(needle) == 1
+          new = (
+              "timew_scope_a_lifetime_candidate.c",
+              "timew_scope_a_native_observer.c",
+              "timew_scope_a_lifecycle_signals.c",
+              "timew_scope_a_native_lifecycle.c",
+          )
+          for item in new:
+              assert "'" + item + "'" not in text
+          added = "".join("\n\t'" + item + "'," for item in new)
+          path.write_text(text.replace(needle, needle + added, 1))
+          print("CI_ONLY: native candidate + observer + event listeners temporarily injected")
+          PY
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-native-lifecycle-store-path.txt"
+          output="$(tail -n 1 "$RUNNER_TEMP/timew-native-lifecycle-store-path.txt")"
+          test -x "$output/bin/sway"
+          echo "TIMEW_NATIVE_LIFECYCLE: pinned SwayPX/wlroots full build PASS; runtime hook OFF"
