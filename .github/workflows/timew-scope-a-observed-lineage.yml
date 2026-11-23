@@ -1,0 +1,159 @@
+name: SwayPX TimeW Scope A Private Observed Lineage (CI-only)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_observed_lineage.h"
+      - "sway/timew_scope_a_observed_lineage.c"
+      - "tests/timew/test_timew_scope_a_observed_lineage.c"
+      - "tests/timew/ci_overlay_observed_lineage.py"
+      - "tests/timew/ci_assert_real_observed_lineage.py"
+      - ".github/workflows/timew-scope-a-observed-lineage.yml"
+      - "MODEL/timew-scope-a-observed-lineage-v0.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-local-issuer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Fail closed on production link or authority claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          m = Path("sway/meson.build").read_text()
+          assert "'timew_scope_a_observed_lineage.c'" not in m
+          for shared in ("sway/desktop/transaction.c",
+                         "sway/input/seatop_default.c",
+                         "sway/tree/view.c"):
+              assert "TIMEW_CI_LINEAGE_" not in Path(shared).read_text()
+          h = Path("include/sway/timew_scope_a_observed_lineage.h").read_text()
+          s = Path("sway/timew_scope_a_observed_lineage.c").read_text()
+          for field in (
+              "physical_selection_authenticated = false",
+              "native_object_origin_authenticated = false",
+              "native_transaction_ack_authenticated = false",
+              "source_enrolled = false", "c5_spent = false",
+              "scene_settled_verified = false", "resize_allowed = false",
+              "move_allowed = false", "protected_receipt_verified = false",
+              "retry_allowed = false", "undo_allowed = false",
+          ):
+              assert field in s, field
+          assert "getrandom(" in s and "lifetime_floor + 1" in s
+          assert "transaction_floor + 1" in s
+          for forbidden in ("cmd_move(", "cmd_resize(", "seat_set_focus(",
+                            "ipc_send_reply(", "wl_signal_add(",
+                            "transaction_commit_dirty(",
+                            "container_floating_move_to("):
+              assert forbidden not in s, forbidden
+          assert "process-local" in h
+          print("TIMEW_LINEAGE_CI_SOURCE_ONLY PASS: no native movement or trust uplift")
+          PY
+
+      - name: Compile and run strict native random lineage and ABA tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/timew_scope_a_exact_geometry.c \
+            sway/timew_scope_a_observed_lineage.c \
+            tests/timew/test_timew_scope_a_observed_lineage.c \
+            -lm -o "$RUNNER_TEMP/timew-lineage-test"
+          "$RUNNER_TEMP/timew-lineage-test"
+
+      - name: Repeat with undefined behavior sanitizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O0 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            -Iinclude \
+            sway/timew_scope_a_exact_geometry.c \
+            sway/timew_scope_a_observed_lineage.c \
+            tests/timew/test_timew_scope_a_observed_lineage.c \
+            -lm -o "$RUNNER_TEMP/timew-lineage-ubsan"
+          "$RUNNER_TEMP/timew-lineage-ubsan"
+
+  real-mapped-xdg-lineage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact stacked SwayPX
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert immutable checked-in compositor before CI-only overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          assert "'timew_scope_a_observed_lineage.c'" not in Path("sway/meson.build").read_text()
+          for name in ("sway/tree/view.c",
+                       "sway/timew_scope_a_ci_real_xdg.c"):
+              assert "TIMEW_CI_LINEAGE_OPEN" not in Path(name).read_text()
+          print("TIMEW_LINEAGE_REAL_XDG_PRECHECK PASS: production wiring none")
+          PY
+
+      - name: Install Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Instrument only disposable native XDG callbacks and compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_xdg_lifecycle.py
+          python3 -B tests/timew/ci_overlay_observed_lineage.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-lineage-real-xdg-store.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-lineage-real-xdg-store.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_LINEAGE_NATIVE_BUILD PASS: pinned real SwayPX/wlroots, no production linkage"
+
+      - name: Resolve pinned Mesa and native Foot actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-lineage-real-xdg-store.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+
+      - name: Exercise two actual XDG lifetimes with private epoch issuer
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-lineage-real-xdg-store.txt")"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          echo "TIMEW_CI_LINEAGE_NATIVE_RUNTIME PASS: two real XDG lifetimes, monotonic private generation, no operator selection/receipt"
+
+      - name: Record bounded CI scope
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A // Private in-compositor diagnostic lineage" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source-only: private random boot and monotonic generation for two real mapped XDG candidates, no physical selection or trust." >> "$GITHUB_STEP_SUMMARY"
+          echo "No installed native command, source enrollment, C5 SPENT, protected receipt, merge or Fedora action." >> "$GITHUB_STEP_SUMMARY"
