@@ -2,7 +2,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 #include "sway/timew_scope_a_native_txn_observer.h"
 #include "sway/output.h"
