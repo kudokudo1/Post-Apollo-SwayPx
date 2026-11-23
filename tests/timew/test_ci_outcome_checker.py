@@ -66,6 +66,73 @@ class DenyOnlyNativeOutcomeTests(unittest.TestCase):
                  "real_callback=1 trusted=1 authority=TRUE")
         self.refuses(x)
 
+    @staticmethod
+    def dual_ready_timeout(ready_first):
+        # Both real stages on one instruction are conflicting outcome
+        # evidence, not clean ACK or clean native timeout proof.
+        x = sample("forced_timeout")
+        for lifetime in (1, 2):
+            timeout_i = next(i for i, row in enumerate(x)
+                             if f"OUTCOME_TIMEOUT lifetime={lifetime}" in row)
+            ready = x[timeout_i].replace("OUTCOME_TIMEOUT", "OUTCOME_READY")
+            x.insert(timeout_i if ready_first else timeout_i + 1, ready)
+        return x
+
+    def test_ready_then_timeout_cannot_qualify(self):
+        x = self.dual_ready_timeout(True)
+        result = validate(x, "forced_timeout")
+        self.assertEqual(result["qualified"], 0)
+        self.assertEqual(result["ambiguous_ready_timeout_hold"], 2)
+        self.assertEqual(result["safe_actions"], [])
+        self.assertFalse(result["settled"])
+        self.refuses(x, "normal")
+
+    def test_timeout_then_ready_cannot_qualify(self):
+        x = self.dual_ready_timeout(False)
+        result = validate(x, "forced_timeout")
+        self.assertEqual(result["qualified"], 0)
+        self.assertEqual(result["ambiguous_ready_timeout_hold"], 2)
+        self.assertEqual(result["safe_actions"], [])
+        self.assertFalse(result["settled"])
+        self.refuses(x, "normal")
+
+    def test_parent_bind_after_ready_rejected(self):
+        x = sample()
+        bind = next(i for i, row in enumerate(x)
+                    if "REAL_INSTRUCTION_BIND lifetime=1" in row)
+        line = x.pop(bind)
+        ready = next(i for i, row in enumerate(x)
+                     if "OUTCOME_READY lifetime=1" in row)
+        x.insert(ready + 1, line)
+        self.refuses(x)
+
+    def test_parent_bind_after_scene_rejected(self):
+        x = sample()
+        bind = next(i for i, row in enumerate(x)
+                    if "REAL_INSTRUCTION_BIND lifetime=1" in row)
+        line = x.pop(bind)
+        scene = next(i for i, row in enumerate(x)
+                     if "OUTCOME_SCENE lifetime=1" in row)
+        x.insert(scene + 1, line)
+        self.refuses(x)
+
+    def test_parent_bind_after_seal_rejected(self):
+        x = sample()
+        bind = next(i for i, row in enumerate(x)
+                    if "REAL_INSTRUCTION_BIND lifetime=1" in row)
+        line = x.pop(bind)
+        seal = next(i for i, row in enumerate(x)
+                    if "OUTCOME_SEAL lifetime=1" in row)
+        x.insert(seal + 1, line)
+        self.refuses(x)
+
+    def test_parent_bind_before_commit_rejected(self):
+        x = sample()
+        bind = next(i for i, row in enumerate(x)
+                    if "REAL_INSTRUCTION_BIND lifetime=1" in row)
+        x[bind - 1], x[bind] = x[bind], x[bind - 1]
+        self.refuses(x)
+
     def test_normal_missing_ready(self):
         self.refuses([x for x in sample() if not x.startswith(
             "TIMEW_CI_OUTCOME_READY lifetime=1")])
