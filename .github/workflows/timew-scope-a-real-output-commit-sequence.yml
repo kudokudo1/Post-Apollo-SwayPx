@@ -1,0 +1,155 @@
+name: SwayPX TimeW Scope A Actual Output Commit-Sequence Attribution (CI-only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/timew/ci_overlay_real_output_present.py"
+      - "tests/timew/ci_assert_real_output_present.py"
+      - "tests/timew/test_ci_real_output_present.py"
+      - ".github/workflows/timew-scope-a-real-output-present.yml"
+      - "MODEL/timew-scope-a-output-present-boundary-v0.md"
+      - "tests/timew/ci_overlay_real_view_buffer_scan.py"
+      - "tests/timew/ci_assert_real_view_buffer_scan.py"
+      - "tests/timew/test_ci_real_view_buffer_scan.py"
+      - "MODEL/timew-scope-a-view-buffer-traversal-v0.md"
+      - ".github/workflows/timew-scope-a-real-view-buffer-scan.yml"
+      - "tests/timew/ci_overlay_real_output_render_commit.py"
+      - "tests/timew/ci_assert_real_output_render_commit.py"
+      - "tests/timew/test_ci_real_output_render_commit.py"
+      - "MODEL/timew-scope-a-output-render-commit-v0.md"
+      - ".github/workflows/timew-scope-a-real-render-commit.yml"
+      - "tests/timew/ci_overlay_real_output_commit_serial.py"
+      - "tests/timew/ci_assert_real_output_commit_serial.py"
+      - "tests/timew/test_ci_real_output_commit_serial.py"
+      - "MODEL/timew-scope-a-output-commit-sequence-v0.md"
+      - ".github/workflows/timew-scope-a-real-output-commit-sequence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-output-sequence-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Keep original compositor and input sources unmodified
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          for p in ("sway/desktop/output.c", "sway/desktop/transaction.c",
+                    "sway/timew_scope_a_ci_real_xdg.c", "sway/meson.build",
+                    "sway/input/seat.c", "sway/input/cursor.c",
+                    "sway/commands/move.c", "sway/commands/resize.c"):
+              assert "TIMEW_CI_OUTPUT_PRESENT" not in Path(p).read_text(), p
+          for p in ("tests/timew/ci_overlay_real_output_commit_serial.py",
+                    "tests/timew/ci_assert_real_output_commit_serial.py",
+                    "tests/timew/test_ci_real_output_commit_serial.py",
+                    "tests/timew/ci_overlay_real_output_render_commit.py",
+                    "tests/timew/ci_assert_real_output_render_commit.py",
+                    "tests/timew/test_ci_real_output_render_commit.py",
+                    "tests/timew/ci_overlay_real_view_buffer_scan.py",
+                    "tests/timew/ci_assert_real_view_buffer_scan.py",
+                    "tests/timew/test_ci_real_view_buffer_scan.py",
+                    "tests/timew/ci_overlay_real_output_present.py",
+                    "tests/timew/ci_assert_real_output_present.py",
+                    "tests/timew/test_ci_real_output_present.py"):
+              compile(Path(p).read_text(), p, "exec")
+          assert "TIMEW_CI_VIEW_BUFFER_SCAN" not in Path("sway/desktop/output.c").read_text()
+          assert "TIMEW_CI_RENDER_COMMIT" not in Path("sway/desktop/output.c").read_text()
+          assert "TIMEW_CI_RENDER_COMMIT" not in Path("sway/timew_scope_a_ci_real_xdg.c").read_text()
+          assert "TIMEW_CI_OUTPUT_SEQ_" not in Path("sway/desktop/output.c").read_text()
+          assert "TIMEW_CI_OUTPUT_SEQ_" not in Path("sway/timew_scope_a_ci_real_xdg.c").read_text()
+          print("TIMEW_CI_OUTPUT_SEQ_SOURCE_ISOLATED PASS")
+          PY
+      - name: Previous real native outcome chronology tests
+        run: python3 -B tests/timew/test_ci_outcome_checker.py
+      - name: Previous native scene and binary64 negative tests
+        run: python3 -B tests/timew/test_ci_real_scene_geometry.py
+      - name: New output PRESENT non-authorizing adversarial tests
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_real_output_present.py
+          echo "TIMEW_CI_OUTPUT_PRESENT_NEGATIVE PASS: no selected-view frame permission"
+      - name: New XDG ancestor buffer-traversal negatives
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_real_view_buffer_scan.py
+          echo "TIMEW_CI_VIEW_BUFFER_NEGATIVE PASS: frame-done scan does not mean rendered or presented"
+      - name: New output state build and backend-commit negative tests
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_real_output_render_commit.py
+          echo "TIMEW_CI_RENDER_COMMIT_NEGATIVE PASS: output state commit is not XDG frame proof"
+      - name: Exact real output commit/present serial and early-unbound adversarial tests
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_real_output_commit_serial.py
+          echo "TIMEW_CI_OUTPUT_SEQ_NEGATIVE PASS: unbound-before-commit presentation never qualifies"
+
+  native-real-output-commit-sequence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Inject real callbacks ONLY into disposable runner source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_xdg_lifecycle.py
+          python3 -B tests/timew/ci_overlay_observed_lineage.py
+          python3 -B tests/timew/ci_overlay_real_instruction_lineage.py
+          python3 -B tests/timew/ci_overlay_real_instruction_outcomes.py
+          python3 -B tests/timew/ci_overlay_real_scene_geometry.py
+          python3 -B tests/timew/ci_overlay_real_output_present.py
+          python3 -B tests/timew/ci_overlay_real_view_buffer_scan.py
+          python3 -B tests/timew/ci_overlay_real_output_render_commit.py
+          python3 -B tests/timew/ci_overlay_real_output_commit_serial.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-real-output-present-sway.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-output-present-sway.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_OUTPUT_PRESENT_NATIVE_BUILD PASS: original compositor output event hook CI only"
+      - name: Use pinned Mesa and real XDG actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-output-present-sway.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Real output PRESENT vs selected-XDG terminal-frame denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-output-present-sway.txt")"
+          for mode in normal forced_timeout; do
+            TIMEW_CI_REAL_INSTRUCTION_MODE=1 TIMEW_CI_OUTCOME_MODE="$mode" \
+              bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          done
+          echo "TIMEW_CI_OUTPUT_SEQ_NATIVE_RUNTIME PASS: actual wlroots output commit/present serials; XDG frame UNVERIFIED"
+      - name: Record strict scope
+        if: always()
+        run: |
+          echo "## SwayPX real output commit_seq versus event PRESENT commit_seq, not an XDG frame receipt" >> "$GITHUB_STEP_SUMMARY"
+          echo "This run observes real wlroots output.commit_seq and output PRESENT event.commit_seq, distinguishing bound output submissions from early/unbound ones. Even true matched output serials DO NOT prove which selected XDG buffer rendered/presented or settled." >> "$GITHUB_STEP_SUMMARY"
+          echo "No signed source/seat identity, selected operator, C5 SPENT, native move/restore, receipt, retry or production deployment." >> "$GITHUB_STEP_SUMMARY"
