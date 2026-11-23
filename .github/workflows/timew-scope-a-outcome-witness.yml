@@ -1,0 +1,133 @@
+name: SwayPX TimeW Scope A Per-Instruction Outcome Witness (CI only)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_ci_real_outcome.h"
+      - "tests/timew/ci_overlay_real_instruction_outcomes.py"
+      - "tests/timew/ci_assert_real_instruction_outcomes.py"
+      - "tests/timew/test_ci_outcome_checker.py"
+      - ".github/workflows/timew-scope-a-outcome-witness.yml"
+      - "MODEL/timew-scope-a-native-outcome-witness-v0.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-log-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject production linkage or authorized fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          files = (
+              "sway/desktop/transaction.c",
+              "sway/timew_scope_a_ci_real_xdg.c",
+              "sway/meson.build",
+              "sway/input/seat.c",
+              "sway/input/seatop_default.c",
+              "sway/commands/resize.c",
+              "sway/commands/move.c",
+          )
+          for path in files:
+              s = Path(path).read_text()
+              assert "TIMEW_CI_OUTCOME_" not in s, path
+              assert "timew_scope_a_ci_real_outcome" not in s, path
+          checker = Path("tests/timew/ci_assert_real_instruction_outcomes.py").read_text()
+          for marker in ("safe_actions", "settled=0", "native_move=OFF",
+                         "authority=NONE", "c5_spent=NONE", "receipt=NONE"):
+              assert marker in checker, marker
+          overlay = Path("tests/timew/ci_overlay_real_instruction_outcomes.py").read_text()
+          for marker in ("GITHUB_ACTIONS", "RUNNER_TEMP", "TIMEW_CI_OUTCOME_"):
+              assert marker in overlay
+          print("TIMEW_CI_OUTCOME_SOURCE_ISOLATED: no shipped transaction hook, receipt or action")
+          PY
+      - name: Compile Python overlay and checker without execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          for path in (
+              "tests/timew/ci_overlay_real_instruction_outcomes.py",
+              "tests/timew/ci_assert_real_instruction_outcomes.py",
+              "tests/timew/test_ci_outcome_checker.py",
+          ):
+              compile(Path(path).read_text(), path, "exec")
+          print("TIMEW_CI_OUTCOME_PYTHON_SYNTAX PASS")
+          PY
+      - name: Adversarial missing/reordered/replayed/stale outcome record tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/test_ci_outcome_checker.py
+
+  native-real-callbacks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact stacked SwayPX branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Nix on disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Instrument real instruction outcomes only in temporary checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_xdg_lifecycle.py
+          python3 -B tests/timew/ci_overlay_observed_lineage.py
+          python3 -B tests/timew/ci_overlay_real_instruction_lineage.py
+          python3 -B tests/timew/ci_overlay_real_instruction_outcomes.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-real-outcome-sway.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-outcome-sway.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_OUTCOME_NATIVE_BUILD PASS: actual SwayPX/wlroots, CI callback overlay only"
+      - name: Resolve pinned Mesa and real XDG fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-outcome-sway.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Exercise real XDG READY and native forced TIMEOUT per instruction
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-outcome-sway.txt")"
+          for mode in normal forced_timeout; do
+            echo "TIMEW_CI_OUTCOME_NATIVE_MODE_START $mode"
+            TIMEW_CI_REAL_INSTRUCTION_MODE=1 TIMEW_CI_OUTCOME_MODE="$mode" \
+              bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          done
+          echo "TIMEW_CI_OUTCOME_NATIVE_RUNTIME PASS: normal and forced-timeout actual callbacks; protected authority NONE"
+      - name: Summarize the exact authority boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A native outcome diagnostic" >> "$GITHUB_STEP_SUMMARY"
+          echo "Two independent headless SwayPX sessions with two real XDG lifetimes each." >> "$GITHUB_STEP_SUMMARY"
+          echo "Actual COMMIT/READY/TIMEOUT/CURRENT/SCENE callbacks are diagnostic observations, not signed receipts." >> "$GITHUB_STEP_SUMMARY"
+          echo "No operator selection, source enrollment, C5 grant, settled per-view frame, installed command or native Restore." >> "$GITHUB_STEP_SUMMARY"
