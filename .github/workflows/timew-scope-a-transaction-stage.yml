@@ -1,0 +1,125 @@
+name: SwayPX TimeW Scope A Transaction Stage (deny-only CI)
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_txn_stage.h"
+      - "sway/timew_scope_a_txn_stage.c"
+      - "tests/timew/test_timew_scope_a_txn_stage.c"
+      - "include/sway/timew_scope_a_native_txn_observer.h"
+      - "sway/timew_scope_a_native_txn_observer.c"
+      - ".github/workflows/timew-scope-a-transaction-stage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-stage-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Guard absent production privilege
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          for unit in ("timew_scope_a_txn_stage.c",
+                       "timew_scope_a_native_txn_observer.c"):
+              assert "'" + unit + "'" not in meson
+          source = Path("sway/timew_scope_a_txn_stage.c").read_text()
+          native = Path("sway/timew_scope_a_native_txn_observer.c").read_text()
+          for must in (
+                  "geometry_settled_verified = false",
+                  "native_resize_allowed = false",
+                  "native_move_allowed = false",
+                  "configure_ack_authenticated = false",
+                  "compositor_receipt_authenticated = false"):
+              assert must in source
+          assert "current_layout_value_observed = true" in native
+          for file in (source, native):
+              for forbidden in (
+                  "cmd_move(", "cmd_resize(", "ipc_send_reply(",
+                  "transaction_commit_dirty(", "container_floating_move_to(",
+                  "wl_signal_add(", "seat_set_focus("):
+                  assert forbidden not in file, forbidden
+          print("TIMEW_TRANSACTION_STAGE_SOURCE_ONLY: no native permission/receipt")
+          PY
+
+      - name: Compile and exercise strict test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
+            -Iinclude sway/timew_scope_a_txn_stage.c \
+            tests/timew/test_timew_scope_a_txn_stage.c \
+            -o "$RUNNER_TEMP/timew-txn-stage-test"
+          "$RUNNER_TEMP/timew-txn-stage-test"
+
+      - name: Repeat with undefined behavior sanitizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O0 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            -Iinclude sway/timew_scope_a_txn_stage.c \
+            tests/timew/test_timew_scope_a_txn_stage.c \
+            -o "$RUNNER_TEMP/timew-txn-stage-ubsan"
+          "$RUNNER_TEMP/timew-txn-stage-ubsan"
+
+  pinned-native-snapshot-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact PR source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert production Meson has no TimeW transaction source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Fq "'timew_scope_a_native_txn_observer.c'" sway/meson.build
+          ! grep -Fq "'timew_scope_a_txn_stage.c'" sway/meson.build
+
+      - name: Install Nix in disposable runner
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compile actual SwayPX types without persistent native linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("sway/meson.build")
+          old = p.read_text()
+          anchor = "\t'stage_director_social_native.c',"
+          assert old.count(anchor) == 1
+          names = (
+              "timew_scope_a_exact_geometry.c",
+              "timew_scope_a_txn_stage.c",
+              "timew_scope_a_native_txn_observer.c",
+          )
+          for name in names:
+              assert "'" + name + "'" not in old
+          p.write_text(old.replace(anchor, anchor +
+              "".join("\n\t'" + name + "'," for name in names), 1))
+          print("TIMEW_TRANSACTION_STAGE_CI_ONLY: disposable Meson injection")
+          PY
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-transaction-observer-build.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-transaction-observer-build.txt")"
+          test -x "$compositor/bin/sway"
+          echo "TIMEW_TRANSACTION_STAGE_NATIVE_COMPILE PASS: real SwayPX/wlroots; runtime hooks OFF, receipts NONE"
