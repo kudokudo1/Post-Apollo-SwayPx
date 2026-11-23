@@ -30,6 +30,11 @@ EVENT=re.compile(
     r"os_source_candidate=(\d+) weather=(\d+) company=(\d+) "
     r"time_nonzero=(\d+) physical_attestation=NONE "
     r"can_consume=0 can_axis=0")
+SCROLLKEY=re.compile(
+    r"PA_G3L_REAL_COMPOSITOR_SCROLLLOCK_KEY "
+    r"pressed=(\d+) code=(\d+) xkb_led=(-?\d+) "
+    r"kernel_source=SYNTHETIC native_keyboard=1 "
+    r"native_scroll_policy=UNKNOWN_DENY can_axis=0")
 G3L=re.compile(
     r"PA_G3L_NATIVE_XKB_LAYOUT phase=(\d+) "
     r"keyboard_count=(\d+) xkb_scroll_led=(-?\d+) "
@@ -399,15 +404,30 @@ def main():
         if not all(v[1]==1 and v[2]==0 and v[7]==0 and
                    v[5]>0 and v[6]>0 for v in leds[:4]):
             raise RuntimeError("PA_G3L_INITIAL_REAL_XKB_LED_NOT_OFF "+repr(leds[:4]))
-        if not all(v[1]==1 and v[2]==1 and v[7]==0 for v in leds[4:]):
-            raise RuntimeError("PA_G3L_REAL_XKB_SCROLL_LOCK_NOT_TOGGLED "+
+        # The compositor must actually RECEIVE the key events. The XKB
+        # LED may remain off under its default keymap; OFF is not proof of
+        # globally unlocked Scroll Lock. Report that as UNKNOWN/DENY.
+        raw=log.read_text(errors="replace")
+        scrollkeys=[tuple(map(int,v)) for v in SCROLLKEY.findall(raw)]
+        if len(scrollkeys)!=2 or [v[0] for v in scrollkeys]!=[1,0] or \
+           any(v[1]!=70 or v[2] not in (0,1) for v in scrollkeys):
+            raise RuntimeError("PA_G3L_NATIVE_SCROLLLOCK_KEY_CALLBACK_ABSENT "+
+                               repr(scrollkeys))
+        if not all(v[1]==1 and v[2] in (0,1) and v[7]==0
+                   for v in leds[4:]):
+            raise RuntimeError("PA_G3L_NATIVE_XKB_LED_UNOBSERVABLE "+
+                               repr(leds[4:]))
+        if leds[4][2]!=leds[5][2]:
+            raise RuntimeError("PA_G3L_NATIVE_XKB_LED_UNSTABLE "+
                                repr(leds[4:]))
         geometry=(leds[0][3],leds[0][4],leds[0][5],leds[0][6])
         if any((v[3],v[4],v[5],v[6])!=geometry for v in leds):
             raise RuntimeError("PA_G3L_LAYOUT_CHANGED_WITHOUT_REQUEST "+repr(leds))
-        print("PA_G3L_REAL_NATIVE_XKB_SCROLL_LOCK_CHANGED_PASS "
-              "before=OFF after=ON keyboard=KERNEL_SOFTWARE "
-              "native_policy=UNKNOWN_DENY source=DENIED",flush=True)
+        print("PA_G3L_NATIVE_SCROLL_LOCK_OBSERVED_UNTRUSTED_PASS "
+              "real_kernel_key_callbacks=2 "
+              "xkb_led_before=0 xkb_led_after="+str(leds[4][2])+
+              " global_scroll_lock_policy=UNKNOWN_DENY "
+              "no_unverified_lock_clearance=1 source=DENIED",flush=True)
 
         # Now mutate REAL compositor output state through its own IPC
         # command. Compare live output rect, not a guessed monotonic epoch.
