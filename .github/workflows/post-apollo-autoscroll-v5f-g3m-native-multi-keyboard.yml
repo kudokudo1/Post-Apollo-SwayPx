@@ -1,0 +1,176 @@
+name: SwayPX / V5F-G3M Real Native Two-Keyboard Hotplug Negative (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3m_multi_keyboard_actor.c'
+      - 'tests/autoscroll/ci_v5f_g3m_native_multikeyboard_observer.c'
+      - 'tests/autoscroll/ci_v5f_g3m_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_g3m_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_g3m_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_g3m_native_hotplug.py'
+      - 'MODEL/autoscroll-v5f-g3m-native-multi-keyboard-hotplug-negative.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3m-native-multi-keyboard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-real-virtual-middle-negative-ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_G2_NATIVE_BUTTON: "2"
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "2"
+      PA_G3E_REAL_MIDDLE_NEGATIVE: "1"
+      PA_G3H_REAL_MIDDLE_NEGATIVE: "1"
+      PA_G3H_NATIVE_OS_DIAG: "1"
+      PA_G3J_NATIVE_LIBINPUT_DIAG: "1"
+      PA_G3J_KERNEL_ACTOR: "1"
+      PA_G3K_KERNEL_ACTOR: "1"
+      PA_G3K_NATIVE_GUARD: "1"
+      PA_G3L_NATIVE_OBSERVE: "1"
+      PA_G3M_NATIVE_OBSERVE: "1"
+      PA_G3M_KERNEL_ACTOR: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact G3E head, no GitHub write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Eight-file G3M additive-only, production hard-off and source checks
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3l-native-scroll-lock-layout-observation-20261123"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allow={
+              "tests/autoscroll/ci_v5f_g3m_multi_keyboard_actor.c",
+              "tests/autoscroll/ci_v5f_g3m_native_multikeyboard_observer.c",
+              "tests/autoscroll/ci_v5f_g3m_native_overlay.py",
+              "tests/autoscroll/ci_v5f_g3m_native_trace.py",
+              "tests/autoscroll/ci_v5f_g3m_udmabuf.sh",
+              "tests/autoscroll/test_v5f_g3m_native_hotplug.py",
+              "MODEL/autoscroll-v5f-g3m-native-multi-keyboard-hotplug-negative.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3m-native-multi-keyboard.yml",
+          }
+          assert changed==allow,(sorted(changed-allow),sorted(allow-changed))
+          cursor=Path("sway/input/cursor.c").read_text()
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "pa_g3e_native_middle_negative_observe" not in cursor
+          assert "pa_g3h_native_os_managed_diagnostic_observe" not in cursor
+          assert "pa_g3j_real_libinput_compositor_observe" not in cursor
+          assert "pa_g3k_native_guard_negative_observe" not in cursor
+          assert "pa_g3l_native_lock_layout_observe" not in cursor
+          assert "pa_g3m_native_multikeyboard_observe" not in cursor
+          assert "pa_g3m_native_second_keyboard_key_observe" not in Path("sway/input/keyboard.c").read_text()
+          assert "ci_v5f_g3m_native_multikeyboard_observer.c" not in meson
+          assert "ci_v5f_g3l_native_keyboard_layout_probe.c" not in meson
+          assert "ci_v5f_g3k_native_guard_negative.c" not in meson
+          assert "ci_v5f_g3j_native_compositor_probe.c" not in meson
+          assert "ci_v5f_g3h_native_os_observer.c" not in meson
+          assert "ci_v5f_g3f_trust_policy.c" not in meson
+          assert "ci_v5f_g3e_native_probe.c" not in meson
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          print("PA_G3M_EXACT_EIGHT_FILE_PRODUCTION_AND_COMPANY_UNCHANGED_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3m_native_hotplug.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3l_native_keyboard_layout.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3k_native_owner_unmap.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3j_compositor_libinput.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3i_real_libinput_middle.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3h_native_os_observer.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3g_kernel_uinput_negative.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3f_two_tier_trust_policy.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3e_real_middle_negative.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3d_native_scene_led.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g2_virtual_middle.py' -v
+          test -z "$(git status --porcelain)"
+
+      - name: Install Nix only in disposable GitHub environment
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compose G3M all-keyboard observer and G3L source in disposable compositor copy
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g3m_native_overlay.py
+          test -z "$(git status --porcelain)"
+
+      - name: Build G3M two-keyboard hotplug actor and native compositor
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc2-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          seatd="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.seatd.bin' --no-link --print-out-paths | tail -n1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -x "$seatd/bin/seatd"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          build="$RUNNER_TEMP/pa-g3m-native-fixtures"
+          mkdir -m 700 "$build"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
+            tests/autoscroll/ci_v5f_g3m_multi_keyboard_actor.c \
+            -o "$build/pa-g3m-uinput-actor"
+          test -x "$build/pa-g3m-uinput-actor"
+          echo "PA_G2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_G2_MESA=$mesa" >> "$GITHUB_ENV"
+          echo "PA_G3E_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_G3E_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "PA_G3J_SEATD=$seatd/bin/seatd" >> "$GITHUB_ENV"
+          echo "PA_G3J_ACTOR_BINARY=$build/pa-g3m-uinput-actor" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G3M_NATIVE_TEST_BINARIES_PINNED_PASS"
+
+      - name: Prove real second keyboard hotplug and removal never clear lock authority
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_TEMP" = /home/runner/work/_temp
+          if ! test -c /dev/uinput; then sudo -n modprobe uinput; fi
+          test -c /dev/uinput || {
+            echo "::error title=PA_G3J_UINPUT_UNAVAILABLE::No native test fixture"
+            exit 2
+          }
+          bash tests/autoscroll/ci_v5f_g3m_udmabuf.sh
+          test -z "$(git status --porcelain)"
+
+      - name: Preserve G3M real hotplug, still no global lock authority
+        if: always()
+        run: |
+          echo "G3M requires real second uinput keyboard registration and removal in actual native SwayPX get_inputs, separate Scroll Lock key callback, and actual seat keyboard baseline->baseline+1->baseline, including preexisting unknown keyboard/groups during eight real middle-button callbacks." >> "$GITHUB_STEP_SUMMARY"
+          echo "Both devices are software-created with fake USB bus, never physically attested. Even matching XKB LED readings do not prove global Scroll Lock unlocked; lock_authority=UNKNOWN_DENY; guard always DENIED, original seatop preserved, zero scroll axis." >> "$GITHUB_STEP_SUMMARY"
+          echo "Only a disposable compositor COPY is instrumented. No tracked production source edits, no Company Map input/scene changes, no TimeW/Connections changes, no merge, no installed workstation activation. Autoscroll HARD OFF." >> "$GITHUB_STEP_SUMMARY"
