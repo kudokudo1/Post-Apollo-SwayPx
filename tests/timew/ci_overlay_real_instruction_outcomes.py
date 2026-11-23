@@ -132,8 +132,17 @@ void timew_scope_a_ci_outcome_ready(struct sway_view *view,
 		return;
 	}
 	struct ci_outcome_record *record = ci_outcome_find(ref, serial, true);
-	if (!record || record->ready || record->current) {
-		fail("real_ready_for_unknown_or_completed_instruction");
+	if (!record) {
+		/* Real XDG callbacks can arrive before a new candidate's
+		 * instruction has been recorded. Unbound callbacks must be
+		 * reported as UNKNOWN/HOLD, never attributed to a later commit. */
+		fprintf(stderr, "TIMEW_CI_OUTCOME_ORPHAN_READY "
+			"unbound=1 real_callback=1 trusted=0 authority=NONE\\n");
+		fflush(stderr);
+		return;
+	}
+	if (record->ready || record->current) {
+		fail("duplicate_or_late_real_ready");
 	}
 	record->ready = true;
 	ci_outcome_emit("READY", record);
