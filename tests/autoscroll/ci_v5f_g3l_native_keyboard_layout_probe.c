@@ -73,11 +73,15 @@ void pa_g3l_native_lock_layout_observe(
 
     /* This is actual live compositor layout geometry, not a complete
      * monotonic scene-generation witness. NEVER use extent as a token. */
-    const struct wlr_box *box=root && root->output_layout ?
-        wlr_output_layout_get_box(root->output_layout,NULL) : NULL;
-    const int x=box ? box->x : -1, y=box ? box->y : -1;
-    const int width=box ? box->width : 0;
-    const int height=box ? box->height : 0;
+    struct wlr_box live_box = {0};
+    const bool layout_present=root != NULL && root->output_layout != NULL;
+    if (layout_present) {
+        wlr_output_layout_get_box(root->output_layout,NULL,&live_box);
+    }
+    const int x=layout_present ? live_box.x : -1;
+    const int y=layout_present ? live_box.y : -1;
+    const int width=layout_present ? live_box.width : 0;
+    const int height=layout_present ? live_box.height : 0;
     const struct pa_autoscroll_origin_facts facts=
         pa_autoscroll_source_probe(mouse);
     const bool source_candidate=pa_autoscroll_origin_classify(&facts)==
