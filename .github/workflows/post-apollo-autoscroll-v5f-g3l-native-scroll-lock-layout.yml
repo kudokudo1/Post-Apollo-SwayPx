@@ -164,6 +164,6 @@ jobs:
       - name: Preserve G3L real-state observation and denial limitations
         if: always()
         run: |
-          echo "G3L requires a real kernel uinput keyboard and mouse, native compositor libinput input registration, actual Scroll Lock key press/release, live XKB LED changing OFF->ON, and an actual compositor output-layout IPC position change." >> "$GITHUB_STEP_SUMMARY"
-          echo "Eight real middle-button callbacks, native guard begin/tick all DENIED and normal seatop unchanged; zero axis. Current one-keyboard XKB LED is NOT complete multi-keyboard policy or physical HID provenance; layout rectangle is NOT a monotonic scene generation witness." >> "$GITHUB_STEP_SUMMARY"
+          echo "G3L requires a real kernel uinput keyboard and mouse, native compositor libinput input registration, actual Scroll Lock key press/release, a real native SwayPX Scroll Lock keyboard callback and its XKB LED response, including unchanged/off, and an actual compositor output-layout IPC position change." >> "$GITHUB_STEP_SUMMARY"
+          echo "Eight real middle-button callbacks, actual keyboard press/release callbacks, native guard begin/tick all DENIED and normal seatop unchanged; zero axis. Current one-keyboard XKB LED is NOT complete multi-keyboard policy or physical HID provenance; layout rectangle is NOT a monotonic scene generation witness." >> "$GITHUB_STEP_SUMMARY"
           echo "No production cursor, seat, input manager, keyboard, output, Meson or runtime changes; Company Map retains shared input, Autoscroll HARD OFF, TimeW Restore HOLD, no merge or workstation action." >> "$GITHUB_STEP_SUMMARY"
