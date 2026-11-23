@@ -21,14 +21,14 @@ cleanup() {
 }
 trap cleanup EXIT
 if [[ "${CI:-}" != true || "${GITHUB_ACTIONS:-}" != true ||
-      "${PA_G3E_NATIVE_BUTTON:-}" != 2 ||
+      "${PA_G2_NATIVE_BUTTON:-}" != 2 ||
       "${PA_AUTOSCROLL_CI_NATIVE_TRACE:-}" != 2 ||
       "${RUNNER_TEMP:-}" != /home/runner/work/_temp ||
       "$uid" == 0 || "${PA_G2_SWAY:-}" != /nix/store/* ||
       "${PA_G2_CLIENT:-}" != "$RUNNER_TEMP"/* ||
       "${PA_G2_MESA:-}" != /nix/store/* ||
       "${PA_G3E_REAL_MIDDLE_NEGATIVE:-}" != 1 ||
-      "${PA_G2_SWAYMSG:-}" != /nix/store/* ||
+      "${PA_G3E_SWAYMSG:-}" != /nix/store/* ||
       "${PA_G3E_FOOT:-}" != /nix/store/* ]]; then
   echo "BLOCKED_G3E_UDMABUF_NOT_DISPOSABLE_CI" >&2
   exit 2
