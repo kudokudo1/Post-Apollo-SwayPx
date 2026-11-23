@@ -52,6 +52,20 @@ class DenyOnlyNativeOutcomeTests(unittest.TestCase):
         self.assertEqual(r["safe_actions"], [])
         self.assertFalse(r["settled"])
 
+    def test_early_unbound_ready_is_diagnostic_only(self):
+        x = sample()
+        x.insert(1, "TIMEW_CI_OUTCOME_ORPHAN_READY unbound=1 "
+                 "real_callback=1 trusted=0 authority=NONE")
+        result = validate(x, "normal")
+        self.assertEqual(result["safe_actions"], [])
+        self.assertFalse(result["settled"])
+
+    def test_forged_unbound_ready_is_rejected(self):
+        x = sample()
+        x.insert(1, "TIMEW_CI_OUTCOME_ORPHAN_READY unbound=1 "
+                 "real_callback=1 trusted=1 authority=TRUE")
+        self.refuses(x)
+
     def test_normal_missing_ready(self):
         self.refuses([x for x in sample() if not x.startswith(
             "TIMEW_CI_OUTCOME_READY lifetime=1")])
