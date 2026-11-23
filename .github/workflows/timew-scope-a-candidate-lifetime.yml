@@ -1,0 +1,54 @@
+name: SwayPX TimeW Scope A Candidate Lifetime
+
+on:
+  pull_request:
+    paths:
+      - "include/sway/timew_scope_a_lifetime_candidate.h"
+      - "sway/timew_scope_a_lifetime_candidate.c"
+      - "tests/timew/test_timew_scope_a_lifetime_candidate.c"
+      - ".github/workflows/timew-scope-a-candidate-lifetime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-only-no-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact PR source
+        uses: actions/checkout@v4
+
+      - name: Confirm source-only isolation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          meson = Path("sway/meson.build").read_text()
+          assert "'timew_scope_a_lifetime_candidate.c'" not in meson, (
+              "No production-linked native TimeW selection without approval"
+          )
+          header = Path("include/sway/timew_scope_a_lifetime_candidate.h").read_text()
+          source = Path("sway/timew_scope_a_lifetime_candidate.c").read_text()
+          assert "native_resize_allowed = false" in source
+          assert "native_move_allowed = false" in source
+          assert "c5_spend_verified = false" in source
+          assert "protected_receipt_verified = false" in source
+          assert "NOT LINKED INTO SWAYPX" in header
+          print("TIMEW_SCOPE_A_SOURCE_ONLY: native authority NONE")
+          PY
+
+      - name: Compile strict standalone C test
+        shell: bash
+        run: |
+          cc -std=c11 -O2 -g -Wall -Wextra -Werror -pedantic \
+            -Iinclude \
+            sway/timew_scope_a_lifetime_candidate.c \
+            tests/timew/test_timew_scope_a_lifetime_candidate.c \
+            -o "$RUNNER_TEMP/timew_scope_a_lifetime_candidate_test"
+
+      - name: Run candidate, revocation and authority-denial cases
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/timew_scope_a_lifetime_candidate_test"
