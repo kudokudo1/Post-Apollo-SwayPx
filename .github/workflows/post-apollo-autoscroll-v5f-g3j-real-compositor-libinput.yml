@@ -116,7 +116,7 @@ jobs:
           sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
           foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
           mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
-          seatd="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.seatd' --no-link --print-out-paths | tail -n1)"
+          seatd="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.seatd.bin' --no-link --print-out-paths | tail -n1)"
           test -x "$sway/bin/sway"
           test -x "$sway/bin/swaymsg"
           test -x "$foot/bin/foot"
