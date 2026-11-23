@@ -91,8 +91,13 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
 
     def test_sampled_generation_zero_never_authorizes(self):
         rows=sample()
-        for tag in ("SAMPLE","COMMIT","PRESENT"):
-            rows=replace_gen(rows,1,tag,"=101","=0")
+        rows=replace_gen(rows,1,"SAMPLE",
+                         "surface_state_seq=101","surface_state_seq=0")
+        rows=replace_gen(rows,1,"COMMIT",
+                         "sampled_surface_seq=101 current_surface_seq=101",
+                         "sampled_surface_seq=0 current_surface_seq=0")
+        rows=replace_gen(rows,1,"PRESENT",
+                         "current_surface_seq=101","current_surface_seq=0")
         r=validate_surface_generation(rows,"normal")
         self.assertEqual(r["superseded_or_wrapped_at_commit_hold"],1)
         self.assertFalse(r["settled"])
