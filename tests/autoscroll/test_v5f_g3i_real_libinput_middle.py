@@ -79,7 +79,7 @@ class RealLibinputMiddleNegative(unittest.TestCase):
             "real libinput", "BTN_MIDDLE",
             "not prove acceptance of a genuine physical mouse",
             "not prove an actual", "wlr_input_device_is_libinput",
-            "Company Map", "TimeW", "without a compositor",
+            "Company Map", "TimeW", "does not use the SwayPX compositor",
         ):
             self.assertIn(token.lower(),MODEL.lower())
 
