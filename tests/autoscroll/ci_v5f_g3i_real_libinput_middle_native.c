@@ -31,6 +31,8 @@
 #include "sway/input/post_apollo_autoscroll_topology.h"
 #include "sway/input/post_apollo_autoscroll_origin_policy.h"
 
+static void tick_wait(void);
+
 static int open_restricted(const char *path, int flags, void *user_data) {
     (void)user_data;
     int fd = open(path, flags | O_CLOEXEC);
