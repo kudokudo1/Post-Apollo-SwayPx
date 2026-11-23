@@ -42,6 +42,7 @@ class NativeKeyboardAndLayout(unittest.TestCase):
             "sd->keyboard->wlr->xkb_state",
             "xkb_state_led_name_is_active(",
             "XKB_LED_NAME_SCROLL","keyboard_count != 1",
+            "PA_G3L_REAL_COMPOSITOR_SCROLLLOCK_KEY",
             "wlr_output_layout_get_box(root->output_layout,NULL,&live_box)",
             "pa_autoscroll_source_probe(mouse)",
             "PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE",
@@ -64,13 +65,16 @@ class NativeKeyboardAndLayout(unittest.TestCase):
             "g3k.main()",
             "pa_g3l_native_lock_layout_observe(cursor, event)",
             "ci_v5f_g3l_native_keyboard_layout_probe.c",
+            "KEYBOARD_KEY_EVENT",
             "PA_G3L_TRACKED_SOURCE_MODIFIED",
         ):
             self.assertIn(word,OVERLAY)
         for word in (
             "PA_G3L_REAL_NATIVE_KEYBOARD_REGISTERED_PASS",
             "PA_G3L_REAL_KERNEL_SCROLL_LOCK_KEY_TOGGLED_PASS",
-            "PA_G3L_REAL_NATIVE_XKB_SCROLL_LOCK_CHANGED_PASS",
+            "PA_G3L_NATIVE_SCROLLLOCK_KEY_CALLBACK_ABSENT",
+            "SCROLLKEY.findall(raw)",
+            "PA_G3L_NATIVE_SCROLL_LOCK_OBSERVED_UNTRUSTED_PASS",
             "PA_G3L_REAL_NATIVE_OUTPUT_LAYOUT_CHANGED_GUARD_DENIED_PASS",
             "output {output} pos {new_x} 0",
             '"-t","get_outputs"',
