@@ -93,7 +93,10 @@ class G3MNativeHotplug(unittest.TestCase):
             "PA_G3M_GUARD_BECAME_ADMITTING",
             "SECONDKEY.findall(raw)",
             "G3M.findall(raw)",
-            "expected=[1,1,1,1,2,2,1,1]",
+            "expected=[baseline]*4+[baseline+1]*2+[baseline]*2",
+            "unexpected_baseline=",
+            "keyboard_groups=",
+            "PA_G3M_UNRECOGNIZED_GROUP_MISTAKEN_CLEAN",
             "len(G3K.findall(raw))!=8",
             "normal_dispatch=8 axis_frames=0",
         ):
