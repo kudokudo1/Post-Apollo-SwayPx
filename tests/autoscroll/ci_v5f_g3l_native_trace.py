@@ -475,7 +475,7 @@ def main():
             time.sleep(.05)
         if len(leds)!=8 or [v[0] for v in leds]!=[1,0]*4:
             raise RuntimeError("PA_G3L_EXTRA_OR_MISSING_NATIVE_EVENTS "+repr(leds))
-        if not all(v[1]==1 and v[2]==1 and v[3]==new_x and
+        if not all(v[1]==1 and v[2]==leds[4][2] and v[3]==new_x and
                    v[4]==0 and v[5]==geometry[2] and
                    v[6]==geometry[3] and v[7]==0 for v in leds[6:]):
             raise RuntimeError("PA_G3L_NATIVE_LAYOUT_NOT_CURRENT "+repr(leds[6:]))
