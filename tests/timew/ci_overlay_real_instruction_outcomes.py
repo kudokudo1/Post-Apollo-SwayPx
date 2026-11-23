@@ -137,7 +137,7 @@ void timew_scope_a_ci_outcome_ready(struct sway_view *view,
 		 * instruction has been recorded. Unbound callbacks must be
 		 * reported as UNKNOWN/HOLD, never attributed to a later commit. */
 		fprintf(stderr, "TIMEW_CI_OUTCOME_ORPHAN_READY "
-			"unbound=1 real_callback=1 trusted=0 authority=NONE\\n");
+			"unbound=1 real_callback=1 trusted=0 authority=NONE\n");
 		fflush(stderr);
 		return;
 	}
