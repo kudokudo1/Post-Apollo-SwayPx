@@ -83,6 +83,8 @@ class G3MNativeHotplug(unittest.TestCase):
     def test_real_native_hotplug_and_key_callbacks_required(self):
         for token in (
             "PA_G3M_SECOND_NATIVE_INPUT_REGISTERED_PASS",
+            '"PA_G3M_KERNEL_ACTOR")}',
+            '"sudo","-n","env"',
             "PA_G3M_SECOND_NATIVE_INPUT_REMOVED_PASS",
             "PA_G3M_REAL_NATIVE_MULTIKEYBOARD_HOTPLUG_DENIED_PASS",
             "PA_G3M_NATIVE_ALL_SYNTHETIC_INPUTS_REMOVED_PASS",
