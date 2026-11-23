@@ -229,8 +229,8 @@ fi
 s = one(s,
     '  python3 -B tests/timew/ci_assert_real_instruction_lineage.py "$log"',
     '  python3 -B tests/timew/ci_assert_real_instruction_lineage.py "$log"\n'
-    '  python3 -B tests/timew/ci_assert_real_instruction_outcomes.py\n'
-    '    "$log" "$TIMEW_CI_OUTCOME_MODE"',
+    '  python3 -B tests/timew/ci_assert_real_instruction_outcomes.py '
+    '"$log" "$TIMEW_CI_OUTCOME_MODE"',
     "ENFORCE_PER_INSTRUCTION_OUTCOMES",
 )
 # Validate ALL source anchors before touching any of the temporary files.
