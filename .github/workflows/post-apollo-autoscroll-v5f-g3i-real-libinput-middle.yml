@@ -1,0 +1,128 @@
+name: SwayPX / V5F-G3I Real Kernel Middle Events Through Libinput (DENIED) (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3i_real_libinput_middle_native.c'
+      - 'tests/autoscroll/test_v5f_g3i_real_libinput_middle.py'
+      - 'MODEL/autoscroll-v5f-g3i-real-libinput-middle-negative.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3i-real-libinput-middle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-libinput-middle-event-negative-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PA_G3I_NATIVE_UINPUT_NEGATIVE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact G3I head without saved credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Enforce four new test-only files, native runtime HARD OFF
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3h-native-os-managed-diagnostic-observer-20261123"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_g3i_real_libinput_middle_native.c",
+              "tests/autoscroll/test_v5f_g3i_real_libinput_middle.py",
+              "MODEL/autoscroll-v5f-g3i-real-libinput-middle-negative.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3i-real-libinput-middle.yml",
+          }
+          assert changed==allowed,(sorted(changed-allowed),sorted(allowed-changed))
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert "ci_v5f_g3i_real_libinput_middle_native.c" not in meson
+          print("PA_G3I_EXACT_FOUR_NEW_PATHS_AND_SHIPPED_HARD_OFF_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g3i_real_libinput_middle.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g3h_native_os_observer.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g3g_kernel_uinput_negative.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g3f_two_tier_trust_policy.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g3e_real_middle_negative.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_g1_provenance_boundary.py' -v
+          test -z "$(git status --porcelain)"
+
+      - name: Assert runner is an isolated GitHub-hosted disposable VM
+        run: |
+          set -euo pipefail
+          test "$CI" = true
+          test "$GITHUB_ACTIONS" = true
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_TEMP" = /home/runner/work/_temp
+          test "$(id -u)" != 0
+          test "$PA_G3I_NATIVE_UINPUT_NEGATIVE" = 1
+          echo "PA_G3I_GITHUB_HOSTED_DISPOSABLE_RUNNER_ONLY_PASS"
+
+      - name: Install libinput development dependencies in ephemeral runner only
+        run: |
+          set -euo pipefail
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y -qq libinput-dev libudev-dev pkg-config
+          pkg-config --exists libinput libudev
+          echo "PA_G3I_REAL_LIBINPUT_HEADERS_AVAILABLE_PASS"
+
+      - name: Compile actual production topology and origin-policy source
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/pa-g3i-kernel-native"
+          mkdir -m 700 "$build"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
+            -Iinclude \
+            tests/autoscroll/ci_v5f_g3i_real_libinput_middle_native.c \
+            sway/input/post_apollo_autoscroll_topology.c \
+            sway/input/post_apollo_autoscroll_origin_policy.c \
+            $(pkg-config --cflags --libs libinput libudev) \
+            -o "$build/pa-g3i-real-uinput-libinput"
+          test -x "$build/pa-g3i-real-uinput-libinput"
+          echo "PA_G3I_REAL_NATIVE_LINKS_UNMODIFIED_SOURCE_POLICY_PASS"
+
+      - name: Observe real Linux kernel middle press/release through libinput and DENY source
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_TEMP" = /home/runner/work/_temp
+          if ! test -c /dev/uinput; then
+            sudo -n modprobe uinput
+          fi
+          test -c /dev/uinput || {
+            echo "::error title=PA_G3I_NO_UINPUT::Disposable kernel uinput unavailable; native proof NOT verified"
+            exit 2
+          }
+          sudo -n env \
+            CI="$CI" GITHUB_ACTIONS="$GITHUB_ACTIONS" \
+            RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_TEMP="$RUNNER_TEMP" \
+            PA_G3I_NATIVE_UINPUT_NEGATIVE="$PA_G3I_NATIVE_UINPUT_NEGATIVE" \
+            "$RUNNER_TEMP/pa-g3i-kernel-native/pa-g3i-real-uinput-libinput"
+          test -z "$(git status --porcelain)"
+
+      - name: Evidence must not be exaggerated
+        if: always()
+        run: |
+          echo "G3I creates a real Linux uinput pseudo-mouse inside this disposable runner, sends actual EV_KEY BTN_MIDDLE press/release with EV_SYN, and REQUIRES real libinput pointer-button events from that same kernel node." >> "$GITHUB_STEP_SUMMARY"
+          echo "Original production Autoscroll topology/source policy MUST DENY this virtual-kernel device even if it claims BUS_USB; no wheel, app or compositor output is sent." >> "$GITHUB_STEP_SUMMARY"
+          echo "G3I is NOT a SwayPX wlroots compositor libinput callback, NOT physical mouse authenticity, NOT a positive source admission or application scroll test. G3H separately tests real compositor callback from virtual Wayland input." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production file changes, TimeW/Company ownership transfer, host desktop action or merge. Production Autoscroll remains HARD OFF." >> "$GITHUB_STEP_SUMMARY"
