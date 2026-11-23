@@ -71,7 +71,7 @@ class G3FTrustModel(unittest.TestCase):
         self.assertIn("f->event_device_attached_to_seat",C)
         self.assertIn("f->native_scroll_method_known",C)
         self.assertIn("!f->button_down_scroll_conflict",C)
-        self.assertIn("native_compositor",MODEL.lower())
+        self.assertIn("native compositor",MODEL.lower())
         self.assertIn("uinput",MODEL.lower())
 
     def test_adversarial_model_documents_operator_and_issuer_gate(self):
