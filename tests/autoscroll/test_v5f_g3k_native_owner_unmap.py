@@ -49,8 +49,8 @@ class G3KNativeOwnerRevocation(unittest.TestCase):
             "PA_G3K_KERNEL_ACTOR", "geteuid()==0",
             "UI_DEV_CREATE", "UI_DEV_DESTROY",
             "EV_KEY", "BTN_MIDDLE", "EV_SYN", "SYN_REPORT",
-            "round <= 2", "strcmp(command,\"click\n\")",
-            "strcmp(command,\"stop\n\")",
+            "round <= 2", "strcmp(command,\"click\\n\")",
+            "strcmp(command,\"stop\\n\")",
             "PA_G3K_KERNEL_UINPUT_DESTROYED_PASS",
         ):
             self.assertIn(token,A)
