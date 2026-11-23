@@ -73,6 +73,8 @@ static uint32_t ci_xdg_gen_sample_value;
 static uint64_t ci_xdg_gen_samples;
 static uint64_t ci_xdg_gen_commits;
 static uint64_t ci_xdg_gen_presents;
+static uint64_t ci_xdg_gen_last_commit_scene;
+static uint64_t ci_xdg_gen_last_present_scene;
 
 static void ci_xdg_gen_sample(void) {
 	if (!ci_sample_root_active || !ci_sample_root_buffer ||
@@ -103,13 +105,15 @@ void timew_scope_a_ci_xdg_generation_output_commit(
 		struct sway_output *output, uint32_t commit_seq) {
 	if (!ci_output_seq_same_candidate(output) ||
 			!ci_last_post_scene_sequence ||
-			ci_last_output_seq_commit_scene != ci_last_post_scene_sequence) {
+			ci_last_output_seq_commit_scene != ci_last_post_scene_sequence ||
+			ci_xdg_gen_last_commit_scene == ci_last_post_scene_sequence) {
 		return;
 	}
 	if (ci_xdg_gen_commits == UINT64_MAX) {
 		fail("xdg_gen_commit_counter_overflow");
 	}
 	++ci_xdg_gen_commits;
+	ci_xdg_gen_last_commit_scene = ci_last_post_scene_sequence;
 	bool sample_in_scene =
 		ci_xdg_gen_sample_scene == ci_last_post_scene_sequence;
 	uint32_t sampled = sample_in_scene ? ci_xdg_gen_sample_value : 0;
@@ -132,13 +136,15 @@ void timew_scope_a_ci_xdg_generation_output_present(
 		struct sway_output *output, uint32_t commit_seq) {
 	if (!ci_output_seq_same_candidate(output) ||
 			!ci_last_post_scene_sequence ||
-			ci_last_output_seq_present_scene != ci_last_post_scene_sequence) {
+			ci_last_output_seq_present_scene != ci_last_post_scene_sequence ||
+			ci_xdg_gen_last_present_scene == ci_last_post_scene_sequence) {
 		return;
 	}
 	if (ci_xdg_gen_presents == UINT64_MAX) {
 		fail("xdg_gen_present_counter_overflow");
 	}
 	++ci_xdg_gen_presents;
+	ci_xdg_gen_last_present_scene = ci_last_post_scene_sequence;
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_PRESENT lifetime=%" PRIu64
 		" sequence=%" PRIu64 " output_commit_seq=%" PRIu32
@@ -166,6 +172,8 @@ static void ci_xdg_gen_seal(void) {
 	ci_xdg_gen_samples = 0;
 	ci_xdg_gen_commits = 0;
 	ci_xdg_gen_presents = 0;
+	ci_xdg_gen_last_commit_scene = 0;
+	ci_xdg_gen_last_present_scene = 0;
 }
 """
 p = once(p,
