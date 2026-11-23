@@ -1,0 +1,99 @@
+name: SwayPX / V5F-G3F Two-Tier Input Trust Policy Model (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3f_trust_policy.h'
+      - 'tests/autoscroll/ci_v5f_g3f_trust_policy.c'
+      - 'tests/autoscroll/ci_v5f_g3f_trust_harness.c'
+      - 'tests/autoscroll/test_v5f_g3f_two_tier_trust_policy.py'
+      - 'MODEL/autoscroll-v5f-g3f-two-tier-trust-policy.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3f-two-tier-trust-model.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-only-negative-trust-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact G3F head, no saved credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Enforce six additive files and no production activation
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import subprocess
+          parent=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3e-real-middle-negative-ingress-20261123"],
+              text=True).strip()
+          paths=set(subprocess.check_output(
+              ["git","diff","--name-only",parent,"HEAD"],
+              text=True).splitlines())
+          allowed={
+              "tests/autoscroll/ci_v5f_g3f_trust_policy.h",
+              "tests/autoscroll/ci_v5f_g3f_trust_policy.c",
+              "tests/autoscroll/ci_v5f_g3f_trust_harness.c",
+              "tests/autoscroll/test_v5f_g3f_two_tier_trust_policy.py",
+              "MODEL/autoscroll-v5f-g3f-two-tier-trust-policy.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3f-two-tier-trust-model.yml",
+          }
+          assert paths==allowed,(sorted(paths-allowed),sorted(allowed-paths))
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          cursor=Path("sway/input/cursor.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert ".layout_generation_verified = false" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          for part in (runtime,bridge,meson,cursor):
+              assert "pa_g3f_" not in part
+              assert "ci_v5f_g3f_" not in part
+          print("PA_G3F_SIX_NEW_FILES_SOURCE_ONLY_PRODUCTION_HARD_OFF_PASS")
+          PY
+          test -z "$(git status --porcelain)"
+
+      - name: Compile isolated C11 non-actuating trust model
+        run: |
+          set -euo pipefail
+          build="$RUNNER_TEMP/pa-g3f-model"
+          mkdir -m 700 "$build"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
+            -I tests/autoscroll \
+            tests/autoscroll/ci_v5f_g3f_trust_policy.c \
+            tests/autoscroll/ci_v5f_g3f_trust_harness.c \
+            -o "$build/pa-g3f-trust-model"
+          test -x "$build/pa-g3f-trust-model"
+          "$build/pa-g3f-trust-model"
+          test -z "$(git status --porcelain)"
+
+      - name: Verify original autoscroll source and two-tier model invariants
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \
+            -s tests/autoscroll -p 'test_v5f_g3f_two_tier_trust_policy.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \
+            -s tests/autoscroll -p 'test_v5f_g3e_real_middle_negative.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \
+            -s tests/autoscroll -p 'test_v5f_g1_provenance_boundary.py' -v
+          test -z "$(git status --porcelain)"
+          echo "PA_G3F_SOURCE_ONLY_DIAGNOSTIC_NO_ACTUATION_PASS"
+
+      - name: Preserve trust and native evidence limitations
+        if: always()
+        run: |
+          echo "G3F is a standalone C11 adversarial MODEL, not a native compositor authority. It can label OS-managed source candidates or demand an enrolled-device broker; it cannot consume middle clicks, emit axes or attest genuine hardware." >> "$GITHUB_STEP_SUMMARY"
+          echo "Its 524,288 synthetic model-input cases do not prove a real mouse, uinput rejection under spoofed paths, firmware/root-of-trust attestation, native scene layout generation, Scroll Lock policy, or ready-to-merge production input authorization." >> "$GITHUB_STEP_SUMMARY"
+          echo "G3E #175 remains independently reviewed negative virtual-middle evidence. Both lanes stay disabled in production: runtime HARD OFF, no UI, no user workstation action, no Company Map ownership changes, no merge." >> "$GITHUB_STEP_SUMMARY"
