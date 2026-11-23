@@ -14,6 +14,10 @@ EVENT = re.compile(
     r"lifetime=(\d+) sequence=(\d+) configured=([01]) "
     r"real_callback=1 receipt=NONE authority=NONE"
 )
+ORPHAN = re.compile(
+    r"TIMEW_CI_OUTCOME_ORPHAN_READY unbound=1 real_callback=1 "
+    r"trusted=0 authority=NONE"
+)
 SEAL = re.compile(
     r"TIMEW_CI_OUTCOME_SEAL lifetime=(\d+) "
     r"committed_instructions=(\d+) real_unmap=1 settled=0 authority=NONE"
@@ -81,7 +85,7 @@ def validate(lines, mode):
                 r["events"].append((stage, line_number))
         elif "TIMEW_CI_OUTCOME_" in line and not (
                 "TIMEW_CI_OUTCOME_OVERLAY_PASS" in line or
-                SEAL.search(line)):
+                ORPHAN.search(line) or SEAL.search(line)):
             raise ValueError("malformed_or_unauthorized_outcome_line")
 
     if any(set(x) != EXPECTED for x in (starts, revokes, seals, unmaps)):
