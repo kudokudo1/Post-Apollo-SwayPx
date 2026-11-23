@@ -1,0 +1,100 @@
+name: SwayPX TimeW Scope A Real Transaction Callbacks (deny-only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/timew/ci_inject_real_transaction_events.py"
+      - "tests/timew/ci_assert_real_transaction_trace.py"
+      - ".github/workflows/timew-scope-a-real-transaction-events.yml"
+      - "MODEL/timew-scope-a-real-transaction-events-v0.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-native-ready-vs-timeout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact stacked SwayPX
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert production source unchanged and no authority promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          txn = Path("sway/desktop/transaction.c").read_text()
+          smoke = Path("tests/stage_director/headless_sway_smoke.sh").read_text()
+          actor = Path("tests/stage_director/ci_native_news_actor_smoke.sh").read_text()
+          meson = Path("sway/meson.build").read_text()
+          assert "TIMEW_CI_TXN_" not in txn
+          assert "STAGE_DIRECTOR_TIMEW_TXN_MODE" not in smoke
+          assert "STAGE_DIRECTOR_TIMEW_TXN_MODE" not in actor
+          assert "timew_scope_a_native_txn_observer.c" not in meson
+          assert "timew_scope_a_txn_stage.c" not in meson
+          test = Path("tests/timew/ci_assert_real_transaction_trace.py").read_text()
+          for marker in ("settled=0", "native_restore=OFF",
+                         "native_move=OFF", "retry=OFF",
+                         "operator_selection=NONE", "c5_spent=NONE"):
+              assert marker in test
+          print("TIMEW_CI_NATIVE_TXN_PRECHECK PASS: source untouched, production authority NONE")
+          PY
+
+      - name: Install pinned compositor build environment
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Apply debug hooks only to disposable CI checkout and compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_inject_real_transaction_events.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace \
+            | tee "$RUNNER_TEMP/timew-real-txn-sway-store-path.txt"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-txn-sway-store-path.txt")"
+          test -x "$compositor/bin/sway"
+          test -x "$compositor/bin/swaymsg"
+          echo "TIMEW_CI_TXN_NATIVE_COMPILE PASS: pinned real SwayPX callbacks instrumented only in disposable runner"
+
+      - name: Resolve pinned Mesa and real XDG actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-txn-sway-store-path.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+
+      - name: Exercise normal ready and real forced-timeout callback paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-txn-sway-store-path.txt")"
+          for mode in normal forced_timeout; do
+            echo "TIMEW_CI_TXN_MODE_START $mode"
+            STAGE_DIRECTOR_TIMEW_TXN_MODE="$mode" \
+              bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+          done
+          echo "TIMEW_CI_TXN_REAL_NATIVE_RUNTIME PASS: real XDG ready vs actual compositor timer; protected receipt NONE"
+
+      - name: Record verification boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "## TimeW Scope A / Native transaction diagnostics" >> "$GITHUB_STEP_SUMMARY"
+          echo "Real compositor callback ordering in two disposable headless sessions only." >> "$GITHUB_STEP_SUMMARY"
+          echo "No protected selection, C3e enrolled source, C5 grant, frame-presented proof, native Restore or production linkage." >> "$GITHUB_STEP_SUMMARY"
