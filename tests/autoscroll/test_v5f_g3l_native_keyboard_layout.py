@@ -42,7 +42,7 @@ class NativeKeyboardAndLayout(unittest.TestCase):
             "sd->keyboard->wlr->xkb_state",
             "xkb_state_led_name_is_active(",
             "XKB_LED_NAME_SCROLL","keyboard_count != 1",
-            "wlr_output_layout_get_box(root->output_layout,NULL)",
+            "wlr_output_layout_get_box(root->output_layout,NULL,&live_box)",
             "pa_autoscroll_source_probe(mouse)",
             "PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE",
             "native_scroll_policy=UNKNOWN_DENY",
