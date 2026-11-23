@@ -62,7 +62,7 @@ int main(void) {
     setup.id.product=0x5a3au;
     setup.id.version=1u;
     snprintf(setup.name,sizeof(setup.name),
-        "PA-G3K-KERNEL-SYNTHETIC-NOT-PHYSICAL");
+        "PA-G3J-KERNEL-SYNTHETIC-NOT-PHYSICAL");
     if(ioctl(fd,UI_DEV_SETUP,&setup)<0 || ioctl(fd,UI_DEV_CREATE)<0){
         perror("G3K create kernel input");goto done;
     }
