@@ -1,0 +1,151 @@
+name: SwayPX / V5F-G3E Real Virtual Middle Ingress Scene DENIED (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'tests/autoscroll/ci_v5f_g3e_native_probe.c'
+      - 'tests/autoscroll/ci_v5f_g3e_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_g3e_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_g3e_udmabuf.sh'
+      - 'tests/autoscroll/test_v5f_g3e_real_middle_negative.py'
+      - 'MODEL/autoscroll-v5f-g3e-real-middle-negative-ingress.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g3e-real-middle-denial.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-real-virtual-middle-negative-ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_G2_NATIVE_BUTTON: "2"
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "2"
+      PA_G3E_REAL_MIDDLE_NEGATIVE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact G3E head, no GitHub write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Seven-file additive only, production hard-off and source checks
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base=subprocess.check_output(
+              ["git","merge-base","HEAD",
+               "origin/autoscroll/v5f-g3d-native-scene-scroll-lock-20261122"],
+              text=True).strip()
+          changed=set(subprocess.check_output(
+              ["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          allow={
+              "tests/autoscroll/ci_v5f_g3e_native_probe.c",
+              "tests/autoscroll/ci_v5f_g3e_native_overlay.py",
+              "tests/autoscroll/ci_v5f_g3e_native_trace.py",
+              "tests/autoscroll/ci_v5f_g3e_udmabuf.sh",
+              "tests/autoscroll/test_v5f_g3e_real_middle_negative.py",
+              "MODEL/autoscroll-v5f-g3e-real-middle-negative-ingress.md",
+              ".github/workflows/post-apollo-autoscroll-v5f-g3e-real-middle-denial.yml",
+          }
+          assert changed==allow,(sorted(changed-allow),sorted(allow-changed))
+          cursor=Path("sway/input/cursor.c").read_text()
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "pa_g3e_native_middle_negative_observe" not in cursor
+          assert "ci_v5f_g3e_native_probe.c" not in meson
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          print("PA_G3E_EXACT_SEVEN_FILE_PRODUCTION_AND_COMPANY_UNCHANGED_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3e_real_middle_negative.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g3d_native_scene_led.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll \
+            -p 'test_v5f_g2_virtual_middle.py' -v
+          test -z "$(git status --porcelain)"
+
+      - name: Install Nix only in disposable GitHub environment
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compose real C2 G2 native owner ingress + G3E observer in CI source copy
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g3e_native_overlay.py
+          test -z "$(git status --porcelain)"
+
+      - name: Build disposable headless SwayPX, Foot and virtual middle client
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc2-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          proto="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wayland-protocols' --no-link --print-out-paths | tail -n1)"
+          wlr_src="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.wlroots_0_20.src' --no-link --print-out-paths | tail -n1)"
+          transient="$proto/share/wayland-protocols/staging/ext-transient-seat/ext-transient-seat-v1.xml"
+          pointer="$wlr_src/protocol/wlr-virtual-pointer-unstable-v1.xml"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -r "$transient"
+          test -r "$pointer"
+          build="$RUNNER_TEMP/pa-g3e-native-client-build"
+          mkdir -m 700 "$build"
+          (
+            cd "$src"
+            nix develop --command bash -euo pipefail -c '
+              build="$1"; transient="$2"; pointer="$3"; client="$4"
+              wayland-scanner client-header "$transient" \
+                "$build/ext-transient-seat-v1-client-protocol.h"
+              wayland-scanner private-code "$transient" \
+                "$build/ext-transient-seat-v1-protocol.c"
+              wayland-scanner client-header "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-client-protocol.h"
+              wayland-scanner private-code "$pointer" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c"
+              cc -std=c11 -Wall -Wextra -Werror -pedantic \
+                -I"$build" "$client" \
+                "$build/ext-transient-seat-v1-protocol.c" \
+                "$build/wlr-virtual-pointer-unstable-v1-protocol.c" \
+                $(pkg-config --cflags --libs wayland-client) \
+                -o "$build/pa-g3e-wayland-virtual-middle"
+            ' _ "$build" "$transient" "$pointer" \
+              "$GITHUB_WORKSPACE/tests/autoscroll/ci_v5f_g2_virtual_middle_client.c"
+          )
+          test -x "$build/pa-g3e-wayland-virtual-middle"
+          echo "PA_G2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_G2_CLIENT=$build/pa-g3e-wayland-virtual-middle" >> "$GITHUB_ENV"
+          echo "PA_G2_MESA=$mesa" >> "$GITHUB_ENV"
+          echo "PA_G3E_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_G3E_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G3E_DISPOSABLE_REAL_COMPOSITOR_AND_WAYLAND_CLIENT_BUILD_PASS"
+
+      - name: Observe virtual real middle event under XDG and deny native physical trust
+        run: |
+          set -euo pipefail
+          bash tests/autoscroll/ci_v5f_g3e_udmabuf.sh
+          test -z "$(git status --porcelain)"
+
+      - name: Preserve negative evidence limits
+        if: always()
+        run: |
+          echo "G3E verifies native virtual middle press/release, genuine four object lifetimes, actual direct XDG hit/output layout, source-candidate and snapshot physical ineligibility, and normal seatop behavior ONLY in a disposable copied SwayPX." >> "$GITHUB_STEP_SUMMARY"
+          echo "Virtual pointer with raw lifetime epoch and real scene is NOT physical hardware or consent. Libinput hardware and uinput spoofing remain untested. No positive witness, timer, axis/frame emission, app mouse receipt or production activation." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production source edit, original checkout mutation, Company Map/TimeW owner transfer, workstation action or merge." >> "$GITHUB_STEP_SUMMARY"
