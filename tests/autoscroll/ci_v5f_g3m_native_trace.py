@@ -527,7 +527,9 @@ def main():
         while True:
             raw=log.read_text(errors="replace")
             leds=[tuple(map(int,v)) for v in G3L.findall(raw)]
-            if len(leds)>=8:
+            if len(leds)>=8 and all(
+                    raw.count(f"PA_G2_NATIVE_FROM_SEATOP state={phase}")>=4
+                    for phase in (0,1)):
                 break
             if time.monotonic()>limit:
                 raise RuntimeError("PA_G3L_POST_LAYOUT_NATIVE_CALLBACK_MISSING "+
@@ -558,17 +560,27 @@ def main():
         if len(native)!=8 or [v[0] for v in native]!=[1,0]*4:
             raise RuntimeError("PA_G3M_NATIVE_MIDDLE_EVENT_MISSING "+
                                repr(native))
-        expected=[1,1,1,1,2,2,1,1]
-        if [v[1] for v in native]!=expected or \
+        # Observe the real seat baseline, not an invented single-keyboard
+        # world. SwayPX may own a preexisting keyboard group or native
+        # device. Those remain untrusted and must never be silently omitted.
+        baseline=native[0][1]
+        other=native[0][4]
+        groups=native[0][5]
+        expected=[baseline]*4+[baseline+1]*2+[baseline]*2
+        if baseline<1 or [v[1] for v in native]!=expected or \
            [v[2] for v in native]!=[1]*8 or \
-           [v[3] for v in native]!=[0,0,0,0,1,1,0,0]:
+           [v[3] for v in native]!=[0,0,0,0,1,1,0,0] or \
+           any(v[4]!=other or v[5]!=groups for v in native):
             raise RuntimeError("PA_G3M_ACTUAL_SEAT_KEYBOARD_HOTPLUG_WRONG "+
                                repr(native))
-        if any(v[4]!=0 or v[6] not in (0,1) or
+        if any(v[6] not in (0,1) or
                (v[3]==0 and v[7]!=-1) or
                (v[3]==1 and v[7] not in (0,1)) or
                v[10]!=0 for v in native):
             raise RuntimeError("PA_G3M_UNKNOWN_CONFLICT_GRANTED_CLEARANCE "+
+                               repr(native))
+        if any(v[8]!=0 for v in native) and (other or groups):
+            raise RuntimeError("PA_G3M_UNRECOGNIZED_GROUP_MISTAKEN_CLEAN "+
                                repr(native))
         secondkeys=[tuple(map(int,x)) for x in SECONDKEY.findall(raw)]
         if len(secondkeys)!=2 or [v[0] for v in secondkeys]!=[1,0] or \
@@ -583,8 +595,11 @@ def main():
                for v in (tuple(map(int,x)) for x in G3K.findall(raw))):
             raise RuntimeError("PA_G3M_GUARD_BECAME_ADMITTING")
         print("PA_G3M_REAL_NATIVE_MULTIKEYBOARD_HOTPLUG_DENIED_PASS "
-              "keyboard_count_sequence=1,1,2,1 "
-              "second_scroll_lock_callbacks=2 "
+              "keyboard_baseline="+str(baseline)+
+              " keyboard_with_second="+str(baseline+1)+
+              " unexpected_baseline="+str(other)+
+              " keyboard_groups="+str(groups)+
+              " second_scroll_lock_callbacks=2 "
               "native_middle_callbacks=8 normal_dispatch=8 axis_frames=0 "
               "global_lock_clearance=DENIED",flush=True)
 
