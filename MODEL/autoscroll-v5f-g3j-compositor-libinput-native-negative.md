@@ -29,7 +29,7 @@ If uinput, device udev tags, private seatd, native libinput backend, compositor 
 
 ## VERIFY
 
-- Exactly seven new CI/test/MODEL paths, zero production source edits and zero overlapping paths with paused Company Map #126.
+- Exactly eight new CI/test/MODEL paths, zero production source edits and zero overlapping paths with paused Company Map #126.
 - Actual udev-registered kernel test mouse with fake BUS_USB, native SwayPX input manager pointer, `wlr_input_device_is_libinput` true, actual libinput handle and sysfs /virtual/ evidence.
 - Two real press/release callbacks from the same known synthetic libinput device, native G3H model DENIED, source candidate false and original seatop receives both transitions. No axis, guard authorization or event swallowing.
 - Actual mapped XDG Foot target and output/scene observations must be reported accurately; no fabricated positive owner snapshots.
