@@ -97,6 +97,10 @@ def wait_socket(proc,path,timeout=12):
 
 def main():
     tmp,ws,sway,foot,swaymsg,mesa,actor_bin=guard()
+    seatd_bin=Path(os.environ.get("PA_G3J_SEATD","/missing"))
+    if not (str(seatd_bin).startswith("/nix/store/") and
+            seatd_bin.is_file() and os.access(seatd_bin,os.X_OK)):
+        raise RuntimeError("PA_G3J_PRIVATE_SEATD_BINARY_UNPINNED")
     seatd_socket=Path("/run/seatd.sock")
     if seatd_socket.exists():
         raise RuntimeError("PA_G3J_PREEXISTING_SEATD_REFUSE_TO_TOUCH")
@@ -151,7 +155,7 @@ def main():
         group=grp.getgrgid(os.getgid()).gr_name
         seatd=subprocess.Popen(
             ["sudo","-n","env","SEATD_VTBOUND=0",
-             "seatd","-u",user,"-g",group,"-l","error"],
+             str(seatd_bin),"-u",user,"-g",group,"-l","error"],
             stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
             start_new_session=True)
         wait_socket(seatd,seatd_socket)
