@@ -5,11 +5,12 @@ ROOM // Universal Autoscroll
 STAFF ROLE // External Hospital-compatible DOC, not verified as Hospital-connected  
 BASE // G3F PR #177 head 228dae0375fb0bb18d1092d3fa41d0d17a0f1f80, independently reviewed scoped PASS  
 SCOPE // CI-only kernel source test; no compositor edits  
+OPERATOR DIRECTION // OS-managed native mouse input first, enrolled-device optional later; decision recorded on G3F #177 comment 7099016932  
 PRODUCTION // HARD OFF
 
 ## IMPLEMENTATION
 
-G3F's proposed OS-managed input source lane is NOT hardware attestation; G3F's proposed enrolled-device lane requires a currently nonexistent trusted issuer. A real Linux **uinput** device challenges source authentication: privileged software can create a kernel input device with real /dev/input/eventN, name and BTN_MIDDLE capabilities and claim BUS_USB and vendor/product IDs.
+**Accepted development direction (2026-11-23):** build OS-managed native mouse support first using the operating-system input path and independent compositor safeguards. Advanced enrolled-device verification is optional later. This decision selects the development lane; it does not grant runtime permission or imply that privileged kernel-synthetic input has been eliminated. G3F's OS-managed source candidate is NOT hardware attestation; its optional enrolled-device lane still requires a trusted issuer that does not exist yet. A real Linux **uinput** device challenges source authentication: privileged software can create a kernel input device with real /dev/input/eventN, name and BTN_MIDDLE capabilities and claim BUS_USB and vendor/product IDs.
 
 G3G creates one temporary real kernel uinput pseudo-mouse named PA-G3G-VIRTUAL-USB-CLAIM-NOT-HARDWARE inside a strictly guarded disposable GitHub-hosted Ubuntu runner. It advertises BUS_USB and mouse buttons/relative movement but sends **no mouse-button events**, pointer motion, axes or frames. The test discovers its actual /sys/devices/virtual/input/inputN/eventN sysfs path and matching /dev/input/eventN node from udev; passes the event path into a **real libinput path context**; verifies a pointer-capable native libinput handle with the same udev node; then calls the existing production Autoscroll kernel topology filter and origin policy without rewriting them.
 
@@ -36,7 +37,7 @@ If the runner lacks uinput or udev/libinput cannot actually observe the test poi
 
 ## WATCH OUT FOR
 
-Negative virtual-kernel detection does **not** prove all synthetic devices are rejected. A privileged synthetic HID may appear bus-backed rather than in /sys/devices/virtual. OS-managed mode still needs an operator decision about whether trusted local processes may simulate input. The enrolled-device level still has no trusted issuer and generic mice usually cannot cryptographically attest identity. Missing native Scroll Lock/layout-generation authority, check-to-axis revalidation, user-facing control, application event receipt and compositor active scrolling remain separately blocked.
+Negative virtual-kernel detection does **not** prove all synthetic devices are rejected. A privileged synthetic HID may appear bus-backed rather than in /sys/devices/virtual. OS-managed is the accepted initial development path. The design must explicitly document the ordinary local OS privilege boundary, including the risk from sufficiently privileged synthetic input; operator production approval remains separate. The optional enrolled-device level still has no trusted issuer and generic mice usually cannot cryptographically attest identity. Missing native Scroll Lock/layout-generation authority, check-to-axis revalidation, user-facing control, application event receipt and compositor active scrolling remain separately blocked.
 
 TimeW transaction approval, DOC 5 protected C5 consent and Company Map input seam ownership are not part of Autoscroll G3G.
 
@@ -46,7 +47,8 @@ TimeW transaction approval, DOC 5 protected C5 consent and Company Map input sea
 - [x] Implement kernel-uinput plus libinput negative experiment on separate test-only branch.
 - [ ] Confirm actual disposable runner kernel evidence, full CI PASS and source isolation.
 - [ ] Independent Nurse 2 exact-head G3G review.
-- [ ] Operator agrees permitted OS-managed synthetic-input risk versus stronger enrolled trust.
+- [x] Operator selected OS-managed first; advanced enrolled-device remains optional later (Nurse 2 decision relay: G3F #177 comment 7099016932).
+- [ ] Native OS-managed trust contract specifies host/seat privilege limits and how synthetics, device removal and source changes are treated without claiming hardware authentication.
 - [ ] Positive native producer only after review of event authority, layout/lock freshness and guarded axis delivery.
 
 ## NEXT
@@ -55,4 +57,4 @@ Run CI. If the runner cannot produce genuine kernel input evidence, record the f
 
 ## DECISIONS
 
-This is a source-negative CI experiment, **not hardware attestation** or production authorization. Proposed two-tier model unchanged, no workstation mutation, no merge, Autoscroll HARD OFF.
+**Accepted:** OS-managed native mouse input is first development priority. Enrolled-device verification is optional future work, not a precondition for development. **Not accepted:** production activation, a positive origin witness, hardware attestation, shared compositor changes or merging. This is a source-negative CI experiment, not production authorization. No workstation mutation, no merge, Autoscroll HARD OFF.
