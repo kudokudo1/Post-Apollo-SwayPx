@@ -84,6 +84,9 @@ struct sway_drag {
 struct sway_seat {
 	struct wlr_seat *wlr_seat;
 	struct sway_cursor *cursor;
+	/* Minted by the input manager's session issuer at real seat creation.
+	 * Object identity only, never verified physical-input authority. */
+	struct pa_autoscroll_lifetime_slot autoscroll_lifetime;
 
 	// Seat scene tree structure
 	// - scene_tree
@@ -154,6 +157,9 @@ struct sway_keyboard_shortcuts_inhibitor {
 struct sway_seat *seat_create(const char *seat_name);
 
 void seat_destroy(struct sway_seat *seat);
+
+/* Read only while the sway_seat pointer is live; 0 after revocation. */
+uint64_t seat_autoscroll_lifetime_epoch(const struct sway_seat *seat);
 
 void seat_add_device(struct sway_seat *seat,
 		struct sway_input_device *device);

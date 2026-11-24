@@ -1,0 +1,1025 @@
+{
+  "master": "e8db5f203aa12b17ad995a802ace628e9b19c6a5",
+  "stack": "d70ce2f232282b5ba9df4d8fc66c6133a74230d5",
+  "merge_base": "6905b027e7cd18db0f5b07dcfbbf79b3694d8503",
+  "imported": [
+    {
+      "path": "MODEL/autoscroll-v5e-b-shared-cursor-probe.md",
+      "mode": "100644",
+      "sha": "440951c034e0d46147d9f158fd69ca13e330bf21"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-c-topology-lifetime.md",
+      "mode": "100644",
+      "sha": "5b18618036999a3b81be1263200e8c0edb832329"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-d1-device-lifecycle.md",
+      "mode": "100644",
+      "sha": "4ef6dd4a52d4aa1aa932c3d0266f01d845833a1c"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-d2-seat-lifecycle.md",
+      "mode": "100644",
+      "sha": "b103f93607395d3d3ec22d19f37a647ca6a2c331"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-d3a-target-lifecycle.md",
+      "mode": "100644",
+      "sha": "0ae303350335599c8b729e5a8e7956668da7a12e"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-d3b-output-lifecycle.md",
+      "mode": "100644",
+      "sha": "3804a301c98c1a646392106cb57562c3139f4a14"
+    },
+    {
+      "path": "MODEL/autoscroll-v5e-d3c-output-configuration.md",
+      "mode": "100644",
+      "sha": "de1a9208e6de825fac6b2b6571ac8cebd0e0ec9a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-a-owner-snapshot.md",
+      "mode": "100644",
+      "sha": "cd17bd9f0ba53e8eab544668470c100ba9535df3"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-b-native-guard.md",
+      "mode": "100644",
+      "sha": "26ce7d1f7396ea5d5d1d8ba7499043a41ad0504b"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-c1-native-lifecycle.md",
+      "mode": "100644",
+      "sha": "6832283e97a1cdc4f2c1fbccf157f2bce787ab9c"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-c2-native-device-seat.md",
+      "mode": "100644",
+      "sha": "4c328d7becc345e1bcaa074929899779b71220e5"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g1-provenance-boundary.md",
+      "mode": "100644",
+      "sha": "b7dc2bf3acf160d39d58a69eac53ee69d3c2cb63"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g2-native-middle-denial.md",
+      "mode": "100644",
+      "sha": "860cc9e9caeb59e6c3226034314f8ba943e1aca9"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3a-stationary-continuity.md",
+      "mode": "100644",
+      "sha": "c519941cb9325c27251370f288688e139672132a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3b-native-revocation.md",
+      "mode": "100644",
+      "sha": "3cc1f1bf653c8ffab8b69e0d3c66e55883e11144"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3c-four-native-owners.md",
+      "mode": "100644",
+      "sha": "37b68fbabe029ed3d58f8e9eab3186f8fdcea13a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3d-native-scene-scroll-lock.md",
+      "mode": "100644",
+      "sha": "29f8b206a1b2d4fb5dd6f7e32bbb835ec6797921"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3e-real-middle-negative-ingress.md",
+      "mode": "100644",
+      "sha": "8971a92d3945760a290139718f352e7867668c8a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3f-two-tier-trust-policy.md",
+      "mode": "100644",
+      "sha": "e4632060cba51c52c3000931527bbffda72c4aff"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3g-kernel-uinput-negative.md",
+      "mode": "100644",
+      "sha": "fef69179aadb547e2f3b71224944e8f62e0643a4"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3h-native-os-managed-observer.md",
+      "mode": "100644",
+      "sha": "a1495de8146a37d1a6820a7f67e8769155879f93"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3i-real-libinput-middle-negative.md",
+      "mode": "100644",
+      "sha": "e227f49b6c314a49bff35d943ce1fa2bad458f06"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3j-compositor-libinput-native-negative.md",
+      "mode": "100644",
+      "sha": "71555d8a0fd808d9aab751925737455c5e82bb0d"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3k-native-owner-unmap-negative.md",
+      "mode": "100644",
+      "sha": "1f04bbbb6d2f77e73dc9bf16e9702f312ab54ab9"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3l-native-scroll-lock-layout-observation.md",
+      "mode": "100644",
+      "sha": "5c35b4fffbf49d5a725c2ebfffe635070822da64"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3m-native-multi-keyboard-hotplug-negative.md",
+      "mode": "100644",
+      "sha": "764afff53a56269f1562fe0e1d0eda7362529925"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3n-keyboard-layout-aba-negative.md",
+      "mode": "100644",
+      "sha": "3e81bb9d1ec042791bcb388da784be7dde9b3048"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3o-native-event-epoch-negative.md",
+      "mode": "100644",
+      "sha": "4f5f780bcf6e42ec6d1adcf5552686abb88c5a2a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3p-post-aba-native-input-negative.md",
+      "mode": "100644",
+      "sha": "00c239c8254bdb96b8f7eae6a7c8c19a9c7a0b4d"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3q-native-group-membership.md",
+      "mode": "100644",
+      "sha": "7e0c667737bc5422b8e310633c88849f32a1ef5a"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3r-native-seat-lifecycle.md",
+      "mode": "100644",
+      "sha": "630db8a57d5f6e4073509968146f2647bbd15d66"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3s-native-scrolllock-interlock.md",
+      "mode": "100644",
+      "sha": "06b733f7e4bfbbb9b25d6d4dcf90670eb5f411bd"
+    },
+    {
+      "path": "MODEL/autoscroll-v5f-g3t-native-shadow-cancellation.md",
+      "mode": "100644",
+      "sha": "c605da778d72a200f915412fb866d8dfba32a5fb"
+    },
+    {
+      "path": "include/sway/input/input-manager.h",
+      "mode": "100644",
+      "sha": "fa177760573d3be1e2cc8ae1a88a92388e1bc2b7"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_continuity.h",
+      "mode": "100644",
+      "sha": "4a1937d78a042bb36ad03ee76e2d8a6da29c9ea5"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_guard_bridge.h",
+      "mode": "100644",
+      "sha": "2f130f5e775a186dd60aff03ce30f0a4ba71f867"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_lifetime.h",
+      "mode": "100644",
+      "sha": "9c3bc8e74b7b66e8c4a83e71dd1e1309b82ed8f7"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_owner_snapshot.h",
+      "mode": "100644",
+      "sha": "6a279df23010b62f223eb64538df3636a76b5b64"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_runtime.h",
+      "mode": "100644",
+      "sha": "6cda09f845f0120151dde83fe8a20ba25e930342"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_source.h",
+      "mode": "100644",
+      "sha": "83df2835b6d085ee759a1fde1bf1ce1b570f01a2"
+    },
+    {
+      "path": "include/sway/input/post_apollo_autoscroll_topology.h",
+      "mode": "100644",
+      "sha": "491e6cf2a62198a9ac22c950cde9c31008e937b1"
+    },
+    {
+      "path": "include/sway/input/seat.h",
+      "mode": "100644",
+      "sha": "8779eb0d5dd4e2c725d41a33190f3e0727d22fa7"
+    },
+    {
+      "path": "include/sway/output.h",
+      "mode": "100644",
+      "sha": "b842693ae5a8ef46af68b8a888c8951c43326759"
+    },
+    {
+      "path": "include/sway/tree/container.h",
+      "mode": "100644",
+      "sha": "98c0f8108c88795970bb1e5e1560cf4d5ed27633"
+    },
+    {
+      "path": "sway/config/output.c",
+      "mode": "100644",
+      "sha": "efad728f518e1385838b8db19018e3e2663510ee"
+    },
+    {
+      "path": "sway/input/cursor.c",
+      "mode": "100644",
+      "sha": "0a7699f7792cae151fd78beb814c555b9a948335"
+    },
+    {
+      "path": "sway/input/input-manager.c",
+      "mode": "100644",
+      "sha": "48c59695fb187cb7bbed8955eaa77ba30fd50cf3"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_continuity.c",
+      "mode": "100644",
+      "sha": "955fc1fbe22fa21f9f0122ce7150adf5a3d1c1a4"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_guard_bridge.c",
+      "mode": "100644",
+      "sha": "b7e54ddeb1eb61e81934b630144f80d5a47a972b"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_lifetime.c",
+      "mode": "100644",
+      "sha": "b46cbf890a8b4026f337b77e83633a97293237a7"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_owner_snapshot.c",
+      "mode": "100644",
+      "sha": "423c297c8fb69c50a6ca436edb3408b5f40facd7"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_runtime.c",
+      "mode": "100644",
+      "sha": "22c3f06ed1ad719f2bce53735c812c67ae5ca839"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_source.c",
+      "mode": "100644",
+      "sha": "e86e0930c1a71601859074a94d9f2eaa4ff5a1d4"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_source_stub.c",
+      "mode": "100644",
+      "sha": "63895b00914a5dfc5ca01710906821f8ceb097b6"
+    },
+    {
+      "path": "sway/input/post_apollo_autoscroll_topology.c",
+      "mode": "100644",
+      "sha": "f3b0a7a2c24651ecfefd12a903d23b9845e71f13"
+    },
+    {
+      "path": "sway/input/seat.c",
+      "mode": "100644",
+      "sha": "7c2c395a993bfbdd59911addae57742f2123ca2d"
+    },
+    {
+      "path": "sway/meson.build",
+      "mode": "100644",
+      "sha": "a68d7d179f4874a46a17d0206ffe5c9124d1d276"
+    },
+    {
+      "path": "sway/tree/container.c",
+      "mode": "100644",
+      "sha": "c98a91a1abbdd6d67e94513f6efdf0b6cf5f97d2"
+    },
+    {
+      "path": "sway/tree/output.c",
+      "mode": "100644",
+      "sha": "7f3d732b69abe9395c7ef4cee4f3e37e133392f0"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c1_native_overlay.py",
+      "mode": "100644",
+      "sha": "d35cd082a854906c2cb40513c02aee322cb26ced"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c1_native_trace.py",
+      "mode": "100644",
+      "sha": "d1b6bbb6eb3232d20d047b5c0a7317e5221eeb5a"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c1_udmabuf.sh",
+      "mode": "100644",
+      "sha": "bb59513ca9cdf78454336827882a89c0b4cb37e8"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c2_native_overlay.py",
+      "mode": "100644",
+      "sha": "0871cf52559505b8e01e3ccd87e0597693db3e39"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c2_native_trace.py",
+      "mode": "100644",
+      "sha": "0c4079a37b988ceae228c909b7d2db2147bd7425"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c2_protocol_client.c",
+      "mode": "100644",
+      "sha": "853a1b64d826d2a00e4e66d96d79c8f8fac34d95"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_c2_udmabuf.sh",
+      "mode": "100644",
+      "sha": "cd359c0bd259ff1c08f238c1ca88396f81f58bc8"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g1_provenance_boundary.c",
+      "mode": "100644",
+      "sha": "cc2378a1a1219b450a000ac74f27ee300babcc5c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g2_native_button.py",
+      "mode": "100644",
+      "sha": "e9617aa4a6dbd3182594f9a0f127e2eb8005d004"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g2_udmabuf.sh",
+      "mode": "100644",
+      "sha": "1d45ddd5d9cf81c78849e44a84a2e183206b05d0"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g2_virtual_middle_client.c",
+      "mode": "100644",
+      "sha": "b2073538c0574c7733d2ea2edae9e96a3f1d26cc"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3a_continuity.c",
+      "mode": "100644",
+      "sha": "5d6c33326af2f8decebb0f4bcf684ea964cb5e2c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3b_native_overlay.py",
+      "mode": "100644",
+      "sha": "95223616e507d2a20d2c516c34e10d675da18606"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3b_native_probe.c",
+      "mode": "100644",
+      "sha": "030a9b7f8b5d759052ebfb1bc88f40a12f45115f"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3b_native_trace.py",
+      "mode": "100644",
+      "sha": "3ed93c0c505611fac93233a5460b67038ed5b2de"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3b_udmabuf.sh",
+      "mode": "100644",
+      "sha": "51da92e164df448dd4ff79b3a9b544cc048e2797"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3c_native_overlay.py",
+      "mode": "100644",
+      "sha": "58cadd968a4d55d9418a8b4e9c14907a242714e4"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3c_native_probe.c",
+      "mode": "100644",
+      "sha": "7bf59a87b132598a9b29edd0de7d56d627f6bee9"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3c_native_trace.py",
+      "mode": "100644",
+      "sha": "138c3e1a06363aa51bdad6e43116fa21a537abc8"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3c_protocol_client.c",
+      "mode": "100644",
+      "sha": "a3727e5d9f71b30c901b06bcc49412e0576729e2"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3c_udmabuf.sh",
+      "mode": "100644",
+      "sha": "bafef4c6eb88271bbd6cafb5a1dabb12a5fa1dcb"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3d_native_overlay.py",
+      "mode": "100644",
+      "sha": "8362989104706b3035160d195c0a91e3f56c69a8"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3d_native_probe.c",
+      "mode": "100644",
+      "sha": "3ddbf3e7d5731d0c82c66725adfda66da2b6cd53"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3d_native_trace.py",
+      "mode": "100644",
+      "sha": "156641e0c52ebe8d4aeb4dc3d51e1a8a8e6f52f3"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3d_udmabuf.sh",
+      "mode": "100644",
+      "sha": "1edc9607f02de2b76f599b3c325332727bdcbcc7"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3d_virtual_keyboard_client.c",
+      "mode": "100644",
+      "sha": "b88cbb7edf3f27d5ba262bd287aa0d1327f1ebc9"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3e_native_overlay.py",
+      "mode": "100644",
+      "sha": "06c9bedf4f3949ea101222cada03cff04d5ffe76"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3e_native_probe.c",
+      "mode": "100644",
+      "sha": "45cb91ae96a938da96332234d426f36cc5891f16"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3e_native_trace.py",
+      "mode": "100644",
+      "sha": "9a834edc4b00f415ecc9d980c64ed9c15afc25c9"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3e_udmabuf.sh",
+      "mode": "100644",
+      "sha": "7bff7c66e302689ca257514478ca0e889da0381d"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3f_trust_harness.c",
+      "mode": "100644",
+      "sha": "e73f500d713bf862e364153d4c05a8b7f90068de"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3f_trust_policy.c",
+      "mode": "100644",
+      "sha": "10c70deb05b35e862361f50240939555aa2b9d7f"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3f_trust_policy.h",
+      "mode": "100644",
+      "sha": "df386eb9c5672fa71e0b85fefb1023ea3af64a4e"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3g_kernel_uinput_native.c",
+      "mode": "100644",
+      "sha": "ea0916a5fb97055946477608ced8bc7a83f83299"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3h_native_os_observer.c",
+      "mode": "100644",
+      "sha": "c4e6c9388bba9745b074d6443056708adeb99e2c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3h_native_overlay.py",
+      "mode": "100644",
+      "sha": "3329fc94315b17078e6b2fbd09546c8c7b676e7c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3h_native_trace.py",
+      "mode": "100644",
+      "sha": "8b8abd72da48d7513574cf31e1eebbf22d2f3ac8"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3h_udmabuf.sh",
+      "mode": "100644",
+      "sha": "a75d6e183c3553517c5c5918a830e69ddb34a783"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3i_real_libinput_middle_native.c",
+      "mode": "100644",
+      "sha": "55f59fbbcfbed1571898407f9bd3ca3aa0846b6a"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3j_native_compositor_probe.c",
+      "mode": "100644",
+      "sha": "d641aad060906c6b18e0d929bca1b57e98ba7b47"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3j_native_overlay.py",
+      "mode": "100644",
+      "sha": "bb6754579a85ae3b86f44fb82571edd69ffee9a0"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3j_native_trace.py",
+      "mode": "100644",
+      "sha": "407625be8a90a70c9cd1b10b74159d65972a06ec"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3j_udmabuf.sh",
+      "mode": "100644",
+      "sha": "0d64039b2a1c4fb00edd30d2fa8f943c437cdabf"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3j_uinput_actor.c",
+      "mode": "100644",
+      "sha": "b3b4f6a22f99acd93df2cc6a0081a05801889748"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3k_native_guard_negative.c",
+      "mode": "100644",
+      "sha": "8018c9e4005550558edf1d5ed9781859e3c520d4"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3k_native_overlay.py",
+      "mode": "100644",
+      "sha": "c69113b7a546855db0e0041bda0a5e155ca0b8ec"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3k_native_trace.py",
+      "mode": "100644",
+      "sha": "917be67a329a2835f4c512e95de5dd40f479c0f1"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3k_two_phase_kernel_actor.c",
+      "mode": "100644",
+      "sha": "57f3cb620fd8d7a7d206495a818a4d681db1fdba"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3k_udmabuf.sh",
+      "mode": "100644",
+      "sha": "36b38ce1ca07c04e250fe3fbf2c652ba354c221a"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3l_keyboard_mouse_actor.c",
+      "mode": "100644",
+      "sha": "0018d3a89affee8fa98ee5cbf0e1ca9b894638c3"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3l_native_keyboard_layout_probe.c",
+      "mode": "100644",
+      "sha": "eb6b229ab9ac5d47ecc19772125b199d66e132ce"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3l_native_overlay.py",
+      "mode": "100644",
+      "sha": "762ebfeb22be2d00d4e44d107cfad4752cd0716d"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3l_native_trace.py",
+      "mode": "100644",
+      "sha": "82c8ea223d362c723b05b0e60913e98659385d3e"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3l_udmabuf.sh",
+      "mode": "100644",
+      "sha": "59f5dc14f4cd9411fd8e6ebc724b65fd7beadfff"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3m_multi_keyboard_actor.c",
+      "mode": "100644",
+      "sha": "af66de01c129d668e15678f2a38d30403a12f29a"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3m_native_multikeyboard_observer.c",
+      "mode": "100644",
+      "sha": "37562e5d9700bfd1263df2b16efa2ad4551dd3e0"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3m_native_overlay.py",
+      "mode": "100644",
+      "sha": "52a763a44e3858318c6db41753b75a4ed0c2de6a"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3m_native_trace.py",
+      "mode": "100644",
+      "sha": "82f33f62d95264b59b2af89995f0b6d20c4a7b8e"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3m_udmabuf.sh",
+      "mode": "100644",
+      "sha": "0821c65e583f51df061771dbe25ed5a74386af51"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3n_keyboard_layout_aba_oracle.c",
+      "mode": "100644",
+      "sha": "ade95f23ac9db9f553958ce98b76be5cc388f2c5"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3o_native_epoch_observer.c",
+      "mode": "100644",
+      "sha": "eaf1643ef284df55186021781739f93c78d6b661"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3o_native_overlay.py",
+      "mode": "100644",
+      "sha": "f87d1453378034fb8394177c999a4b276fbdca29"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3o_native_trace.py",
+      "mode": "100644",
+      "sha": "ba2e2c5848ebd2153a6bb19c85b39f4bf8f821dd"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3o_udmabuf.sh",
+      "mode": "100644",
+      "sha": "f8d2350188b226b7db13637921878fd96367b187"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3p_five_pair_actor.c",
+      "mode": "100644",
+      "sha": "90b6db1529fe0d65e643ff5d15c88512fc7c4ac6"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3p_native_trace.py",
+      "mode": "100644",
+      "sha": "8e863a1f530b968c59a9ced2cb5bd17740f2c1cb"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3p_udmabuf.sh",
+      "mode": "100644",
+      "sha": "34d6ba3ce568d5349e0d246af92f8f357cfb4b73"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3q_native_group_observer.c",
+      "mode": "100644",
+      "sha": "eeaa4552f33e4f07ab2099aaaaff28c5e8f77c12"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3q_native_overlay.py",
+      "mode": "100644",
+      "sha": "9d6c0e206ae8b71c82ad7302b2aabd9a8f474d15"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3q_native_trace.py",
+      "mode": "100644",
+      "sha": "69dbdd4b08cb26817d78f596d2cd5f36ad064900"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3q_seven_pair_actor.c",
+      "mode": "100644",
+      "sha": "5f64dd99f27ef7857ecf78a4f10c8087a42d12e4"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3q_udmabuf.sh",
+      "mode": "100644",
+      "sha": "886b5d978462366675871220ea4707d909cecbea"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3r_eleven_pair_actor.c",
+      "mode": "100644",
+      "sha": "9c96fc56dc232375cc1d8e8d570f3e9be3069e07"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3r_native_overlay.py",
+      "mode": "100644",
+      "sha": "8e7831ed04ac3d67b18307f4ab5db56605295877"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3r_native_seat_observer.c",
+      "mode": "100644",
+      "sha": "dd5b1a5f5e770cb2e777d259378a0b70395d980c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3r_native_trace.py",
+      "mode": "100644",
+      "sha": "591415a43d059f5e5788181ac189fc6385e859d1"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3r_udmabuf.sh",
+      "mode": "100644",
+      "sha": "89cfeb255db13d2995551a39b3d9031397fb1662"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3s_native_lock_observer.c",
+      "mode": "100644",
+      "sha": "fb6a07dc7fc389cc81fcfb388b30b27731b36cf2"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3s_native_overlay.py",
+      "mode": "100644",
+      "sha": "3d9d1b93ca8fe4ef93a14423c2369d9d72ae1e03"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3s_native_trace.py",
+      "mode": "100644",
+      "sha": "ee0c46e0563660e3a6eb9e72d3843e5d823a5185"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3s_twelve_pair_actor.c",
+      "mode": "100644",
+      "sha": "f8156d99d3de0caef628459a4749b44ce35192de"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3s_udmabuf.sh",
+      "mode": "100644",
+      "sha": "3811596a478861d5902b015fee99d9684a066278"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3t_native_overlay.py",
+      "mode": "100644",
+      "sha": "87de9138c4caad48ffee01281ab1fbd45017589c"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3t_native_trace.py",
+      "mode": "100644",
+      "sha": "3a632ce214da5fa1af51cb6fc14ec879851cbe78"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3t_shadow_cancel_observer.c",
+      "mode": "100644",
+      "sha": "67b9519a09ba0ab70b2b047f52185e1551174d1e"
+    },
+    {
+      "path": "tests/autoscroll/ci_v5f_g3t_udmabuf.sh",
+      "mode": "100644",
+      "sha": "1cec7dedbe3d8aa68c68162546b3410bc81e9b5a"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_d1_device_lifecycle.py",
+      "mode": "100644",
+      "sha": "011f2eadb74941bb6fbf7b5a2bead0b670eae81b"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_d2_seat_lifecycle.py",
+      "mode": "100644",
+      "sha": "c7807442bab5bb89b72b59f0199746d51da3eb73"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_d3a_target_lifecycle.py",
+      "mode": "100644",
+      "sha": "59625a68454d6eb72dc115cebf40fcaeca61badd"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_d3b_output_lifecycle.py",
+      "mode": "100644",
+      "sha": "2e016a1d6539b8fc062d01d9a64b5a8546ffe956"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_d3c_output_config_epoch.py",
+      "mode": "100644",
+      "sha": "80441ede80f9bf3acda288bc562a5fa602a97fb9"
+    },
+    {
+      "path": "tests/autoscroll/test_v5e_shared_ingress.py",
+      "mode": "100644",
+      "sha": "742d2c215855f233176ee3c2e4d3abde265fa42f"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_b_guard_bridge.py",
+      "mode": "100644",
+      "sha": "de607594ea787062fc09aded2566622d68c1b424"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_c1_overlay_safety.py",
+      "mode": "100644",
+      "sha": "874e8a0285d899e676bd367da878b5bf3980278b"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_c2_native_lifecycle.py",
+      "mode": "100644",
+      "sha": "0d491286efeed43f1e4d7efbfa1e0d352580dfa1"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g1_provenance_boundary.py",
+      "mode": "100644",
+      "sha": "f26a07e2f5a96d5df7e6918e199d03c6bfd9c454"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g2_virtual_middle.py",
+      "mode": "100644",
+      "sha": "481e096e064ae64b40f799c94ec7883125f6476d"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3a_continuity.py",
+      "mode": "100644",
+      "sha": "9e5812e9af815be6d49d5a871d12f03918dde336"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3b_native_revocation.py",
+      "mode": "100644",
+      "sha": "3e5e1bfa0779b03f702c1c63aafe5b65dea7bd85"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3c_native_four_owner.py",
+      "mode": "100644",
+      "sha": "49ef531e2dd9b5b97cb28f68289e8fa21c96d546"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3d_native_scene_led.py",
+      "mode": "100644",
+      "sha": "5365e2f31404e94d097ece2a486c61fddc8e5c32"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3e_real_middle_negative.py",
+      "mode": "100644",
+      "sha": "b8a351b870be818eabfb95e73072b38c18c7e58e"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3f_two_tier_trust_policy.py",
+      "mode": "100644",
+      "sha": "d78f7732813499be06cffa60c69d275539288b46"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3g_kernel_uinput_negative.py",
+      "mode": "100644",
+      "sha": "ec7e67bd075499026cf9628bcb4908ac64b95033"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3h_native_os_observer.py",
+      "mode": "100644",
+      "sha": "f814112088df7d1f2f53c72fecbada7ade9e48ac"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3i_real_libinput_middle.py",
+      "mode": "100644",
+      "sha": "070b5fc9df0c81159a46b6b550dde6fea1215468"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3j_compositor_libinput.py",
+      "mode": "100644",
+      "sha": "6eb912ac66baf226d041cda1762afb15ae3bf17f"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3k_native_owner_unmap.py",
+      "mode": "100644",
+      "sha": "81a25df7bdca86d49465c7b79dbd8151888c9256"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3l_native_keyboard_layout.py",
+      "mode": "100644",
+      "sha": "19cc331ee0634633676ce6e9f983ece066287999"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3m_native_hotplug.py",
+      "mode": "100644",
+      "sha": "2905b4cdaca078f1f1a2dd5649e3a008903bae04"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_g3n_keyboard_layout_aba.py",
+      "mode": "100644",
+      "sha": "dcd376bdf7176d7c5e4a9c1c1a182577b3cd6903"
+    },
+    {
+      "path": "tests/autoscroll/test_v5f_owner_snapshot.py",
+      "mode": "100644",
+      "sha": "38eb27dbc0689c510bc151eb6c152ec4cf5590f3"
+    },
+    {
+      "path": "tests/post_apollo_autoscroll_lifetime_test.c",
+      "mode": "100644",
+      "sha": "cf80426aac3d6cb525b079ae19df959d1320dda8"
+    },
+    {
+      "path": "tests/post_apollo_autoscroll_topology_test.c",
+      "mode": "100644",
+      "sha": "d235b5b07699a4d82540c41c2bb6a9db7a57d412"
+    },
+    {
+      "path": "tests/post_apollo_autoscroll_v5f_owner_guard_test.c",
+      "mode": "100644",
+      "sha": "92888c65ba90cf893387d31b15bbb5774eca5b29"
+    }
+  ],
+  "already_identical": [
+    "include/sway/input/post_apollo_autoscroll_epoch.h",
+    "sway/input/post_apollo_autoscroll_epoch.c"
+  ],
+  "historical_workflows": [
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-core.yml",
+      "sha": "e00483a42b6a234275b3257a38295d554219dc9a"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-b-shared-ingress.yml",
+      "sha": "f0ddb279dbe392013d8b815ac3a459f2dd15965a"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-c-topology-lifetime.yml",
+      "sha": "03251b3c1158e77289d215b72f792116ed82292b"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-d1-device-lifecycle.yml",
+      "sha": "18eceab55b8046c91bb45b429c0572f67dcac73c"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-d2-seat-lifecycle.yml",
+      "sha": "276f7573ccc8ccd8ef151b16525980faaea2e3af"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-d3a-target-lifecycle.yml",
+      "sha": "7857deadeb904ff06950bc1990f312189c06eb47"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-d3b-output-lifecycle.yml",
+      "sha": "d7a347b4705e7a45c75203140fdf0ad1cad2664f"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5e-d3c-output-config.yml",
+      "sha": "aebe567ee4590e6738bf4a6ca44ffb87efc6f580"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-a-owner-snapshot.yml",
+      "sha": "7d59bfcdf4945b0acbad481ac524a0baa702c5b2"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-b-native-guard.yml",
+      "sha": "f0aa547265a3e7871eabeaef8311adb186ae828b"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-c1-native-lifecycle.yml",
+      "sha": "99e4a34d231e402b2081fc164cb9396e666417df"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-c2-native-lifecycle.yml",
+      "sha": "117690f0603c432be01e0de8c3a30d0dab74e786"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g1-provenance.yml",
+      "sha": "e7af04dedab7c5f5a6f3c934296581621003ded7"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g2-native-button.yml",
+      "sha": "21f0b2c5db67a8c86013d4ffdf716ef783eb6ac0"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3a-continuity.yml",
+      "sha": "f3fccc055d3cf1939ceb82378051fb015608589b"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3b-native-revocation.yml",
+      "sha": "d07636767421372d2dd01eb41d1bffe30663499d"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3c-four-native-owners.yml",
+      "sha": "27e9b2acc13850c36f4a416c48454e0084c110a4"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3d-native-scene-led.yml",
+      "sha": "c1cb39536eaeb2eef3c66b46822852735a4d1b6b"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3e-real-middle-denial.yml",
+      "sha": "321412160ea5dc3027042b2c1b580c5088e59aa4"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3f-two-tier-trust-model.yml",
+      "sha": "b2e0a4f220a1fbf38b7276c0fcc44bdf6de6f748"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3g-kernel-uinput-negative.yml",
+      "sha": "6862af6e67ceee2fda9c931aadc4a87ead4e9607"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3h-native-os-diagnostic.yml",
+      "sha": "fd7341c01cca8c75c09b04fcdccda2da334fac1f"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3i-real-libinput-middle.yml",
+      "sha": "85087ee71c8e214ad8c03e25e0aea2900f0866c8"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3j-real-compositor-libinput.yml",
+      "sha": "efc25a9e9d924b840a5c4dfc60909f2860eee724"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3k-native-owner-unmap.yml",
+      "sha": "60c44e9895dcf15cb502de0b02c79037cad826b9"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3l-native-scroll-lock-layout.yml",
+      "sha": "54e7f3c4687b6837eba12c0fc871958c27e03b26"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3m-native-multi-keyboard.yml",
+      "sha": "c9f90709322ddd4e37a06ad538ebb880748e2480"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3n-aba-negative.yml",
+      "sha": "24a54ea5db2cdda735af43f2c35a800a43a620f5"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3o-native-event-epoch.yml",
+      "sha": "160ef2fbadd08567b488edd4d6041fae89f5603b"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3p-post-aba-native-input.yml",
+      "sha": "5a1f0e489b4b4c782cb66820d3bcace6f835b7f0"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3q-native-group-membership.yml",
+      "sha": "c39f9cb4b2e3f67176b9cd810583e4d893b3c286"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3r-native-seat-lifecycle.yml",
+      "sha": "4cb190720dc94f9062074dcd34075586b6f48de2"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3s-native-scrolllock-interlock.yml",
+      "sha": "59e4588e20d2a88cc5b05a49de6360f8362a7a8e"
+    },
+    {
+      "path": ".github/workflows/post-apollo-autoscroll-v5f-g3t-native-shadow-cancellation.yml",
+      "sha": "791db65eaa3640243b3f5f934e55fd05d785ea88"
+    }
+  ],
+  "adapted_paths": [
+    ".github/workflows/post-apollo-autoscroll-core.yml",
+    ".github/workflows/post-apollo-autoscroll-v5f-g4a-consolidated.yml",
+    "MODEL/autoscroll-v5f-g4a-import-manifest.json",
+    "MODEL/autoscroll-v5f-g4a-consolidation.md"
+  ]
+}

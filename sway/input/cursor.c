@@ -21,6 +21,7 @@
 #include "sway/commands.h"
 #include "sway/input/cursor.h"
 #include "sway/input/post_apollo_autoscroll_runtime.h"
+#include "sway/input/post_apollo_autoscroll_source.h"
 #include "sway/input/keyboard.h"
 #include "sway/input/tablet.h"
 #include "sway/layers.h"
@@ -397,11 +398,19 @@ static void handle_pointer_button(struct wl_listener *listener, void *data) {
 	if (weather_paired || company_paired) {
 		return;
 	}
-	/* Runs after both Stage Director pairing guards. Hard-OFF by default. */
-	if (pa_autoscroll_runtime_button(cursor->autoscroll,
-			&event->pointer->base, event->time_msec, event->button,
-			event->state == WL_POINTER_BUTTON_STATE_PRESSED)) {
-		return;
+	/* V5E-B shared cursor seam, operator-approved narrow exception:
+	 * Weather/Company have FIRST refusal above. Only if an optional
+	 * autoscroll runtime exists do we read a native backend candidate.
+	 * A candidate is NOT physical proof. The runtime remains HARD OFF;
+	 * no event is consumed or device setting changed in production. */
+	if (cursor->autoscroll != NULL) {
+		struct pa_autoscroll_origin_facts origin =
+			pa_autoscroll_source_probe(&event->pointer->base);
+		if (pa_autoscroll_runtime_button(cursor->autoscroll,
+				&event->pointer->base, event->time_msec, event->button,
+				event->state == WL_POINTER_BUTTON_STATE_PRESSED, &origin)) {
+			return;
+		}
 	}
 	dispatch_cursor_button(cursor, &event->pointer->base,
 			event->time_msec, event->button, event->state);

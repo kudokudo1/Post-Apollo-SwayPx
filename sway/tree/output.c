@@ -152,11 +152,51 @@ struct sway_output *output_create(struct wlr_output *wlr_output) {
 	return output;
 }
 
+uint64_t output_autoscroll_lifetime_epoch(const struct sway_output *output) {
+	if (output == NULL || !output->enabled || output->wlr_output == NULL ||
+			root == NULL || root->fallback_output == output ||
+			output->node.destroying) {
+		return 0;
+	}
+	return pa_autoscroll_lifetime_epoch(
+		&output->autoscroll_output_lifetime, PA_LIFETIME_OUTPUT);
+}
+
+void output_autoscroll_config_committed(struct sway_output *output) {
+	if (output == NULL) {
+		return;
+	}
+	/* Rotate even if geometry appears identical. Mode, transform, scale,
+	 * color pipeline or auto-layout may change on a successful backend
+	 * configuration. An unverified object is always represented by zero.
+	 * Never issue a token for a disabled, fallback or destroying output. */
+	pa_autoscroll_lifetime_revoke(&output->autoscroll_output_lifetime);
+	if (!output->enabled || output->node.destroying ||
+			output->wlr_output == NULL || root == NULL ||
+			root->fallback_output == output || server.input == NULL) {
+		return;
+	}
+	(void)pa_autoscroll_lifetime_bind(
+		&server.input->autoscroll_lifetime_issuer,
+		&output->autoscroll_output_lifetime, PA_LIFETIME_OUTPUT);
+}
+
 void output_enable(struct sway_output *output) {
 	if (!sway_assert(!output->enabled, "output is already enabled")) {
 		return;
 	}
 	struct wlr_output *wlr_output = output->wlr_output;
+	/* Enabling creates a NEW output availability lifetime, including when
+	 * the same output was previously disabled. If the issuer is missing
+	 * or exhausted this slot stays zero without blocking normal outputs.
+	 * The fallback/NOOP output is never eligible for real autoscroll. */
+	pa_autoscroll_lifetime_revoke(&output->autoscroll_output_lifetime);
+	if (server.input != NULL && root != NULL &&
+			output != root->fallback_output) {
+		(void)pa_autoscroll_lifetime_bind(
+			&server.input->autoscroll_lifetime_issuer,
+			&output->autoscroll_output_lifetime, PA_LIFETIME_OUTPUT);
+	}
 	output->enabled = true;
 	list_add(root->outputs, output);
 
@@ -292,6 +332,10 @@ void output_disable(struct sway_output *output) {
 
 	sway_log(SWAY_DEBUG, "Disabling output '%s'", output->wlr_output->name);
 
+	/* The output becomes ineligible before workspace evacuation and
+	 * scene teardown. A later re-enable must mint a different token. */
+	pa_autoscroll_lifetime_revoke(&output->autoscroll_output_lifetime);
+
 	// Remove the output now to avoid interacting with it during e.g.,
 	// transactions, as the output might be physically removed with the scene
 	// output destroyed.
@@ -307,6 +351,8 @@ void output_begin_destroy(struct sway_output *output) {
 	if (!sway_assert(!output->enabled, "Expected a disabled output")) {
 		return;
 	}
+	/* Idempotent final revocation, including the never-enabled fallback. */
+	pa_autoscroll_lifetime_revoke(&output->autoscroll_output_lifetime);
 	sway_log(SWAY_DEBUG, "Destroying output '%s'", output->wlr_output->name);
 	wl_signal_emit_mutable(&output->node.events.destroy, &output->node);
 

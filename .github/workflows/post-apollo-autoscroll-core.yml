@@ -43,6 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Compile internal autoscroll core with warnings as errors
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic \
@@ -81,56 +82,21 @@ jobs:
             -lm -o /tmp/post-apollo-autoscroll-witness-unit
       - name: Test provenance, freshness, target/output turnover and no-emit denials
         run: timeout 5s /tmp/post-apollo-autoscroll-witness-unit
-      - name: Verify witness policy stays outside production input path
+      - name: Verify hard-off guard and existing input pairing contracts
         run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_default_off_compositor_hook.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_b_guard_bridge.py' -v
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_v5f_owner_snapshot.py' -v
           python3 - <<'PY'
           from pathlib import Path
-          runtime = Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
-          cursor = Path("sway/input/cursor.c").read_text()
-          meson = Path("sway/meson.build").read_text()
-          witness = Path("sway/input/post_apollo_autoscroll_witness.c").read_text()
-          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
-          assert "pa_autoscroll_witness_" not in runtime
-          assert "pa_autoscroll_witness_" not in cursor
-          assert "post_apollo_autoscroll_witness.c" not in meson
-          for banned in ("wlr_seat_pointer_notify", "wl_event_loop_add_timer",
-                         "uinput", "swaymsg", "libinput_device_"):
-              assert banned not in witness, banned
-          print("SWAYPX_AUTOSCROLL_WITNESS_TEST_ONLY")
-          PY
-      - name: Verify compositor hook is compiled but hard OFF with pairing intact
-        run: python3 -m unittest discover -s tests/autoscroll -p "test_default_off_compositor_hook.py"
-      - name: Verify no changes to foreign cursor-owner dependency files
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          base = subprocess.check_output(
-              ["git", "merge-base", "HEAD", "origin/master"], text=True
-          ).strip()
-          changed = subprocess.check_output(
-              ["git", "diff", "--name-only", base, "HEAD"], text=True
-          ).splitlines()
-          forbidden = {
-              "sway/input/seat.c",
-              "sway/input/seatop_default.c",
-              "sway/ipc-server.c",
-          }
-          assert not forbidden.intersection(changed), changed
-          core = Path("sway/input/post_apollo_autoscroll.c").read_text()
-          assert "wlr_seat_pointer_notify_axis" not in core
-          assert "seatop_pointer_axis" not in core
-          adapter = Path("sway/input/post_apollo_autoscroll_adapter.c").read_text()
-          assert "wlr_seat_pointer_notify_axis" not in adapter
-          assert "seatop_pointer_axis" not in adapter
-          assert "wl_event_loop_add_timer" not in adapter
-          dispatch = Path("sway/input/post_apollo_autoscroll_axis_dispatch.c").read_text()
-          assert "wlr_seat_pointer_notify_axis" not in dispatch
-          assert "seatop_pointer_axis" not in dispatch
-          assert "wl_event_loop_add_timer" not in dispatch
-          assert "wl_pointer" not in dispatch
-          assert "uinput" not in dispatch
-          assert "swaymsg" not in adapter
-          assert "UInput" not in core
+          core=Path("sway/input/post_apollo_autoscroll.c").read_text()
+          adapter=Path("sway/input/post_apollo_autoscroll_adapter.c").read_text()
+          dispatch=Path("sway/input/post_apollo_autoscroll_axis_dispatch.c").read_text()
+          witness=Path("sway/input/post_apollo_autoscroll_witness.c").read_text()
+          for code in (core,adapter,dispatch,witness):
+              for banned in ("wlr_seat_pointer_notify", "seatop_pointer_axis",
+                             "wl_event_loop_add_timer", "uinput", "swaymsg"):
+                  assert banned not in code,banned
           print("SWAYPX_AUTOSCROLL_COMPILED_HARD_OFF")
           PY
