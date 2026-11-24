@@ -28,6 +28,7 @@ struct pa_os_scroll_scene {
 };
 struct pa_os_scroll_event {
     uint64_t sequence, observed_ms;
+    uint64_t device_epoch, seat_epoch, layout_epoch, policy_epoch;
     bool native_callback, middle_press, libinput_pointer, live_handle;
     bool coherent_kernel_tree, known_synthetic, protocol_virtual;
     bool scroll_method_known, native_button_scroll;

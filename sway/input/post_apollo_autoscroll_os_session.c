@@ -42,6 +42,17 @@ static bool scene_ok(const struct pa_os_scroll_session *s,
         v->no_pending_transaction && v->no_constraint && v->session_unlocked &&
         v->no_conflicting_grab && v->company_weather_clear && v->no_emulation;
 }
+/* A newer same-seat scene sequence is spent even on refusal. Exhaustion
+ * is terminal for this slot. Do not allow later begin to replay a denied
+ * observation after changing mode or restoring state. */
+static bool observe_scene(struct pa_os_scroll_session *s,
+        const struct pa_os_scroll_scene *v,uint64_t now) {
+    const bool ok=scene_ok(s,v,now);
+    if (v && v->seat_epoch==s->seat_epoch &&
+        v->read_sequence>s->last_read_sequence)
+        s->last_read_sequence=v->read_sequence;
+    return ok;
+}
 static bool event_ok(const struct pa_os_scroll_event *e,uint64_t now) {
     return e->sequence!=UINT64_MAX && age_ok(e->observed_ms,now,MAX_EVENT_AGE_MS) &&
         e->native_callback && e->middle_press && e->libinput_pointer &&
@@ -54,13 +65,16 @@ bool pa_os_scroll_begin(struct pa_os_scroll_session *s,
     if (!s || !s->seat_epoch) return false;
     const bool was_active=s->active;
     pa_os_scroll_cancel(s);
+    const bool valid_scene=observe_scene(s,v,now);
     /* Consume observed sequence even on refusal. A later configuration
      * change or restored scene must never upgrade a previously seen press. */
     if (!e || !e->sequence || e->sequence<=s->last_event_sequence) return false;
     s->last_event_sequence=e->sequence;
-    if (was_active || !event_ok(e,now) || !scene_ok(s,v,now) ||
-            v->read_ms<e->observed_ms) return false;
-    s->last_read_sequence=v->read_sequence;
+    if (was_active || !event_ok(e,now) || !valid_scene ||
+            v->read_ms<e->observed_ms ||
+            e->device_epoch!=v->device_epoch || e->seat_epoch!=v->seat_epoch ||
+            e->layout_epoch!=v->layout_epoch || e->policy_epoch!=v->policy_epoch)
+        return false;
     s->bound=*v;
     s->begin_ms=now;
     s->last_tick_ms=now;
@@ -71,8 +85,9 @@ bool pa_os_scroll_tick(struct pa_os_scroll_session *s,
         const struct pa_os_scroll_scene *v,uint64_t now) {
     if (!s || !s->active) return false;
     const struct pa_os_scroll_scene *b=&s->bound;
+    const bool valid_scene=observe_scene(s,v,now);
     if (now<=s->last_tick_ms || now-s->last_tick_ms>MAX_TICK_GAP_MS ||
-        now-s->begin_ms>MAX_SESSION_MS || !scene_ok(s,v,now) ||
+        now-s->begin_ms>MAX_SESSION_MS || !valid_scene ||
         v->read_ms<=b->read_ms || v->device_epoch!=b->device_epoch ||
         v->seat_epoch!=b->seat_epoch || v->target_epoch!=b->target_epoch ||
         v->output_epoch!=b->output_epoch || v->layout_epoch!=b->layout_epoch ||
@@ -80,7 +95,6 @@ bool pa_os_scroll_tick(struct pa_os_scroll_session *s,
         pa_os_scroll_cancel(s);
         return false;
     }
-    s->last_read_sequence=v->read_sequence;
     s->bound=*v;
     s->last_tick_ms=now;
     return true;

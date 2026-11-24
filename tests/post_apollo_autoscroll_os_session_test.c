@@ -5,7 +5,8 @@
 #include "sway/input/post_apollo_autoscroll_os_session.h"
 static struct pa_os_scroll_event event(uint64_t seq) {
     return (struct pa_os_scroll_event){
-        .sequence=seq,.observed_ms=1000,.native_callback=true,
+        .sequence=seq,.observed_ms=1000,.device_epoch=1,.seat_epoch=2,
+        .layout_epoch=5,.policy_epoch=6,.native_callback=true,
         .middle_press=true,.libinput_pointer=true,.live_handle=true,
         .coherent_kernel_tree=true,.scroll_method_known=true};
 }
@@ -41,6 +42,8 @@ int main(void) {
     EVENT_DENY(libinput_pointer,false); EVENT_DENY(live_handle,false);
     EVENT_DENY(coherent_kernel_tree,false); EVENT_DENY(known_synthetic,true);
     EVENT_DENY(protocol_virtual,true); EVENT_DENY(scroll_method_known,false);
+    EVENT_DENY(device_epoch,11); EVENT_DENY(seat_epoch,12);
+    EVENT_DENY(layout_epoch,15); EVENT_DENY(policy_epoch,16);
     EVENT_DENY(native_button_scroll,true); EVENT_DENY(observed_ms,919);
     EVENT_DENY(observed_ms,1001); EVENT_DENY(sequence,UINT64_MAX);
     SCENE_DENY(mode,PA_OS_SCROLL_OFF); SCENE_DENY(mode,PA_OS_SCROLL_ENROLLED);
@@ -65,6 +68,23 @@ int main(void) {
     TICK_DENY(session_unlocked,false); TICK_DENY(no_conflicting_grab,false);
     TICK_DENY(read_sequence,1); TICK_DENY(read_ms,1000);
     TICK_DENY(read_ms,1017); TICK_DENY(owners_live,false);
+    { /* Refused scene cannot be reused with a different fresh press. */
+        struct pa_os_scroll_session r=slot();
+        struct pa_os_scroll_scene denied=scene(1,1000);
+        struct pa_os_scroll_event first=event(1);
+        denied.lock=PA_OS_SCROLL_LOCK_DISARMED;
+        assert(!pa_os_scroll_begin(&r,&first,&denied,1000));
+        denied.lock=PA_OS_SCROLL_LOCK_ARMED;
+        first.sequence=2;
+        assert(!pa_os_scroll_begin(&r,&first,&denied,1000));
+        first.sequence=3; denied.read_sequence=2;
+        assert(pa_os_scroll_begin(&r,&first,&denied,1000));
+        denied.read_sequence=UINT64_MAX; denied.read_ms=1016;
+        assert(!pa_os_scroll_tick(&r,&denied,1016));
+        first.sequence=4; first.observed_ms=1032;
+        denied=scene(3,1032);
+        assert(!pa_os_scroll_begin(&r,&first,&denied,1032));
+    }
     struct pa_os_scroll_session s=slot();
     struct pa_os_scroll_event e=event(1);
     struct pa_os_scroll_scene v=scene(1,1000);
