@@ -1,0 +1,45 @@
+name: SwayPX / G4D1 Seat Controls (HARD OFF)
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_os_controls.h'
+      - 'sway/input/post_apollo_autoscroll_os_controls.c'
+      - 'tests/post_apollo_autoscroll_os_controls_test.c'
+      - 'MODEL/autoscroll-v5f-g4d1-seat-controls.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g4d1-seat-controls.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Assert additive boundary
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base="2e1aba8ca30997bd16ab1deefddc03a66c23d582"
+          changed=set(subprocess.check_output(["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          assert changed=={"include/sway/input/post_apollo_autoscroll_os_controls.h","sway/input/post_apollo_autoscroll_os_controls.c","tests/post_apollo_autoscroll_os_controls_test.c","MODEL/autoscroll-v5f-g4d1-seat-controls.md",".github/workflows/post-apollo-autoscroll-v5f-g4d1-seat-controls.yml"},changed
+          for p in changed:
+              assert not subprocess.check_output(["git","ls-tree",base,"--",p],text=True),p
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "post_apollo_autoscroll_os_controls.c" not in Path("sway/meson.build").read_text()
+          for p in ("sway/input/cursor.c","sway/input/keyboard.c","sway/input/seat.c"):
+              assert "pa_os_controls_" not in Path(p).read_text()
+          PY
+      - name: Compile and test actual detached session and controls
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/input/post_apollo_autoscroll_os_session.c sway/input/post_apollo_autoscroll_os_controls.c tests/post_apollo_autoscroll_os_controls_test.c -o "$RUNNER_TEMP/pa-g4d1"
+          timeout 5s "$RUNNER_TEMP/pa-g4d1"
+          test -z "$(git status --porcelain)"
