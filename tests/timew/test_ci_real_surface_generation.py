@@ -6,7 +6,7 @@ from test_ci_real_root_sample import sample as parent_sample
 def root_gen_sample(gen):
     return (
         f"TIMEW_CI_XDG_GEN_SAMPLE lifetime={gen} sequence={gen} "
-        f"surface_state_seq={100+gen} exact_native_root=1 "
+        f"surface_state_seq={100+gen} root_client_object_match=1 exact_native_root=1 "
         "real_scenefx_sample=1 immutable_buffer=UNVERIFIED "
         "final_frame=UNVERIFIED ack=UNVERIFIED source=UNENROLLED "
         "c5_spent=NONE receipt=NONE move=OFF authority=NONE"
@@ -74,6 +74,40 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
         self.assertFalse(r["selected_xdg_final_frame"])
         self.assertEqual(r["safe_actions"],[])
         self.assertFalse(r["settled"])
+
+    def test_live_object_match_is_only_sample_diagnostic(self):
+        r=validate_surface_generation(sample(),"normal")
+        self.assertEqual(r["root_client_object_matches_at_sample_diagnostic"],2)
+        self.assertEqual(r["root_client_object_unmatched_at_sample_hold"],0)
+        self.assertFalse(r["client_buffer_attachment_continuity"])
+        self.assertFalse(r["immutable_buffer_identified"])
+        self.assertFalse(r["selected_xdg_final_frame"])
+
+    def test_unmatched_client_object_stays_hold_despite_stable_generation(self):
+        rows=replace_gen(sample(),1,"SAMPLE",
+                         "root_client_object_match=1","root_client_object_match=0")
+        r=validate_surface_generation(rows,"normal")
+        self.assertEqual(r["root_client_object_matches_at_sample_diagnostic"],1)
+        self.assertEqual(r["root_client_object_unmatched_at_sample_hold"],1)
+        self.assertEqual(r["unchanged_at_output_present_diagnostic"],2)
+        self.assertFalse(r["client_buffer_attachment_continuity"])
+        self.assertEqual(r["safe_actions"],[])
+        self.assertFalse(r["settled"])
+
+    def test_missing_client_object_observation(self):
+        self.denies(replace_gen(sample(),1,"SAMPLE",
+                               "root_client_object_match=1 ",""))
+
+    def test_malformed_client_object_observation(self):
+        for value in ("2","-1","TRUE","01"):
+            with self.subTest(value=value):
+                self.denies(replace_gen(sample(),1,"SAMPLE",
+                           "root_client_object_match=1","root_client_object_match="+value))
+
+    def test_client_object_match_cannot_claim_attachment_continuity(self):
+        self.denies(replace_gen(sample(),1,"SAMPLE",
+                   "root_client_object_match=1",
+                   "root_client_object_match=1 client_buffer_attachment_continuity=VERIFIED"))
 
     def test_forced_timeout_stable_surface_does_not_settle(self):
         r=validate_surface_generation(sample("forced_timeout"),"forced_timeout")

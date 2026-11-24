@@ -12,7 +12,8 @@ from ci_assert_real_root_sample import validate_root_sample
 
 SAMPLE = re.compile(
     r"TIMEW_CI_XDG_GEN_SAMPLE lifetime=(\d+) sequence=(\d+) "
-    r"surface_state_seq=(\d+) exact_native_root=1 real_scenefx_sample=1 "
+    r"surface_state_seq=(\d+) root_client_object_match=([01]) "
+    r"exact_native_root=1 real_scenefx_sample=1 "
     r"immutable_buffer=UNVERIFIED final_frame=UNVERIFIED "
     r"ack=UNVERIFIED source=UNENROLLED c5_spent=NONE "
     r"receipt=NONE move=OFF authority=NONE$"
@@ -119,9 +120,11 @@ def validate_surface_generation(lines, mode):
     # At the instant of sampling, the compositor's root committed-state seq
     # is captured. It may be a no-buffer state or may wrap: neither is a
     # durable content identifier; 0 remains entirely unqualified.
-    for key, (i, (seq,)) in samples.items():
+    client_object_matches = 0
+    for key, (i, (seq, object_match)) in samples.items():
         if not parent_sample[key][0] < i < seals[key[0]][0]:
             raise ValueError("root_surface_state_before_native_sample_or_after_seal")
+        client_object_matches += object_match
     sampled_unchanged_at_commit = 0
     sampled_superseded_at_commit = 0
     unsampled_output_commits = 0
@@ -185,6 +188,9 @@ def validate_surface_generation(lines, mode):
 
     return {
         "actual_root_state_samples": len(samples),
+        "root_client_object_matches_at_sample_diagnostic": client_object_matches,
+        "root_client_object_unmatched_at_sample_hold": len(samples) - client_object_matches,
+        "client_buffer_attachment_continuity": False,
         "accepted_output_commits": len(commits),
         "actual_output_present_events": len(presents),
         "unchanged_at_output_commit_diagnostic": sampled_unchanged_at_commit,
@@ -214,6 +220,9 @@ def main():
     print(
         f"TIMEW_CI_XDG_GEN_{sys.argv[2].upper()}_PASS "
         f"actual_root_state_samples={r['actual_root_state_samples']} "
+        f"root_client_object_matches_at_sample={r['root_client_object_matches_at_sample_diagnostic']} "
+        f"root_client_object_unmatched_at_sample_hold={r['root_client_object_unmatched_at_sample_hold']} "
+        "client_buffer_attachment_continuity=UNVERIFIED "
         f"accepted_output_commits={r['accepted_output_commits']} "
         f"output_presents={r['actual_output_present_events']} "
         f"root_generation_unchanged_at_commit={r['unchanged_at_output_commit_diagnostic']} "
