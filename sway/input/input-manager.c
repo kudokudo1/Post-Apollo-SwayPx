@@ -27,6 +27,35 @@
 
 #define DEFAULT_SEAT "seat0"
 
+/* The input manager owns pointer lifetimes: new input, virtual pointer,
+ * and removal are all handled here. Issued epochs are never physical trust.
+ * Once the device is removed, its slot is revoked before seats detach it.
+ */
+static void pa_autoscroll_bind_pointer_lifetime(
+        struct sway_input_manager *manager,
+        struct sway_input_device *input_device) {
+    if (manager != NULL && input_device != NULL &&
+            input_device->wlr_device != NULL &&
+            input_device->wlr_device->type == WLR_INPUT_DEVICE_POINTER) {
+        /* Any allocation failure or exhausted issuer leaves epoch zero.
+         * Normal pointer behavior is never denied by this bookkeeping. */
+        (void)pa_autoscroll_lifetime_bind(
+            &manager->autoscroll_lifetime_issuer,
+            &input_device->autoscroll_lifetime, PA_LIFETIME_DEVICE);
+    }
+}
+
+uint64_t input_manager_autoscroll_pointer_lifetime_epoch(
+        const struct sway_input_device *input_device) {
+    if (input_device == NULL || input_device->is_virtual ||
+            input_device->wlr_device == NULL ||
+            input_device->wlr_device->type != WLR_INPUT_DEVICE_POINTER) {
+        return 0;
+    }
+    return pa_autoscroll_lifetime_epoch(
+        &input_device->autoscroll_lifetime, PA_LIFETIME_DEVICE);
+}
+
 struct input_config *current_input_config = NULL;
 struct seat_config *current_seat_config = NULL;
 
@@ -208,6 +237,10 @@ static void handle_device_destroy(struct wl_listener *listener, void *data) {
 	sway_log(SWAY_DEBUG, "removing device: '%s'",
 		input_device->identifier);
 
+	/* Real compositor teardown: revoke before any seat detaches the input.
+	 * A future active consumer must compare this live epoch on every tick. */
+	pa_autoscroll_lifetime_revoke(&input_device->autoscroll_lifetime);
+
 	struct sway_seat *seat = NULL;
 	wl_list_for_each(seat, &server.input->seats, link) {
 		seat_remove_device(seat, input_device);
@@ -235,6 +268,7 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 
 	input_device->wlr_device = device;
 	input_device->identifier = input_device_get_identifier(device);
+	pa_autoscroll_bind_pointer_lifetime(input, input_device);
 	wl_list_insert(&input->devices, &input_device->link);
 
 	sway_log(SWAY_DEBUG, "adding device: '%s'",
@@ -416,6 +450,8 @@ void handle_virtual_pointer(struct wl_listener *listener, void *data) {
 	input_device->is_virtual = true;
 	input_device->wlr_device = device;
 	input_device->identifier = input_device_get_identifier(device);
+	/* Virtual devices get a distinct lifetime, but never pointer authority. */
+	pa_autoscroll_bind_pointer_lifetime(input_manager, input_device);
 	wl_list_insert(&input_manager->devices, &input_device->link);
 
 	sway_log(SWAY_DEBUG, "adding virtual pointer: '%s'",
@@ -455,6 +491,11 @@ struct sway_input_manager *input_manager_create(struct sway_server *server) {
 
 	wl_list_init(&input->devices);
 	wl_list_init(&input->seats);
+	/* Initialize the issuer once before any real input callback may run. */
+	if (!pa_autoscroll_lifetime_init(&input->autoscroll_lifetime_issuer)) {
+		free(input);
+		return NULL;
+	}
 
 	input->new_input.notify = handle_new_input;
 	wl_signal_add(&server->backend->events.new_input, &input->new_input);

@@ -1094,6 +1094,11 @@ static bool apply_resolved_output_configs(struct matched_output_config *configs,
 	for (size_t idx = 0; idx < configs_len; idx++) {
 		struct matched_output_config *cfg = &configs[idx];
 		output_update_position(cfg->output);
+		/* The backend commit has succeeded and auto-placement may have
+		 * shifted more than one screen. Reissue an epoch for EVERY eligible
+		 * enabled output before the new scene layout can be arranged.
+		 * This also invalidates no-op/scale/transform config updates. */
+		output_autoscroll_config_committed(cfg->output);
 		arrange_layers(cfg->output);
 	}
 

@@ -6,6 +6,7 @@
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_transient_seat_v1.h>
 #include "sway/config.h"
+#include "sway/input/post_apollo_autoscroll_lifetime.h"
 #include "list.h"
 
 struct sway_server;
@@ -16,11 +17,15 @@ struct sway_input_device {
 	struct wl_list link;
 	struct wl_listener device_destroy;
 	bool is_virtual;
+	/* Compositor-issued device lifetime only; never physical provenance. */
+	struct pa_autoscroll_lifetime_slot autoscroll_lifetime;
 };
 
 struct sway_input_manager {
 	struct wl_list devices;
 	struct wl_list seats;
+	/* One issuer for all input devices during this manager's lifetime. */
+	struct pa_autoscroll_lifetime_issuer autoscroll_lifetime_issuer;
 
 	struct wlr_keyboard_shortcuts_inhibit_manager_v1 *keyboard_shortcuts_inhibit;
 	struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard;
@@ -40,6 +45,10 @@ struct sway_input_manager {
 struct sway_input_manager *input_manager_create(struct sway_server *server);
 
 void input_manager_finish(struct sway_input_manager *input);
+
+/* A live, nonvirtual POINTER lifetime only. Not an authorization token. */
+uint64_t input_manager_autoscroll_pointer_lifetime_epoch(
+	const struct sway_input_device *input_device);
 
 bool input_manager_has_focus(struct sway_node *node);
 

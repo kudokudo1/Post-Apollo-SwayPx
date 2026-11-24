@@ -8,6 +8,7 @@
 #include "list.h"
 #include "sway/animation_manager.h"
 #include "sway/tree/node.h"
+#include "sway/input/post_apollo_autoscroll_lifetime.h"
 
 struct sway_view;
 struct sway_seat;
@@ -70,6 +71,8 @@ struct sway_container_state {
 struct sway_container {
 	struct sway_node node;
 	struct sway_view *view;
+	/* A mapped window lifetime, never authorization or a hit-test proof. */
+	struct pa_autoscroll_lifetime_slot autoscroll_target_lifetime;
 
 	struct wlr_scene_tree *scene_tree;
 
@@ -187,6 +190,10 @@ struct sway_container *container_create(struct sway_view *view);
 void container_destroy(struct sway_container *con);
 
 void container_begin_destroy(struct sway_container *con);
+
+/* Call only while con itself is live. Zero for split/unmapped/destroying. */
+uint64_t container_autoscroll_target_lifetime_epoch(
+	const struct sway_container *con);
 
 /**
  * Search a container's descendants a container based on test criteria. Returns

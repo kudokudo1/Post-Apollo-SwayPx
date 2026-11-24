@@ -20,6 +20,8 @@
 #include "util.h"
 #include "sway/input/cursor.h"
 #include "sway/input/post_apollo_autoscroll_axis_dispatch.h"
+#include "sway/input/post_apollo_autoscroll_guard_bridge.h"
+#include "sway/input/post_apollo_autoscroll_origin_policy.h"
 #include "sway/input/post_apollo_autoscroll_runtime.h"
 #include "sway/server.h"
 #include "sway/tree/node.h"
@@ -30,6 +32,9 @@
 struct pa_autoscroll_runtime {
     struct sway_cursor *cursor;
     struct pa_autoscroll_dispatch dispatch;
+    /* Guard checks actual owner-issued tokens before any axis intent.
+     * No trusted positive event witness exists; this stays unarmed. */
+    struct pa_autoscroll_guard_bridge owner_guard;
     struct wl_event_source *timer;
     struct wlr_input_device *source_device;
 };
@@ -55,6 +60,7 @@ static bool send_axis_intent(void *opaque,
     if (!PA_AUTOSCROLL_LIVE_ACTIVATION || runtime == NULL ||
             runtime->cursor == NULL || event == NULL ||
             !runtime->dispatch.adapter.enabled ||
+            !runtime->owner_guard.epoch.active ||
             runtime->cursor->seat == NULL ||
             event->target_node_id == 0 ||
             event->target_node_id != pointer_target(runtime->cursor)) {
@@ -74,6 +80,7 @@ static void send_axis_frame(void *opaque) {
     struct pa_autoscroll_runtime *runtime = opaque;
     if (PA_AUTOSCROLL_LIVE_ACTIVATION && runtime != NULL &&
             runtime->dispatch.adapter.enabled &&
+            runtime->owner_guard.epoch.active &&
             runtime->cursor != NULL && runtime->cursor->seat != NULL) {
         wlr_seat_pointer_notify_frame(runtime->cursor->seat->wlr_seat);
     }
@@ -88,9 +95,17 @@ static int autoscroll_timer_tick(void *opaque) {
             runtime->cursor == NULL ||
             server.session_lock.lock != NULL) {
         if (runtime != NULL) {
-            pa_scroll_dispatch_cancel(&runtime->dispatch);
-            runtime->source_device = NULL;
+            pa_autoscroll_runtime_cancel(runtime);
         }
+        return 0;
+    }
+    /* V5F-B: native timer cannot fabricate a fresh input event. Compare
+     * real owner lifetimes BEFORE any axis/frame output and refuse when
+     * the separate positive witness is absent or stale. */
+    if (!pa_autoscroll_guard_bridge_tick(&runtime->owner_guard,
+            runtime->cursor, runtime->source_device,
+            get_current_time_in_msec())) {
+        pa_autoscroll_runtime_cancel(runtime);
         return 0;
     }
     uint64_t target = pointer_target(runtime->cursor);
@@ -140,6 +155,7 @@ void pa_autoscroll_runtime_cancel(struct pa_autoscroll_runtime *runtime) {
         return;
     }
     pa_scroll_dispatch_cancel(&runtime->dispatch);
+    pa_autoscroll_guard_bridge_cancel(&runtime->owner_guard);
     runtime->source_device = NULL;
     if (runtime->timer != NULL) {
         wl_event_source_timer_update(runtime->timer, -1);
@@ -160,17 +176,34 @@ void pa_autoscroll_runtime_destroy(struct pa_autoscroll_runtime *runtime) {
 
 bool pa_autoscroll_runtime_button(struct pa_autoscroll_runtime *runtime,
         struct wlr_input_device *device, uint32_t timestamp,
-        uint32_t button, bool pressed) {
+        uint32_t button, bool pressed,
+        const struct pa_autoscroll_origin_facts *origin) {
     if (!PA_AUTOSCROLL_LIVE_ACTIVATION || runtime == NULL ||
             !runtime->dispatch.adapter.enabled ||
-            device == NULL || runtime->cursor == NULL) {
+            device == NULL || runtime->cursor == NULL ||
+            /* A libinput backend CANDIDATE is necessary, not sufficient.
+             * A synthetic kernel pointer may also reach libinput. */
+            pa_autoscroll_origin_classify(origin) !=
+                PA_AUTOSCROLL_ORIGIN_LIBINPUT_CANDIDATE) {
         return false;
     }
-    /* No verified physical pointer or libinput Scroll Lock source exists.
-     * These false/true gates intentionally prevent consumption for now.
+    /* Native scroll mode is observed, but genuine physical provenance,
+     * object lifetimes and layout epoch are not yet authenticated.
+     * The independent false/true gates still prevent consumption.
      */
     const bool physical_verified = false;
     const bool native_scroll_lock_active = true;
+    /* Never consume middle-click based only on libinput candidacy or
+     * four object lifetimes. The pinned V5C guard is now connected to
+     * this real event boundary, but its native witness is deliberately
+     * nonadmissible until three independent security facts exist. */
+    if (button == PA_AUTOSCROLL_BTN_MIDDLE && pressed &&
+            !pa_autoscroll_guard_bridge_begin(&runtime->owner_guard,
+                runtime->cursor, device, timestamp,
+                get_current_time_in_msec())) {
+        pa_autoscroll_runtime_cancel(runtime);
+        return false;
+    }
     if (button == PA_AUTOSCROLL_BTN_MIDDLE) {
         uint64_t target = pointer_target(runtime->cursor);
         bool consumed = pa_scroll_dispatch_middle(&runtime->dispatch,

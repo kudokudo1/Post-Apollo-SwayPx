@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_scene.h>
 #include "config.h"
 #include "sway/tree/node.h"
+#include "sway/input/post_apollo_autoscroll_lifetime.h"
 #include "sway/tree/view.h"
 
 struct sway_server;
@@ -21,6 +22,8 @@ struct sway_output_state {
 
 struct sway_output {
 	struct sway_node node;
+	/* One token per enabled output lifetime, not a scene/layout proof. */
+	struct pa_autoscroll_lifetime_slot autoscroll_output_lifetime;
 
 	struct {
 		struct wlr_scene_tree *shell_background;
@@ -121,6 +124,13 @@ void output_sort_workspaces(struct sway_output *output);
 void output_enable(struct sway_output *output);
 
 void output_disable(struct sway_output *output);
+
+/* Read only while output is live; zero for disabled/fallback/destroyed. */
+uint64_t output_autoscroll_lifetime_epoch(const struct sway_output *output);
+
+/* Rotate an output's availability epoch after a real backend config commit.
+ * Fail closed: this cannot grant physical hardware or scroll permission. */
+void output_autoscroll_config_committed(struct sway_output *output);
 
 struct sway_workspace *output_get_active_workspace(struct sway_output *output);
 

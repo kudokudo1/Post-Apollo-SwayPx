@@ -71,12 +71,23 @@ static void seat_node_destroy(struct sway_seat_node *seat_node) {
 	free(seat_node);
 }
 
+uint64_t seat_autoscroll_lifetime_epoch(const struct sway_seat *seat) {
+	if (seat == NULL || seat->wlr_seat == NULL) {
+		return 0;
+	}
+	return pa_autoscroll_lifetime_epoch(
+		&seat->autoscroll_lifetime, PA_LIFETIME_SEAT);
+}
+
 void seat_destroy(struct sway_seat *seat) {
 	wlr_seat_destroy(seat->wlr_seat);
 }
 
 static void handle_seat_destroy(struct wl_listener *listener, void *data) {
 	struct sway_seat *seat = wl_container_of(listener, seat, destroy);
+	/* Revoke before changing focus, tearing down devices/cursor, or
+	 * releasing this seat. Any authorized future session must fail here. */
+	pa_autoscroll_lifetime_revoke(&seat->autoscroll_lifetime);
 
 	if (seat == config->handler_context.seat) {
 		config->handler_context.seat = input_manager_get_default_seat();
@@ -543,6 +554,16 @@ struct sway_seat *seat_create(const char *seat_name) {
 		wlr_seat_destroy(seat->wlr_seat);
 		free(seat);
 		return NULL;
+	}
+
+	/* The input manager was initialized before seat0 and all transient
+	 * seat creation. A failed/absent issuer leaves the slot revoked (0);
+	 * ordinary seat creation remains unaffected. The token is NOT a
+	 * hardware provenance claim or permission to consume pointer input. */
+	if (server.input != NULL) {
+		(void)pa_autoscroll_lifetime_bind(
+			&server.input->autoscroll_lifetime_issuer,
+			&seat->autoscroll_lifetime, PA_LIFETIME_SEAT);
 	}
 
 	seat->destroy.notify = handle_seat_destroy;
