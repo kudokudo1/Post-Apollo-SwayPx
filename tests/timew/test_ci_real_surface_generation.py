@@ -112,6 +112,34 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
         self.assertEqual(r["unbound_output_present_hold"],1)
         self.assertFalse(r["selected_xdg_final_frame"])
 
+    def test_late_present_serial_does_not_bind_new_scene_in_same_lifetime(self):
+        # Isolate the generation-checker invariant. The parent checker owns
+        # native chronology; this regression specifically checks that its
+        # serial cannot attach a prior commit to another scene instruction.
+        from unittest.mock import patch
+        rows = sample()
+        rows = [
+            x.replace(
+                "OUTPUT_SEQ_PRESENT lifetime=1 sequence=1 output_commit_seq=101",
+                "OUTPUT_SEQ_PRESENT lifetime=1 sequence=9 output_commit_seq=101"
+            ).replace(
+                "XDG_GEN_PRESENT lifetime=1 sequence=1 output_commit_seq=101",
+                "XDG_GEN_PRESENT lifetime=1 sequence=9 output_commit_seq=101"
+            ) for x in rows
+        ]
+        with patch(
+            "ci_assert_real_surface_generation.validate_root_sample",
+            return_value={
+                "native_output_serial_matches": 2,
+                "ambiguous_ready_timeout_hold": 0,
+            },
+        ):
+            r = validate_surface_generation(rows, "normal")
+        self.assertEqual(r["unbound_output_present_hold"], 1)
+        self.assertEqual(r["unchanged_at_output_present_diagnostic"], 1)
+        self.assertFalse(r["selected_xdg_final_frame"])
+        self.assertEqual(r["safe_actions"], [])
+
     def test_missing_root_generation_sample(self):
         self.denies([x for x in sample() if "XDG_GEN_SAMPLE lifetime=1" not in x])
 
