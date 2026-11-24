@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Ephemeral native XDG root committed-state generation witness.
 
-Observe real wlroots wlr_surface.current.seq at exact SceneFX root sample,
+Observe actual SceneFX client-buffer object equality at root sampling and
+real wlroots wlr_surface.current.seq at exact SceneFX root sample,
 accepted output commit_seq and output PRESENT commit_seq. A changed/wrapped
 surface generation means UNKNOWN/HOLD, not retroactive selected-frame proof.
 """
@@ -89,15 +90,23 @@ static void ci_xdg_gen_sample(void) {
 	++ci_xdg_gen_samples;
 	ci_xdg_gen_sample_scene = ci_last_post_scene_sequence;
 	ci_xdg_gen_sample_value = ci_view->surface->current.seq;
+	/* Compare live objects only during the callback. SceneFX uses this same
+	 * client-buffer conversion for texture lookup. Never retain an address,
+	 * lock a buffer, or assume a matching wrapper means immutable pixels. */
+	struct wlr_client_buffer *sampled_client =
+		wlr_client_buffer_get(ci_sample_root_buffer->buffer);
+	bool client_object_match = sampled_client != NULL &&
+		sampled_client == ci_view->surface->buffer;
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_SAMPLE lifetime=%" PRIu64
 		" sequence=%" PRIu64 " surface_state_seq=%" PRIu32
+		" root_client_object_match=%u"
 		" exact_native_root=1 real_scenefx_sample=1"
 		" immutable_buffer=UNVERIFIED final_frame=UNVERIFIED"
 		" ack=UNVERIFIED source=UNENROLLED c5_spent=NONE"
 		" receipt=NONE move=OFF authority=NONE\n",
 		ci_lifetime.lifetime_sequence, ci_last_post_scene_sequence,
-		ci_xdg_gen_sample_value);
+		ci_xdg_gen_sample_value, client_object_match ? 1u : 0u);
 	fflush(stderr);
 }
 
