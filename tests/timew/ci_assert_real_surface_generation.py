@@ -158,7 +158,9 @@ def validate_surface_generation(lines, mode):
         if serial != actual_serial or not actual_i < i < seals[key[0]][0]:
             raise ValueError("wrong_actual_output_present_serial_or_order")
         source = by_serial.get(serial)
-        # A PRESENT serial can be from an earlier scene within this XDG lifetime.\n        # Never attribute it to the current scene's sampled root generation.\n        if not source or source[0] != key or not source[1] < i:
+        # A PRESENT serial can be from an earlier scene within this XDG lifetime.
+        # Never attribute it to the current scene's sampled root generation.
+        if not source or source[0] != key or not source[1] < i:
             unbound_output_present_hold += 1
             continue
         _, _, sampled_seq, at_commit, sampled = source
