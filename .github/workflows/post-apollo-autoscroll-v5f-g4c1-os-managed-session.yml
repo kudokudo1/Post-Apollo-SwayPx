@@ -1,0 +1,47 @@
+name: SwayPX / G4C1 OS-managed Session Contract (HARD OFF)
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_os_session.h'
+      - 'sway/input/post_apollo_autoscroll_os_session.c'
+      - 'tests/post_apollo_autoscroll_os_session_test.c'
+      - 'MODEL/autoscroll-v5f-g4c1-os-managed-session.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g4c1-os-managed-session.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact source boundary
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base="1a1c6823fc522666133db3fc08d5e23e7149ba98"
+          changed=set(subprocess.check_output(["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          assert changed=={"include/sway/input/post_apollo_autoscroll_os_session.h","sway/input/post_apollo_autoscroll_os_session.c","tests/post_apollo_autoscroll_os_session_test.c","MODEL/autoscroll-v5f-g4c1-os-managed-session.md",".github/workflows/post-apollo-autoscroll-v5f-g4c1-os-managed-session.yml"},changed
+          for p in changed:
+              assert not subprocess.check_output(["git","ls-tree",base,"--",p],text=True),p
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "post_apollo_autoscroll_os_session.c" not in Path("sway/meson.build").read_text()
+          for p in ("sway/input/cursor.c","sway/input/seat.c","sway/input/keyboard.c","sway/input/post_apollo_autoscroll_runtime.c"):
+              assert "pa_os_scroll_" not in Path(p).read_text()
+          PY
+      - name: Compile and execute detached functional admission contract
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/input/post_apollo_autoscroll_os_session.c tests/post_apollo_autoscroll_os_session_test.c -o "$RUNNER_TEMP/pa-g4c1"
+          timeout 5s "$RUNNER_TEMP/pa-g4c1"
+          test -z "$(git status --porcelain)"
