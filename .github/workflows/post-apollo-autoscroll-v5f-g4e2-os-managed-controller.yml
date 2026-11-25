@@ -1,0 +1,48 @@
+name: SwayPX / G4E2 OS-managed Controller (HARD OFF)
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_os_controller.h'
+      - 'sway/input/post_apollo_autoscroll_os_controller.c'
+      - 'tests/post_apollo_autoscroll_os_controller_test.c'
+      - 'MODEL/autoscroll-v5f-g4e2-os-managed-controller.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g4e2-os-managed-controller.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  controller:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify additive boundary and no native activation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base="1f9d9e9f70bb2a779d7df818dd816011d0e5908e"
+          changed=set(subprocess.check_output(["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          assert changed=={"include/sway/input/post_apollo_autoscroll_os_controller.h","sway/input/post_apollo_autoscroll_os_controller.c","tests/post_apollo_autoscroll_os_controller_test.c","MODEL/autoscroll-v5f-g4e2-os-managed-controller.md",".github/workflows/post-apollo-autoscroll-v5f-g4e2-os-managed-controller.yml"},changed
+          for p in changed:
+              assert not subprocess.check_output(["git","ls-tree",base,"--",p],text=True),p
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert "post_apollo_autoscroll_os_controller.c" not in Path("sway/meson.build").read_text()
+          for p in ("sway/input/cursor.c","sway/input/keyboard.c","sway/input/seat.c"):
+              assert "pa_os_controller_" not in Path(p).read_text()
+          controller=Path("sway/input/post_apollo_autoscroll_os_controller.c").read_text()
+          for token in ("trusted_physical_pointer","pa_scroll_dispatch_middle(","wlr_seat_pointer_notify_axis(","wl_event_loop_add_timer("):
+              assert token not in controller,token
+          PY
+      - name: Compile actual engine, session, controls and controller
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude sway/input/post_apollo_autoscroll.c sway/input/post_apollo_autoscroll_os_session.c sway/input/post_apollo_autoscroll_os_controls.c sway/input/post_apollo_autoscroll_os_controller.c tests/post_apollo_autoscroll_os_controller_test.c -lm -o "$RUNNER_TEMP/pa-g4e2"
+          timeout 5s "$RUNNER_TEMP/pa-g4e2"
+          test -z "$(git status --porcelain)"
