@@ -6,7 +6,7 @@ import struct
 import sys
 
 HEX = re.compile(r"[0-9a-f]{16}\Z")
-def validate(tree):
+def validate(tree, multi=False):
     capture = tree.get("timew_ci_current")
     if not isinstance(capture,dict) or set(capture) != {"status","rows","authority"} or capture["status"] != "CURRENT_DIAGNOSTIC" or capture["authority"] != "NONE":
         raise ValueError("capture_not_qualified")
@@ -33,8 +33,12 @@ def validate(tree):
     visit(tree)
     if len(expected) != 2 or {x[2] for x in expected.values()} != {False,True}:
         raise ValueError("missing_tiled_or_floating_fixture")
+    if multi and (len({x[0] for x in expected.values()}) != 2 or
+                  len({x[1] for x in expected.values()}) != 2):
+        raise ValueError("missing_distinct_output_workspace_coverage")
     seen = set()
     fractional = 0
+    floating_fractional = False
     for row in capture["rows"]:
         if set(row) != {"con_id","workspace_node","output_node","floating","current_bits"}:
             raise ValueError("wrong_fields")
@@ -49,15 +53,21 @@ def validate(tree):
         if any(not math.isfinite(x) for x in values) or min(values[2:]) <= 0:
             raise ValueError("bad_geometry")
         fractional += sum(not x.is_integer() for x in values)
+        if row["floating"]:
+            floating_fractional = (values[2:] == [651.0,451.0] and
+                                   all(abs(x % 1 - 0.5) < 1e-9 for x in values[:2]))
     if seen != set(expected):
         raise ValueError("missing_current_rows")
+    if multi and not floating_fractional:
+        raise ValueError("missing_native_centered_odd_size_fraction")
     return fractional
 
 if __name__ == "__main__":
     try:
         with open(sys.argv[1],encoding="utf-8") as f:
-            n = validate(json.load(f))
-        print(f"TIMEW_CI_DESKTOP_CURRENT_PASS views=2 tiled=1 floating=1 same_app=1 fractional_components={n} epoch=UNVERIFIED revision=UNVERIFIED authority=NONE")
+            multi = len(sys.argv) == 3 and sys.argv[2] == "multi"
+            n = validate(json.load(f), multi=multi)
+        print(f"TIMEW_CI_DESKTOP_CURRENT_PASS views=2 tiled=1 floating=1 same_app=1 outputs={2 if multi else 1} fractional_components={n} epoch=UNVERIFIED revision=UNVERIFIED authority=NONE")
     except (ValueError,TypeError,KeyError,AttributeError,IndexError) as e:
         print(str(e),file=sys.stderr)
         sys.exit(1)
