@@ -11,7 +11,9 @@ from pathlib import Path
 SAMPLE = re.compile(r"TIMEW_CI_XDG_GEN_SAMPLE lifetime=(\d+) sequence=(\d+) surface_state_seq=(\d+) root_client_object_match=1 watch_epoch=([1-9]\d*) ")
 PRESENT = re.compile(r"TIMEW_CI_XDG_GEN_PRESENT lifetime=(\d+) sequence=(\d+) output_commit_seq=(\d+) current_surface_seq=(\d+) watch_epoch=([1-9]\d*) ")
 REVOKE = re.compile(r"TIMEW_CI_XDG_WATCH_REVOKE lifetime=(\d+) epoch=(\d+) reason=(surface_commit|buffer_destroy|resample|unmap|scene_detach) authority=NONE$")
-ROOT = re.compile(r"TIMEW_CI_XDG_REDRAW_COMMIT lifetime=(\d+) surface_state_seq=(\d+) prior_watch_epoch=(\d+) authority=NONE$")
+ROOT = re.compile(r"TIMEW_CI_XDG_REDRAW_COMMIT lifetime=(\d+) surface_state_seq=(\d+) prior_watch_epoch=(\d+) wire_request_epoch=(\d+) authority=NONE$")
+ATTACH = re.compile(r"TIMEW_CI_XDG_WIRE_ATTACH lifetime=(\d+) request_epoch=([1-9]\d*) nonnull=([01]) authority=NONE$")
+WIRE_COMMIT = re.compile(r"TIMEW_CI_XDG_WIRE_COMMIT lifetime=(\d+) request_epoch=(\d+) nonnull=([01]) authority=NONE$")
 MAP = re.compile(r"TIMEW_CI_REAL_XDG_MAPPED gen=(\d+)(?:\s|$)")
 UNMAP = re.compile(r"TIMEW_CI_REAL_XDG_UNMAPPED gen=(\d+)(?:\s|$)")
 
@@ -52,9 +54,29 @@ def verify_after(lines, floor):
         raise ValueError("no_new_root_events")
     life, scene, seq, epoch = checkpoint(lines[:floor])
     reason = None
+    pending = None
+    committed = None
+    seen = set()
     for line in lines[floor:]:
         if MAP.search(line) or UNMAP.search(line):
             raise ValueError("actor_lifetime_changed")
+        m = ATTACH.search(line)
+        if m:
+            if int(m[1]) != life or int(m[2]) in seen:
+                raise ValueError("foreign_or_replayed_attach_request")
+            pending = (int(m[2]), int(m[3]))
+            seen.add(pending[0])
+        m = WIRE_COMMIT.search(line)
+        if m:
+            if int(m[1]) != life:
+                raise ValueError("foreign_commit_request")
+            request = (int(m[2]), int(m[3]))
+            if request[0] and request != pending:
+                raise ValueError("unbound_attach_commit_request")
+            if not request[0] and request[1]:
+                raise ValueError("nonnull_without_attach")
+            committed = request
+            pending = None
         m = REVOKE.search(line)
         if m and int(m[1]) == life and int(m[2]) == epoch:
             if reason is not None or m[3] not in ("surface_commit","buffer_destroy"):
@@ -65,7 +87,11 @@ def verify_after(lines, floor):
             prior = int(m[3])
             if (reason == "surface_commit" and prior != epoch) or (reason == "buffer_destroy" and prior != 0):
                 raise ValueError("wrong_revocation_callback_lineage")
+            if not committed or committed[1] != 1 or int(m[4]) != committed[0]:
+                raise ValueError("missing_nonnull_attach_request_before_root_commit")
             return life, epoch, reason
+        elif m:
+            committed = None
     raise ValueError("missing_changed_root_commit_with_revocation")
 
 def main():
@@ -78,7 +104,7 @@ def main():
             print(len(lines))
         elif sys.argv[1] == "after" and len(sys.argv) == 4:
             life, epoch, reason = verify_after(lines,int(sys.argv[3]))
-            print(f"TIMEW_CI_CONTROLLED_REDRAW_PASS lifetime={life} epoch={epoch} revocation={reason} changed_root_commit=1 attachment=UNVERIFIED final_frame=UNVERIFIED authority=NONE")
+            print(f"TIMEW_CI_CONTROLLED_REDRAW_PASS lifetime={life} epoch={epoch} revocation={reason} changed_root_commit=1 nonnull_attach_request=1 attachment=UNVERIFIED final_frame=UNVERIFIED authority=NONE")
         else:
             return 2
     except ValueError:
