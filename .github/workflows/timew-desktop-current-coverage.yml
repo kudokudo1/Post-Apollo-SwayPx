@@ -62,3 +62,8 @@ jobs:
           set -euo pipefail
           compositor="$(tail -n 1 "$RUNNER_TEMP/timew-desktop-current-sway.txt")"
           bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
+      - name: Two outputs and genuine fractional floating center
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-desktop-current-sway.txt")"
+          TIMEW_CI_MULTI_CAPTURE=1 bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
