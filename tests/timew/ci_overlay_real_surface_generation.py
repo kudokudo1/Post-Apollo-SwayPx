@@ -261,7 +261,8 @@ p = once(p,
 )
 p = once(p,
     "static void ci_sample_root_detach(void) {",
-    source + "\nstatic void ci_sample_root_detach(void) {",
+    source + "\nstatic void ci_sample_root_detach(void) {\n"
+    '\tci_xdg_watch_revoke("scene_detach");',
     "SURFACE_GENERATION_PROBE_IMPLEMENTATION",
 )
 # The real SceneFX sample message must precede its surface generation read

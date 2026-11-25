@@ -202,8 +202,9 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
             ).replace(
                 "XDG_GEN_PRESENT lifetime=1 sequence=1 output_commit_seq=101",
                 "XDG_GEN_PRESENT lifetime=1 sequence=9 output_commit_seq=101"
-            ).replace("watch_epoch=1", "watch_epoch=0") if "XDG_GEN_PRESENT lifetime=1" in x else x.replace("OUTPUT_SEQ_PRESENT lifetime=1 sequence=1 output_commit_seq=101","OUTPUT_SEQ_PRESENT lifetime=1 sequence=9 output_commit_seq=101") for x in rows
+            ) for x in rows
         ]
+        rows=replace_gen(rows,1,"PRESENT","watch_epoch=1","watch_epoch=0")
         with patch(
             "ci_assert_real_surface_generation.validate_root_sample",
             return_value={

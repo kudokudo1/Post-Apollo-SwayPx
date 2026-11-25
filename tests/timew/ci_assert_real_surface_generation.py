@@ -56,7 +56,7 @@ UNMAP = re.compile(r"TIMEW_CI_REAL_XDG_UNMAPPED gen=(\d+)(?:\s|$)")
 
 REVOKE = re.compile(
     r"TIMEW_CI_XDG_WATCH_REVOKE lifetime=(\d+) epoch=(\d+) "
-    r"reason=(surface_commit|buffer_destroy|resample|unmap) authority=NONE$"
+    r"reason=(surface_commit|buffer_destroy|resample|unmap|scene_detach) authority=NONE$"
 )
 
 def uint64(raw):
