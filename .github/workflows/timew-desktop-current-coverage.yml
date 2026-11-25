@@ -1,0 +1,64 @@
+name: SwayPX TimeW Desktop CURRENT Coverage (CI-only)
+
+on:
+  pull_request:
+    paths:
+      - "tests/timew/ci_desktop_current*"
+      - "tests/timew/ci_overlay_desktop_current.py"
+      - "tests/timew/ci_assert_desktop_current.py"
+      - "tests/timew/test_ci_desktop_current.py"
+      - ".github/workflows/timew-desktop-current-coverage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Coverage and fail-closed evidence
+        run: |
+          set -euo pipefail
+          ! grep -Fq 'ci_capture_current' sway/ipc-server.c
+          python3 -B tests/timew/test_ci_desktop_current.py
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Disposable current traversal overlay and build
+        run: |
+          set -euo pipefail
+          python3 -B tests/timew/ci_overlay_desktop_current.py
+          nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tee "$RUNNER_TEMP/timew-desktop-current-sway.txt"
+      - name: Pin Mesa and native XDG actor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          test -d "$mesa/lib/dri"
+          test -r "$mesa/lib/libEGL_mesa.so.0"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n 1)"
+          test -x "$foot/bin/foot"
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-desktop-current-sway.txt")"
+          echo "STAGE_DIRECTOR_MESA_DIR=$mesa" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "STAGE_DIRECTOR_TEST_SWAYMSG=$compositor/bin/swaymsg" >> "$GITHUB_ENV"
+      - name: Two simultaneous native windows, one tiled and one floating
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-desktop-current-sway.txt")"
+          bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
