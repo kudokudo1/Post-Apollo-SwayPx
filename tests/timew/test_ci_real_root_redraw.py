@@ -44,5 +44,14 @@ class RedrawTest(unittest.TestCase):
     def test_foreign_attach(self):
         with self.assertRaises(ValueError): verify_after(BASE+wire(life=2)+[revoke(),root()],3)
 
+    def test_overlapping_wire_commits_refused(self):
+        with self.assertRaises(ValueError): verify_after(BASE+wire()+wire(epoch=10)+[revoke(),root(wire=10)],3)
+    def test_null_epoch_cannot_discard_pending_attach(self):
+        rows=BASE+wire()[:1]+["TIMEW_CI_XDG_WIRE_COMMIT lifetime=1 request_epoch=0 nonnull=0 authority=NONE"]+[revoke(),root(wire=0)]
+        with self.assertRaises(ValueError): verify_after(rows,3)
+    def test_malformed_attach_request_refused(self):
+        rows=BASE+[wire()[0].replace("nonnull=1","nonnull=2")]+wire()+[revoke(),root()]
+        with self.assertRaises(ValueError): verify_after(rows,3)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

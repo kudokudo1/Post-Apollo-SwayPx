@@ -56,27 +56,31 @@ def verify_after(lines, floor):
     reason = None
     pending = None
     committed = None
-    seen = set()
+    last_attach = 0
     for line in lines[floor:]:
         if MAP.search(line) or UNMAP.search(line):
             raise ValueError("actor_lifetime_changed")
         m = ATTACH.search(line)
         if m:
-            if int(m[1]) != life or int(m[2]) in seen:
+            if int(m[1]) != life or int(m[2]) <= last_attach:
                 raise ValueError("foreign_or_replayed_attach_request")
             pending = (int(m[2]), int(m[3]))
-            seen.add(pending[0])
+            last_attach = pending[0]
+        elif "TIMEW_CI_XDG_WIRE_ATTACH " in line:
+            raise ValueError("malformed_attach_request")
         m = WIRE_COMMIT.search(line)
         if m:
+            if committed is not None:
+                raise ValueError("overlapping_unresolved_wire_commits")
             if int(m[1]) != life:
                 raise ValueError("foreign_commit_request")
             request = (int(m[2]), int(m[3]))
-            if request[0] and request != pending:
+            if request != (pending if pending is not None else (0, 0)):
                 raise ValueError("unbound_attach_commit_request")
-            if not request[0] and request[1]:
-                raise ValueError("nonnull_without_attach")
             committed = request
             pending = None
+        elif "TIMEW_CI_XDG_WIRE_COMMIT " in line:
+            raise ValueError("malformed_commit_request")
         m = REVOKE.search(line)
         if m and int(m[1]) == life and int(m[2]) == epoch:
             if reason is not None or m[3] not in ("surface_commit","buffer_destroy"):
@@ -91,7 +95,11 @@ def verify_after(lines, floor):
                 raise ValueError("missing_nonnull_attach_request_before_root_commit")
             return life, epoch, reason
         elif m:
+            if int(m[1]) != life:
+                raise ValueError("foreign_root_commit")
             committed = None
+        elif "TIMEW_CI_XDG_REDRAW_COMMIT " in line:
+            raise ValueError("malformed_root_commit")
     raise ValueError("missing_changed_root_commit_with_revocation")
 
 def main():
