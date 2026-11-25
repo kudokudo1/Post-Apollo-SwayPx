@@ -107,6 +107,12 @@ static void ci_xdg_wire_request(void *unused,
 	}
 	const char *name = message->message->name;
 	if (strcmp(name, "attach") == 0 && message->arguments_count == 3) {
+		/* Wayland permits replacement of pending attachments. This bounded
+		 * diagnostic deliberately declines that ambiguous sequence rather
+		 * than silently discarding its earlier request lineage. CI only. */
+		if (ci_xdg_wire_pending != 0) {
+			fail("xdg_wire_overlapping_pending_attach");
+		}
 		if (ci_xdg_wire_next == UINT64_MAX) {
 			fail("xdg_wire_attach_counter_overflow");
 		}
@@ -118,6 +124,11 @@ static void ci_xdg_wire_request(void *unused,
 			ci_xdg_wire_pending_nonnull ? 1u : 0u);
 		fflush(stderr);
 	} else if (strcmp(name, "commit") == 0 && message->arguments_count == 0) {
+		/* A prior nonzero request epoch must have reached the observed
+		 * root commit before we correlate another protocol commit. */
+		if (ci_xdg_wire_commit_epoch != 0) {
+			fail("xdg_wire_unresolved_commit_epoch");
+		}
 		ci_xdg_wire_commit_epoch = ci_xdg_wire_pending;
 		fprintf(stderr, "TIMEW_CI_XDG_WIRE_COMMIT lifetime=%" PRIu64
 			" request_epoch=%" PRIu64 " nonnull=%u authority=NONE\n",

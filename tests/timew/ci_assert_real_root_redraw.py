@@ -2,7 +2,9 @@
 
 A pre-trigger checkpoint selects a still-live sample already correlated to
 output PRESENT. A later committed root state and revocation must occur in
-that same mapped lifetime. This is not a wl_buffer attachment or pixel proof.
+that same mapped lifetime. This bounded diagnostic rejects multiple attach
+requests before one commit, even though Wayland permits pending replacement.
+This is not a wl_buffer attachment or pixel proof.
 """
 import re
 import sys
@@ -64,6 +66,8 @@ def verify_after(lines, floor):
         if m:
             if int(m[1]) != life or int(m[2]) <= last_attach:
                 raise ValueError("foreign_or_replayed_attach_request")
+            if pending is not None:
+                raise ValueError("overlapping_pending_attach_requests")
             pending = (int(m[2]), int(m[3]))
             last_attach = pending[0]
         elif "TIMEW_CI_XDG_WIRE_ATTACH " in line:

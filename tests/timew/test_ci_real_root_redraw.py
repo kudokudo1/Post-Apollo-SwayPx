@@ -44,6 +44,21 @@ class RedrawTest(unittest.TestCase):
     def test_foreign_attach(self):
         with self.assertRaises(ValueError): verify_after(BASE+wire(life=2)+[revoke(),root()],3)
 
+    def test_distinct_pending_attach_epochs_refused(self):
+        # Nurse 2 regression: monotonic epochs do not excuse overwriting
+        # the first uncommitted request. Both native and offline observers
+        # deliberately decline Wayland's legal pending replacement.
+        rows = BASE + wire(9)[:1] + wire(10) + [revoke(), root(wire=10)]
+        with self.assertRaisesRegex(ValueError, "overlapping_pending_attach_requests"):
+            verify_after(rows, 3)
+
+    def test_pending_attach_nullness_does_not_bypass_overlap(self):
+        for first, second in ((0, 1), (1, 0), (0, 0)):
+            with self.subTest(first=first, second=second):
+                rows = BASE + wire(9, first)[:1] + wire(10, second) + [revoke(), root(wire=10)]
+                with self.assertRaisesRegex(ValueError, "overlapping_pending_attach_requests"):
+                    verify_after(rows, 3)
+
     def test_overlapping_wire_commits_refused(self):
         with self.assertRaises(ValueError): verify_after(BASE+wire()+wire(epoch=10)+[revoke(),root(wire=10)],3)
     def test_null_epoch_cannot_discard_pending_attach(self):
