@@ -31,6 +31,8 @@ on:
       - "tests/timew/ci_overlay_real_surface_generation.py"
       - "tests/timew/ci_assert_real_surface_generation.py"
       - "tests/timew/test_ci_real_surface_generation.py"
+      - "tests/timew/ci_assert_real_root_redraw.py"
+      - "tests/timew/test_ci_real_root_redraw.py"
       - "MODEL/timew-scope-a-root-generation-output-v0.md"
       - ".github/workflows/timew-scope-a-real-surface-generation.yml"
   workflow_dispatch:
@@ -87,6 +89,8 @@ jobs:
           assert "TIMEW_CI_XDG_GEN" not in Path("sway/timew_scope_a_ci_real_xdg.c").read_text()
           print("TIMEW_CI_XDG_GEN_SOURCE_ISOLATED PASS")
           PY
+      - name: Controlled redraw checker adversarial tests
+        run: python3 -B tests/timew/test_ci_real_root_redraw.py
       - name: Previous real native outcome chronology tests
         run: python3 -B tests/timew/test_ci_outcome_checker.py
       - name: Previous native scene and binary64 negative tests
@@ -179,6 +183,13 @@ jobs:
               bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
           done
           echo "TIMEW_CI_XDG_GEN_NATIVE_RUNTIME PASS: root surface.current.seq vs SceneFX sample, output commit/PRESENT; final frame still UNVERIFIED"
+      - name: Controlled same-window terminal redraw after sampled PRESENT
+        shell: bash
+        run: |
+          set -euo pipefail
+          compositor="$(tail -n 1 "$RUNNER_TEMP/timew-real-output-present-sway.txt")"
+          TIMEW_CI_CONTROLLED_REDRAW=1 TIMEW_CI_REAL_INSTRUCTION_MODE=1 TIMEW_CI_OUTCOME_MODE=normal \
+            bash tests/stage_director/ci_udmabuf_smoke.sh "$compositor/bin/sway"
       - name: Record strict scope
         if: always()
         run: |
