@@ -77,6 +77,57 @@ static uint64_t ci_xdg_gen_presents;
 static uint64_t ci_xdg_gen_last_commit_scene;
 static uint64_t ci_xdg_gen_last_present_scene;
 
+/* Conservative sample witness, not an attachment generation. Any root
+ * commit revokes the observation, even a damage-only commit. The destroy
+ * signal prevents allocator address reuse from preserving an old witness. */
+static struct wlr_buffer *ci_xdg_watch_buffer;
+static struct wlr_client_buffer *ci_xdg_watch_client;
+static struct wl_listener ci_xdg_watch_destroy;
+static struct wl_listener ci_xdg_watch_commit;
+static uint64_t ci_xdg_watch_next;
+static uint64_t ci_xdg_watch_active;
+
+static void ci_xdg_watch_revoke(const char *reason) {
+	if (!ci_xdg_watch_active) {
+		return;
+	}
+	fprintf(stderr, "TIMEW_CI_XDG_WATCH_REVOKE lifetime=%" PRIu64
+		" epoch=%" PRIu64 " reason=%s authority=NONE\n",
+		ci_lifetime.lifetime_sequence, ci_xdg_watch_active, reason);
+	fflush(stderr);
+	wl_list_remove(&ci_xdg_watch_destroy.link);
+	wl_list_remove(&ci_xdg_watch_commit.link);
+	ci_xdg_watch_buffer = NULL;
+	ci_xdg_watch_client = NULL;
+	ci_xdg_watch_active = 0;
+}
+
+static void ci_xdg_watch_buffer_destroyed(struct wl_listener *listener,
+		void *data) {
+	(void)listener;
+	(void)data;
+	ci_xdg_watch_revoke("buffer_destroy");
+}
+
+static void ci_xdg_watch_surface_committed(struct wl_listener *listener,
+		void *data) {
+	(void)listener;
+	(void)data;
+	ci_xdg_watch_revoke("surface_commit");
+}
+
+static uint64_t ci_xdg_watch_current(void) {
+	if (!ci_xdg_watch_active ||
+			ci_xdg_gen_sample_scene != ci_last_post_scene_sequence ||
+			!ci_view || !ci_view->surface || !ci_view->surface->mapped ||
+			!ci_sample_root_active || !ci_sample_root_buffer ||
+			ci_sample_root_buffer->buffer != ci_xdg_watch_buffer ||
+			ci_view->surface->buffer != ci_xdg_watch_client) {
+		return 0;
+	}
+	return ci_xdg_watch_active;
+}
+
 static void ci_xdg_gen_sample(void) {
 	if (!ci_sample_root_active || !ci_sample_root_buffer ||
 			!ci_view || !ci_view->surface ||
@@ -88,25 +139,41 @@ static void ci_xdg_gen_sample(void) {
 		fail("xdg_gen_sample_counter_overflow");
 	}
 	++ci_xdg_gen_samples;
+	ci_xdg_watch_revoke("resample");
 	ci_xdg_gen_sample_scene = ci_last_post_scene_sequence;
 	ci_xdg_gen_sample_value = ci_view->surface->current.seq;
 	/* Compare live objects only during the callback. SceneFX uses this same
-	 * client-buffer conversion for texture lookup. Never retain an address,
-	 * lock a buffer, or assume a matching wrapper means immutable pixels. */
+	 * client-buffer conversion for texture lookup. Watch only while live;
+	 * never lock a buffer or assume a matching wrapper means immutable pixels. */
 	struct wlr_client_buffer *sampled_client =
 		wlr_client_buffer_get(ci_sample_root_buffer->buffer);
 	bool client_object_match = sampled_client != NULL &&
 		sampled_client == ci_view->surface->buffer;
+	if (client_object_match) {
+		if (ci_xdg_watch_next == UINT64_MAX) {
+			fail("xdg_watch_epoch_overflow");
+		}
+		ci_xdg_watch_buffer = ci_sample_root_buffer->buffer;
+		ci_xdg_watch_client = sampled_client;
+		ci_xdg_watch_destroy.notify = ci_xdg_watch_buffer_destroyed;
+		ci_xdg_watch_commit.notify = ci_xdg_watch_surface_committed;
+		wl_signal_add(&ci_xdg_watch_buffer->events.destroy,
+			&ci_xdg_watch_destroy);
+		wl_signal_add(&ci_view->surface->events.commit,
+			&ci_xdg_watch_commit);
+		ci_xdg_watch_active = ++ci_xdg_watch_next;
+	}
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_SAMPLE lifetime=%" PRIu64
 		" sequence=%" PRIu64 " surface_state_seq=%" PRIu32
-		" root_client_object_match=%u"
+		" root_client_object_match=%u watch_epoch=%" PRIu64
 		" exact_native_root=1 real_scenefx_sample=1"
 		" immutable_buffer=UNVERIFIED final_frame=UNVERIFIED"
 		" ack=UNVERIFIED source=UNENROLLED c5_spent=NONE"
 		" receipt=NONE move=OFF authority=NONE\n",
 		ci_lifetime.lifetime_sequence, ci_last_post_scene_sequence,
-		ci_xdg_gen_sample_value, client_object_match ? 1u : 0u);
+		ci_xdg_gen_sample_value, client_object_match ? 1u : 0u,
+		ci_xdg_watch_active);
 	fflush(stderr);
 }
 
@@ -130,14 +197,14 @@ void timew_scope_a_ci_xdg_generation_output_commit(
 		"TIMEW_CI_XDG_GEN_COMMIT lifetime=%" PRIu64
 		" sequence=%" PRIu64 " output_commit_seq=%" PRIu32
 		" sampled_this_scene=%u sampled_surface_seq=%" PRIu32
-		" current_surface_seq=%" PRIu32
+		" current_surface_seq=%" PRIu32 " watch_epoch=%" PRIu64
 		" accepted_output_commit=1"
 		" immutable_buffer=UNVERIFIED final_frame=UNVERIFIED"
 		" ack=UNVERIFIED source=UNENROLLED c5_spent=NONE"
 		" receipt=NONE move=OFF authority=NONE\n",
 		ci_lifetime.lifetime_sequence, ci_last_post_scene_sequence,
 		commit_seq, sample_in_scene ? 1u : 0u, sampled,
-		ci_view->surface->current.seq);
+		ci_view->surface->current.seq, ci_xdg_watch_current());
 	fflush(stderr);
 }
 
@@ -157,17 +224,19 @@ void timew_scope_a_ci_xdg_generation_output_present(
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_PRESENT lifetime=%" PRIu64
 		" sequence=%" PRIu64 " output_commit_seq=%" PRIu32
-		" current_surface_seq=%" PRIu32 " real_output_present=1"
+		" current_surface_seq=%" PRIu32 " watch_epoch=%" PRIu64
+		" real_output_present=1"
 		" sampled_buffer_in_presented_frame=UNVERIFIED"
 		" immutable_buffer=UNVERIFIED final_frame=UNVERIFIED"
 		" ack=UNVERIFIED source=UNENROLLED c5_spent=NONE"
 		" receipt=NONE move=OFF authority=NONE\n",
 		ci_lifetime.lifetime_sequence, ci_last_post_scene_sequence,
-		commit_seq, ci_view->surface->current.seq);
+		commit_seq, ci_view->surface->current.seq, ci_xdg_watch_current());
 	fflush(stderr);
 }
 
 static void ci_xdg_gen_seal(void) {
+	ci_xdg_watch_revoke("unmap");
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_SEAL lifetime=%" PRIu64
 		" samples=%" PRIu64 " output_commits=%" PRIu64
@@ -186,8 +255,14 @@ static void ci_xdg_gen_seal(void) {
 }
 """
 p = once(p,
+    "#include <wlr/types/wlr_compositor.h>",
+    "#include <wlr/types/wlr_compositor.h>\n#include <wlr/types/wlr_buffer.h>",
+    "WLR_BUFFER_PUBLIC_HEADER",
+)
+p = once(p,
     "static void ci_sample_root_detach(void) {",
-    source + "\nstatic void ci_sample_root_detach(void) {",
+    source + "\nstatic void ci_sample_root_detach(void) {\n"
+    '\tci_xdg_watch_revoke("scene_detach");',
     "SURFACE_GENERATION_PROBE_IMPLEMENTATION",
 )
 # The real SceneFX sample message must precede its surface generation read
