@@ -86,6 +86,59 @@ static struct wlr_client_buffer *ci_xdg_watch_client;
 static struct wl_listener ci_xdg_watch_destroy;
 static struct wl_listener ci_xdg_watch_commit;
 static bool ci_xdg_root_commit_listening;
+/* Exact root wl_surface requests, diagnostic only. No object IDs, resource
+ * pointers, content, or protocol arguments except attach nullness logged.
+ * A wire request is not an accepted surface commit or a buffer identity. */
+static struct wl_protocol_logger *ci_xdg_wire_logger;
+static uint64_t ci_xdg_wire_next;
+static uint64_t ci_xdg_wire_pending;
+static uint64_t ci_xdg_wire_commit_epoch;
+static bool ci_xdg_wire_pending_nonnull;
+
+static void ci_xdg_wire_request(void *unused,
+		enum wl_protocol_logger_type direction,
+		const struct wl_protocol_logger_message *message) {
+	(void)unused;
+	if (direction != WL_PROTOCOL_LOGGER_REQUEST || !message ||
+			!message->message || !ci_view || !ci_view->surface ||
+			!ci_view->surface->mapped ||
+			message->resource != ci_view->surface->resource) {
+		return;
+	}
+	const char *name = message->message->name;
+	if (strcmp(name, "attach") == 0 && message->arguments_count == 3) {
+		/* Wayland permits replacement of pending attachments. This bounded
+		 * diagnostic deliberately declines that ambiguous sequence rather
+		 * than silently discarding its earlier request lineage. CI only. */
+		if (ci_xdg_wire_pending != 0) {
+			fail("xdg_wire_overlapping_pending_attach");
+		}
+		if (ci_xdg_wire_next == UINT64_MAX) {
+			fail("xdg_wire_attach_counter_overflow");
+		}
+		ci_xdg_wire_pending = ++ci_xdg_wire_next;
+		ci_xdg_wire_pending_nonnull = message->arguments[0].o != NULL;
+		fprintf(stderr, "TIMEW_CI_XDG_WIRE_ATTACH lifetime=%" PRIu64
+			" request_epoch=%" PRIu64 " nonnull=%u authority=NONE\n",
+			ci_lifetime.lifetime_sequence, ci_xdg_wire_pending,
+			ci_xdg_wire_pending_nonnull ? 1u : 0u);
+		fflush(stderr);
+	} else if (strcmp(name, "commit") == 0 && message->arguments_count == 0) {
+		/* A prior nonzero request epoch must have reached the observed
+		 * root commit before we correlate another protocol commit. */
+		if (ci_xdg_wire_commit_epoch != 0) {
+			fail("xdg_wire_unresolved_commit_epoch");
+		}
+		ci_xdg_wire_commit_epoch = ci_xdg_wire_pending;
+		fprintf(stderr, "TIMEW_CI_XDG_WIRE_COMMIT lifetime=%" PRIu64
+			" request_epoch=%" PRIu64 " nonnull=%u authority=NONE\n",
+			ci_lifetime.lifetime_sequence, ci_xdg_wire_pending,
+			ci_xdg_wire_pending_nonnull ? 1u : 0u);
+		fflush(stderr);
+		ci_xdg_wire_pending = 0;
+		ci_xdg_wire_pending_nonnull = false;
+	}
+}
 static uint64_t ci_xdg_watch_next;
 static uint64_t ci_xdg_watch_active;
 
@@ -121,8 +174,10 @@ static void ci_xdg_watch_surface_committed(struct wl_listener *listener,
 	if (ci_view && ci_view->surface && ci_view->surface->mapped) {
 		fprintf(stderr, "TIMEW_CI_XDG_REDRAW_COMMIT lifetime=%" PRIu64
 			" surface_state_seq=%" PRIu32 " prior_watch_epoch=%" PRIu64
-			" authority=NONE\n", ci_lifetime.lifetime_sequence,
-			ci_view->surface->current.seq, prior);
+			" wire_request_epoch=%" PRIu64 " authority=NONE\n",
+			ci_lifetime.lifetime_sequence, ci_view->surface->current.seq,
+			prior, ci_xdg_wire_commit_epoch);
+		ci_xdg_wire_commit_epoch = 0;
 		fflush(stderr);
 	}
 }
@@ -158,6 +213,13 @@ static void ci_xdg_gen_sample(void) {
 		wl_signal_add(&ci_view->surface->events.commit,
 			&ci_xdg_watch_commit);
 		ci_xdg_root_commit_listening = true;
+		struct wl_client *client =
+			wl_resource_get_client(ci_view->surface->resource);
+		ci_xdg_wire_logger = wl_display_add_protocol_logger(
+			wl_client_get_display(client), ci_xdg_wire_request, NULL);
+		if (!ci_xdg_wire_logger) {
+			fail("xdg_wire_logger_failed");
+		}
 	}
 	/* Compare live objects only during the callback. SceneFX uses this same
 	 * client-buffer conversion for texture lookup. Watch only while live;
@@ -251,6 +313,13 @@ void timew_scope_a_ci_xdg_generation_output_present(
 
 static void ci_xdg_gen_seal(void) {
 	ci_xdg_watch_revoke("unmap");
+	if (ci_xdg_wire_logger) {
+		wl_protocol_logger_destroy(ci_xdg_wire_logger);
+		ci_xdg_wire_logger = NULL;
+	}
+	ci_xdg_wire_pending = 0;
+	ci_xdg_wire_pending_nonnull = false;
+	ci_xdg_wire_commit_epoch = 0;
 	if (ci_xdg_root_commit_listening) {
 		wl_list_remove(&ci_xdg_watch_commit.link);
 		ci_xdg_root_commit_listening = false;
