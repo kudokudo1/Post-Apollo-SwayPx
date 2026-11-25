@@ -1,0 +1,223 @@
+name: SwayPX / G4E6 Seat-owned Native Runtime (HARD OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'include/sway/input/post_apollo_autoscroll_os_runtime.h'
+      - 'sway/input/post_apollo_autoscroll_os_runtime.c'
+      - 'tests/autoscroll/ci_v5f_g4e6_native_runtime.c'
+      - 'tests/autoscroll/ci_v5f_g4e6_native_overlay.py'
+      - 'tests/autoscroll/ci_v5f_g4e6_runtime_actor.c'
+      - 'tests/autoscroll/ci_v5f_g4e6_native_trace.py'
+      - 'tests/autoscroll/ci_v5f_g4e6_udmabuf.sh'
+      - 'MODEL/autoscroll-v5f-g4e6-seat-runtime.md'
+      - '.github/workflows/post-apollo-autoscroll-v5f-g4e6-seat-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-real-virtual-middle-negative-ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PA_G2_NATIVE_BUTTON: "2"
+      PA_AUTOSCROLL_CI_NATIVE_TRACE: "2"
+      PA_G3E_REAL_MIDDLE_NEGATIVE: "1"
+      PA_G3H_REAL_MIDDLE_NEGATIVE: "1"
+      PA_G3H_NATIVE_OS_DIAG: "1"
+      PA_G3J_NATIVE_LIBINPUT_DIAG: "1"
+      PA_G3J_KERNEL_ACTOR: "1"
+      PA_G3K_KERNEL_ACTOR: "1"
+      PA_G3K_NATIVE_GUARD: "1"
+      PA_G3L_NATIVE_OBSERVE: "1"
+      PA_G3M_NATIVE_OBSERVE: "1"
+      PA_G3M_KERNEL_ACTOR: "1"
+      PA_G3O_NATIVE_EPOCH: "1"
+      PA_G3P_POST_ABA: "1"
+      PA_G3Q_GROUP: "1"
+      PA_G3R_SEAT: "1"
+      PA_G3S_LOCK: "1"
+      PA_G3T_SHADOW: "1"
+      PA_G4C2_NATIVE: "1"
+      PA_G4D2_KEYS: "1"
+      PA_G4D3_KEYS: "1"
+      PA_G4E1_SCENE: "1"
+      PA_G4E3_RECEIPTS: "1"
+      PA_G4E4_MOTION: "1"
+      PA_G4E5_PAIR: "1"
+      PA_G4E6_RUNTIME: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout integrated source, no write credentials, no GitHub write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify G4E6 additive source boundary
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base="f15655a3dcd052a8ceaf01acfacca0a49add3f70"
+          changed=set(subprocess.check_output(["git","diff","--name-only",base,"HEAD"],text=True).splitlines())
+          expected={"include/sway/input/post_apollo_autoscroll_os_runtime.h","sway/input/post_apollo_autoscroll_os_runtime.c","tests/autoscroll/ci_v5f_g4e6_native_runtime.c","tests/autoscroll/ci_v5f_g4e6_native_overlay.py","tests/autoscroll/ci_v5f_g4e6_runtime_actor.c","tests/autoscroll/ci_v5f_g4e6_native_trace.py","tests/autoscroll/ci_v5f_g4e6_udmabuf.sh","MODEL/autoscroll-v5f-g4e6-seat-runtime.md",".github/workflows/post-apollo-autoscroll-v5f-g4e6-seat-runtime.yml"}
+          assert changed==expected,(sorted(changed-expected),sorted(expected-changed))
+          for p in changed:
+              assert not subprocess.check_output(["git","ls-tree",base,"--",p],text=True),p
+          cursor=Path("sway/input/cursor.c").read_text()
+          runtime=Path("sway/input/post_apollo_autoscroll_runtime.c").read_text()
+          bridge=Path("sway/input/post_apollo_autoscroll_guard_bridge.c").read_text()
+          meson=Path("sway/meson.build").read_text()
+          assert "pa_g3e_native_middle_negative_observe" not in cursor
+          assert "pa_g3h_native_os_managed_diagnostic_observe" not in cursor
+          assert "pa_g3j_real_libinput_compositor_observe" not in cursor
+          assert "pa_g3k_native_guard_negative_observe" not in cursor
+          assert "pa_g3l_native_lock_layout_observe" not in cursor
+          assert "pa_g3m_native_multikeyboard_observe" not in cursor
+          assert "pa_g3m_native_second_keyboard_key_observe" not in Path("sway/input/keyboard.c").read_text()
+          assert "ci_v5f_g3m_native_multikeyboard_observer.c" not in meson
+          assert "ci_v5f_g3l_native_keyboard_layout_probe.c" not in meson
+          assert "ci_v5f_g3k_native_guard_negative.c" not in meson
+          assert "ci_v5f_g3j_native_compositor_probe.c" not in meson
+          assert "ci_v5f_g3h_native_os_observer.c" not in meson
+          assert "ci_v5f_g3f_trust_policy.c" not in meson
+          assert "ci_v5f_g3e_native_probe.c" not in meson
+          assert "#define PA_AUTOSCROLL_LIVE_ACTIVATION 0" in runtime
+          assert "const bool physical_verified = false;" in runtime
+          assert "const bool native_scroll_lock_active = true;" in runtime
+          assert "pa_scroll_dispatch_enable(" not in runtime
+          assert ".origin = PA_POINTER_ORIGIN_UNKNOWN" in bridge
+          assert "PA_POINTER_ORIGIN_PHYSICAL_LIBINPUT" not in bridge
+          assert "ci_v5f_g3o_native_epoch_observer.c" not in meson
+          assert "pa_g3o_" not in cursor
+          assert "pa_g3q_" not in cursor
+          assert "pa_g3r_" not in cursor
+          assert "pa_g3s_" not in cursor
+          assert "pa_g3t_" not in cursor
+          assert "ci_v5f_g3t_shadow_cancel_observer.c" not in meson
+          assert "pa_g3s_" not in Path("sway/input/keyboard.c").read_text()
+          assert "ci_v5f_g3s_native_lock_observer.c" not in meson
+          assert "pa_g3r_" not in Path("sway/input/seat.c").read_text()
+          assert "ci_v5f_g3r_native_seat_observer.c" not in meson
+          assert "pa_g3q_" not in Path("sway/input/keyboard.c").read_text()
+          assert "ci_v5f_g3q_native_group_observer.c" not in meson
+          assert "post_apollo_autoscroll_os_native.c" not in meson
+          assert "post_apollo_autoscroll_os_session.c" not in meson
+          assert "pa_g4c2_" not in cursor
+          assert "pa_g4c2_" not in Path("include/sway/input/seat.h").read_text()
+          assert "post_apollo_autoscroll_os_controls.c" not in meson
+          assert "pa_g4d2_" not in cursor
+          assert "pa_g4d2_" not in Path("sway/input/keyboard.c").read_text()
+          assert "post_apollo_autoscroll_os_keyboard.c" not in meson
+          assert "pa_g4d3_" not in Path("sway/input/keyboard.c").read_text()
+          assert "post_apollo_autoscroll_os_scene.c" not in meson
+          assert "pa_g4e1_" not in cursor
+          assert "pa_g4e1_" not in Path("sway/tree/root.c").read_text()
+          assert "post_apollo_autoscroll_os_controller.c" not in meson
+          assert "ci_v5f_g4e3_native_axis.c" not in meson
+          assert "pa_g4e3_" not in cursor
+          assert "ci_v5f_g4e4_native_motion.c" not in meson
+          assert "pa_g4e4_" not in cursor
+          assert "pa_g4e4_" not in Path("sway/input/keyboard.c").read_text()
+          assert "post_apollo_autoscroll_os_ingress.c" not in meson
+          assert "ci_v5f_g4e5_native_middle.c" not in meson
+          assert "pa_g4e5_" not in cursor
+          assert "pa_g4e5_" not in Path("sway/input/keyboard.c").read_text()
+          assert "post_apollo_autoscroll_os_runtime.c" not in meson
+          assert "ci_v5f_g4e6_native_runtime.c" not in meson
+          assert "pa_g4e6_" not in cursor
+          source=Path("sway/input/post_apollo_autoscroll_os_runtime.c").read_text()
+          assert "o.event.known_synthetic=false" not in source
+          assert "o->source_candidate=true" not in source
+          assert "o.event.source=PA_OS_KEY_MANAGED" not in source
+          print("PA_G4E6_ADDITIVE_HARD_OFF_PASS")
+          PY
+          python3 -B -m unittest discover -s tests/autoscroll -p 'test_*.py' -v
+          build="$(mktemp -d "$RUNNER_TEMP/pa-g4a-unit.XXXXXX")"
+          trap 'rm -rf "$build"' EXIT
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_topology.c tests/post_apollo_autoscroll_topology_test.c -o "$build/topology"
+          timeout 5s "$build/topology"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c tests/post_apollo_autoscroll_lifetime_test.c -o "$build/lifetime"
+          timeout 5s "$build/lifetime"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_witness.c sway/input/post_apollo_autoscroll_epoch.c \
+            tests/post_apollo_autoscroll_epoch_test.c -o "$build/epoch"
+          timeout 5s "$build/epoch"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            sway/input/post_apollo_autoscroll_lifetime.c sway/input/post_apollo_autoscroll_epoch.c \
+            sway/input/post_apollo_autoscroll_witness.c tests/post_apollo_autoscroll_v5f_owner_guard_test.c -o "$build/owner"
+          timeout 5s "$build/owner"
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude \
+            tests/autoscroll/ci_v5f_g3a_continuity.c sway/input/post_apollo_autoscroll_continuity.c \
+            sway/input/post_apollo_autoscroll_epoch.c sway/input/post_apollo_autoscroll_witness.c -o "$build/continuity"
+          timeout 5s "$build/continuity"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
+            tests/autoscroll/ci_v5f_g3n_keyboard_layout_aba_oracle.c -o "$build/aba"
+          timeout 5s "$build/aba" | tee "$build/aba.log"
+          test "$(grep -c '^PA_G3N_UNTRUSTED_EPOCH_REVOKED_PASS ' "$build/aba.log")" -eq 8
+          test -z "$(git status --porcelain)"
+
+      - name: Install Nix only in disposable GitHub environment
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+
+      - name: Compose G3O native event observer in disposable compositor copy
+        run: |
+          set -euo pipefail
+          python3 -B tests/autoscroll/ci_v5f_g4e6_native_overlay.py
+          test -z "$(git status --porcelain)"
+
+      - name: Build G3M two-keyboard hotplug actor and native compositor
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/pa-fc2-native-src"
+          sway="$(cd "$src" && nix build .#swayfx-unwrapped-git --no-link --print-out-paths --show-trace | tail -n1)"
+          foot="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.foot' --no-link --print-out-paths | tail -n1)"
+          mesa="$(nix eval --raw --impure --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.mesa.outPath')"
+          seatd="$(nix build --impure --expr '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.seatd.bin' --no-link --print-out-paths | tail -n1)"
+          test -x "$sway/bin/sway"
+          test -x "$sway/bin/swaymsg"
+          test -x "$foot/bin/foot"
+          test -x "$seatd/bin/seatd"
+          test -r "$mesa/share/glvnd/egl_vendor.d/50_mesa.json"
+          build="$RUNNER_TEMP/pa-g3m-native-fixtures"
+          mkdir -m 700 "$build"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Wshadow -Wconversion -pedantic \
+            tests/autoscroll/ci_v5f_g4e6_runtime_actor.c \
+            -o "$build/pa-g3m-uinput-actor"
+          test -x "$build/pa-g3m-uinput-actor"
+          echo "PA_G2_SWAY=$sway/bin/sway" >> "$GITHUB_ENV"
+          echo "PA_G2_MESA=$mesa" >> "$GITHUB_ENV"
+          echo "PA_G3E_SWAYMSG=$sway/bin/swaymsg" >> "$GITHUB_ENV"
+          echo "PA_G3E_FOOT=$foot/bin/foot" >> "$GITHUB_ENV"
+          echo "PA_G3J_SEATD=$seatd/bin/seatd" >> "$GITHUB_ENV"
+          echo "PA_G3J_ACTOR_BINARY=$build/pa-g3m-uinput-actor" >> "$GITHUB_ENV"
+          test -z "$(git status --porcelain)"
+          echo "PA_G3M_NATIVE_TEST_BINARIES_PINNED_PASS"
+
+      - name: Verify combined native seat runtime
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_TEMP" = /home/runner/work/_temp
+          if ! test -c /dev/uinput; then sudo -n modprobe uinput; fi
+          test -c /dev/uinput || {
+            echo "::error title=PA_G3J_UINPUT_UNAVAILABLE::No native test fixture"
+            exit 2
+          }
+          bash tests/autoscroll/ci_v5f_g4e6_udmabuf.sh
+          test -z "$(git status --porcelain)"
+
+      - name: Scope
+        if: always()
+        run: |
+          echo "G4E6 combined native seat runtime, positive eligibility substituted only in disposable source copy. No shipping source activation or real native managed grant." >> "$GITHUB_STEP_SUMMARY"
