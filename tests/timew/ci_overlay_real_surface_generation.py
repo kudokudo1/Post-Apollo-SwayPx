@@ -19,6 +19,7 @@ out = root / "sway/desktop/output.c"
 probe = root / "sway/timew_scope_a_ci_real_xdg.c"
 smoke = root / "tests/stage_director/headless_sway_smoke.sh"
 meson = root / "sway/meson.build"
+actor = root / "tests/stage_director/ci_native_news_actor_smoke.sh"
 
 def once(src, anchor, replacement, name):
     n = src.count(anchor)
@@ -26,7 +27,7 @@ def once(src, anchor, replacement, name):
         raise SystemExit(f"BLOCKED_XDG_GENERATION_SOURCE_DRIFT_{name} count={n}")
     return src.replace(anchor, replacement, 1)
 
-o, p, s, m = [x.read_text() for x in (out, probe, smoke, meson)]
+o, p, s, m, a = [x.read_text() for x in (out, probe, smoke, meson, actor)]
 if "TIMEW_CI_XDG_GEN" in o or "TIMEW_CI_XDG_GEN" in p:
     raise SystemExit("BLOCKED_ALREADY_INSTRUMENTED_GENERATION")
 if ("timew_scope_a_ci_root_sample_prebuild(output);" not in o or
@@ -84,6 +85,7 @@ static struct wlr_buffer *ci_xdg_watch_buffer;
 static struct wlr_client_buffer *ci_xdg_watch_client;
 static struct wl_listener ci_xdg_watch_destroy;
 static struct wl_listener ci_xdg_watch_commit;
+static bool ci_xdg_root_commit_listening;
 static uint64_t ci_xdg_watch_next;
 static uint64_t ci_xdg_watch_active;
 
@@ -96,7 +98,6 @@ static void ci_xdg_watch_revoke(const char *reason) {
 		ci_lifetime.lifetime_sequence, ci_xdg_watch_active, reason);
 	fflush(stderr);
 	wl_list_remove(&ci_xdg_watch_destroy.link);
-	wl_list_remove(&ci_xdg_watch_commit.link);
 	ci_xdg_watch_buffer = NULL;
 	ci_xdg_watch_client = NULL;
 	ci_xdg_watch_active = 0;
@@ -113,7 +114,17 @@ static void ci_xdg_watch_surface_committed(struct wl_listener *listener,
 		void *data) {
 	(void)listener;
 	(void)data;
+	uint64_t prior = ci_xdg_watch_active;
 	ci_xdg_watch_revoke("surface_commit");
+	/* Independent root event: even when destroy revoked the sample first,
+	 * this callback observes the actual committed surface state. */
+	if (ci_view && ci_view->surface && ci_view->surface->mapped) {
+		fprintf(stderr, "TIMEW_CI_XDG_REDRAW_COMMIT lifetime=%" PRIu64
+			" surface_state_seq=%" PRIu32 " prior_watch_epoch=%" PRIu64
+			" authority=NONE\n", ci_lifetime.lifetime_sequence,
+			ci_view->surface->current.seq, prior);
+		fflush(stderr);
+	}
 }
 
 static uint64_t ci_xdg_watch_current(void) {
@@ -142,6 +153,12 @@ static void ci_xdg_gen_sample(void) {
 	ci_xdg_watch_revoke("resample");
 	ci_xdg_gen_sample_scene = ci_last_post_scene_sequence;
 	ci_xdg_gen_sample_value = ci_view->surface->current.seq;
+	if (!ci_xdg_root_commit_listening) {
+		ci_xdg_watch_commit.notify = ci_xdg_watch_surface_committed;
+		wl_signal_add(&ci_view->surface->events.commit,
+			&ci_xdg_watch_commit);
+		ci_xdg_root_commit_listening = true;
+	}
 	/* Compare live objects only during the callback. SceneFX uses this same
 	 * client-buffer conversion for texture lookup. Watch only while live;
 	 * never lock a buffer or assume a matching wrapper means immutable pixels. */
@@ -156,11 +173,8 @@ static void ci_xdg_gen_sample(void) {
 		ci_xdg_watch_buffer = ci_sample_root_buffer->buffer;
 		ci_xdg_watch_client = sampled_client;
 		ci_xdg_watch_destroy.notify = ci_xdg_watch_buffer_destroyed;
-		ci_xdg_watch_commit.notify = ci_xdg_watch_surface_committed;
 		wl_signal_add(&ci_xdg_watch_buffer->events.destroy,
 			&ci_xdg_watch_destroy);
-		wl_signal_add(&ci_view->surface->events.commit,
-			&ci_xdg_watch_commit);
 		ci_xdg_watch_active = ++ci_xdg_watch_next;
 	}
 	fprintf(stderr,
@@ -237,6 +251,10 @@ void timew_scope_a_ci_xdg_generation_output_present(
 
 static void ci_xdg_gen_seal(void) {
 	ci_xdg_watch_revoke("unmap");
+	if (ci_xdg_root_commit_listening) {
+		wl_list_remove(&ci_xdg_watch_commit.link);
+		ci_xdg_root_commit_listening = false;
+	}
 	fprintf(stderr,
 		"TIMEW_CI_XDG_GEN_SEAL lifetime=%" PRIu64
 		" samples=%" PRIu64 " output_commits=%" PRIu64
@@ -294,8 +312,49 @@ s = once(s,
     '"$log" "$TIMEW_CI_OUTCOME_MODE"',
     "NATIVE_SURFACE_COMMIT_GENERATION_CHECKER",
 )
+a = once(a,
+    '"$foot_binary" \\\n  --app-id=post-apollo-weather-news',
+    '''if [[ "${TIMEW_CI_CONTROLLED_REDRAW:-0}" == 1 ]]; then
+  rm -f -- "$runtime/timew-ci-redraw.go"
+  ci_actor_command=(/bin/bash -c 'for ((i=0;i<300;i++)); do if [[ -f "$1" ]]; then printf "TIMEW CONTROLLED REDRAW 1234567890\\n"; sleep 30; exit 0; fi; sleep 0.05; done; exit 1' _ "$runtime/timew-ci-redraw.go")
+else
+  ci_actor_command=(/usr/bin/sleep 30)
+fi
+"$foot_binary" \\
+  --app-id=post-apollo-weather-news''',
+    "CONTROLLED_REDRAW_ACTOR",
+)
+a = once(a,
+    '  /usr/bin/sleep 30 >"$actor_log" 2>&1 &',
+    '  "${ci_actor_command[@]}" >"$actor_log" 2>&1 &',
+    "CONTROLLED_REDRAW_COMMAND",
+)
+a = once(a,
+    '    sleep 0.55\n  fi',
+    '''    sleep 0.55
+    if [[ "${TIMEW_CI_CONTROLLED_REDRAW:-0}" == 1 ]]; then
+      checkpoint=""
+      for _ in {1..50}; do
+        if checkpoint="$(python3 -B tests/timew/ci_assert_real_root_redraw.py ready "$runtime/sway.log")"; then break; fi
+        sleep 0.1
+      done
+      test -n "$checkpoint" || { echo "TIMEW_CI_REDRAW_FAIL no live sampled watch before trigger" >&2; exit 1; }
+      touch "$runtime/timew-ci-redraw.go"
+      redraw_ok=0
+      for _ in {1..50}; do
+        if python3 -B tests/timew/ci_assert_real_root_redraw.py after "$runtime/sway.log" "$checkpoint"; then
+          redraw_ok=1
+          break
+        fi
+        sleep 0.1
+      done
+      [[ "$redraw_ok" == 1 ]] || { echo "TIMEW_CI_REDRAW_FAIL no observed commit and revocation after trigger" >&2; exit 1; }
+    fi
+  fi''',
+    "CONTROLLED_REDRAW_TRIGGER",
+)
 # Write ONLY after every source anchor and ephemeral runner guard succeeds.
-for file, value in ((out, o), (probe, p), (smoke, s)):
+for file, value in ((out, o), (probe, p), (smoke, s), (actor, a)):
     file.write_text(value)
 print("TIMEW_CI_XDG_GEN_OVERLAY_PASS: real wlroots surface.current.seq "
       "on actual SceneFX root SAMPLE and output COMMIT/PRESENT serial; "
