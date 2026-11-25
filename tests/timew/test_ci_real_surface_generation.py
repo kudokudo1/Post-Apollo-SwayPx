@@ -6,7 +6,7 @@ from test_ci_real_root_sample import sample as parent_sample
 def root_gen_sample(gen):
     return (
         f"TIMEW_CI_XDG_GEN_SAMPLE lifetime={gen} sequence={gen} "
-        f"surface_state_seq={100+gen} root_client_object_match=1 exact_native_root=1 "
+        f"surface_state_seq={100+gen} root_client_object_match=1 watch_epoch={gen} exact_native_root=1 "
         "real_scenefx_sample=1 immutable_buffer=UNVERIFIED "
         "final_frame=UNVERIFIED ack=UNVERIFIED source=UNENROLLED "
         "c5_spent=NONE receipt=NONE move=OFF authority=NONE"
@@ -16,7 +16,7 @@ def root_gen_commit(gen):
     return (
         f"TIMEW_CI_XDG_GEN_COMMIT lifetime={gen} sequence={gen} "
         f"output_commit_seq={100+gen} sampled_this_scene=1 "
-        f"sampled_surface_seq={100+gen} current_surface_seq={100+gen} "
+        f"sampled_surface_seq={100+gen} current_surface_seq={100+gen} watch_epoch={gen} "
         "accepted_output_commit=1 immutable_buffer=UNVERIFIED "
         "final_frame=UNVERIFIED ack=UNVERIFIED source=UNENROLLED "
         "c5_spent=NONE receipt=NONE move=OFF authority=NONE"
@@ -25,7 +25,7 @@ def root_gen_commit(gen):
 def root_gen_present(gen):
     return (
         f"TIMEW_CI_XDG_GEN_PRESENT lifetime={gen} sequence={gen} "
-        f"output_commit_seq={100+gen} current_surface_seq={100+gen} "
+        f"output_commit_seq={100+gen} current_surface_seq={100+gen} watch_epoch={gen} "
         "real_output_present=1 sampled_buffer_in_presented_frame=UNVERIFIED "
         "immutable_buffer=UNVERIFIED final_frame=UNVERIFIED "
         "ack=UNVERIFIED source=UNENROLLED c5_spent=NONE "
@@ -53,7 +53,8 @@ def sample(mode="normal"):
         lines.insert(i+1,root_gen_present(gen))
         i=next(i for i,l in enumerate(lines)
                if f"ROOT_SAMPLE_SEAL lifetime={gen}" in l)
-        lines.insert(i,root_gen_seal(gen))
+        lines.insert(i, f"TIMEW_CI_XDG_WATCH_REVOKE lifetime={gen} epoch={gen} reason=unmap authority=NONE")
+        lines.insert(i+1,root_gen_seal(gen))
     return lines
 
 def replace_gen(rows, gen, tag, before, after):
@@ -85,7 +86,10 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
 
     def test_unmatched_client_object_stays_hold_despite_stable_generation(self):
         rows=replace_gen(sample(),1,"SAMPLE",
-                         "root_client_object_match=1","root_client_object_match=0")
+                         "root_client_object_match=1 watch_epoch=1","root_client_object_match=0 watch_epoch=0")
+        for tag in ("COMMIT","PRESENT"):
+            rows=replace_gen(rows,1,tag,"watch_epoch=1","watch_epoch=0")
+        rows=[x for x in rows if "WATCH_REVOKE lifetime=1" not in x]
         r=validate_surface_generation(rows,"normal")
         self.assertEqual(r["root_client_object_matches_at_sample_diagnostic"],1)
         self.assertEqual(r["root_client_object_unmatched_at_sample_hold"],1)
@@ -108,6 +112,45 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
         self.denies(replace_gen(sample(),1,"SAMPLE",
                    "root_client_object_match=1",
                    "root_client_object_match=1 client_buffer_attachment_continuity=VERIFIED"))
+
+    def test_watch_live_across_matching_serial_is_not_attachment_proof(self):
+        r=validate_surface_generation(sample(),"normal")
+        self.assertEqual(r["live_sample_watch_at_commit_diagnostic"],2)
+        self.assertEqual(r["live_sample_watch_at_matching_present_diagnostic"],2)
+        self.assertFalse(r["client_buffer_attachment_continuity"])
+
+    def test_surface_commit_revokes_before_present(self):
+        rows=sample()
+        rev=next(x for x in rows if "WATCH_REVOKE lifetime=1" in x)
+        rows.remove(rev)
+        i=next(i for i,x in enumerate(rows) if "XDG_GEN_PRESENT lifetime=1" in x)
+        rows.insert(i, rev.replace("reason=unmap","reason=surface_commit"))
+        rows=replace_gen(rows,1,"PRESENT","watch_epoch=1","watch_epoch=0")
+        r=validate_surface_generation(rows,"normal")
+        self.assertEqual(r["watch_revoked_by_surface_commit"],1)
+        self.assertEqual(r["live_sample_watch_at_matching_present_diagnostic"],1)
+        self.assertFalse(r["settled"])
+
+    def test_destroyed_watch_cannot_be_replayed(self):
+        rows=sample()
+        rev=next(x for x in rows if "WATCH_REVOKE lifetime=1" in x)
+        rows.remove(rev)
+        i=next(i for i,x in enumerate(rows) if "XDG_GEN_PRESENT lifetime=1" in x)
+        rows.insert(i,rev.replace("reason=unmap","reason=buffer_destroy"))
+        self.denies(rows)
+        rows=replace_gen(rows,1,"PRESENT","watch_epoch=1","watch_epoch=0")
+        r=validate_surface_generation(rows,"normal")
+        self.assertEqual(r["watch_revoked_by_buffer_destroy"],1)
+        self.assertFalse(r["client_buffer_attachment_continuity"])
+
+    def test_watch_epoch_reuse_across_lifetimes_refused(self):
+        self.denies(replace_gen(sample(),2,"SAMPLE","watch_epoch=2","watch_epoch=1"))
+
+    def test_missing_watch_revocation_refused(self):
+        self.denies([x for x in sample() if "WATCH_REVOKE lifetime=1" not in x])
+
+    def test_wrong_lifetime_watch_revocation_refused(self):
+        self.denies([x.replace("WATCH_REVOKE lifetime=1","WATCH_REVOKE lifetime=2") for x in sample()])
 
     def test_forced_timeout_stable_surface_does_not_settle(self):
         r=validate_surface_generation(sample("forced_timeout"),"forced_timeout")
@@ -159,7 +202,7 @@ class ActualSurfaceGenerationTests(unittest.TestCase):
             ).replace(
                 "XDG_GEN_PRESENT lifetime=1 sequence=1 output_commit_seq=101",
                 "XDG_GEN_PRESENT lifetime=1 sequence=9 output_commit_seq=101"
-            ) for x in rows
+            ).replace("watch_epoch=1", "watch_epoch=0") if "XDG_GEN_PRESENT lifetime=1" in x else x.replace("OUTPUT_SEQ_PRESENT lifetime=1 sequence=1 output_commit_seq=101","OUTPUT_SEQ_PRESENT lifetime=1 sequence=9 output_commit_seq=101") for x in rows
         ]
         with patch(
             "ci_assert_real_surface_generation.validate_root_sample",

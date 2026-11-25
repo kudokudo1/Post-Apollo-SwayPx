@@ -12,7 +12,7 @@ from ci_assert_real_root_sample import validate_root_sample
 
 SAMPLE = re.compile(
     r"TIMEW_CI_XDG_GEN_SAMPLE lifetime=(\d+) sequence=(\d+) "
-    r"surface_state_seq=(\d+) root_client_object_match=([01]) "
+    r"surface_state_seq=(\d+) root_client_object_match=([01]) watch_epoch=(\d+) "
     r"exact_native_root=1 real_scenefx_sample=1 "
     r"immutable_buffer=UNVERIFIED final_frame=UNVERIFIED "
     r"ack=UNVERIFIED source=UNENROLLED c5_spent=NONE "
@@ -21,7 +21,7 @@ SAMPLE = re.compile(
 COMMIT = re.compile(
     r"TIMEW_CI_XDG_GEN_COMMIT lifetime=(\d+) sequence=(\d+) "
     r"output_commit_seq=(\d+) sampled_this_scene=([01]) "
-    r"sampled_surface_seq=(\d+) current_surface_seq=(\d+) "
+    r"sampled_surface_seq=(\d+) current_surface_seq=(\d+) watch_epoch=(\d+) "
     r"accepted_output_commit=1 "
     r"immutable_buffer=UNVERIFIED final_frame=UNVERIFIED "
     r"ack=UNVERIFIED source=UNENROLLED c5_spent=NONE "
@@ -29,7 +29,7 @@ COMMIT = re.compile(
 )
 PRESENT = re.compile(
     r"TIMEW_CI_XDG_GEN_PRESENT lifetime=(\d+) sequence=(\d+) "
-    r"output_commit_seq=(\d+) current_surface_seq=(\d+) "
+    r"output_commit_seq=(\d+) current_surface_seq=(\d+) watch_epoch=(\d+) "
     r"real_output_present=1 "
     r"sampled_buffer_in_presented_frame=UNVERIFIED "
     r"immutable_buffer=UNVERIFIED final_frame=UNVERIFIED "
@@ -54,6 +54,17 @@ PARENT_PRESENT = re.compile(
 )
 UNMAP = re.compile(r"TIMEW_CI_REAL_XDG_UNMAPPED gen=(\d+)(?:\s|$)")
 
+REVOKE = re.compile(
+    r"TIMEW_CI_XDG_WATCH_REVOKE lifetime=(\d+) epoch=(\d+) "
+    r"reason=(surface_commit|buffer_destroy|resample|unmap) authority=NONE$"
+)
+
+def uint64(raw):
+    n = int(raw)
+    if not 0 <= n < 2**64:
+        raise ValueError("non_uint64_watch_epoch")
+    return n
+
 def uint32(raw):
     n = int(raw)
     if not 0 <= n < 2**32:
@@ -64,6 +75,7 @@ def validate_surface_generation(lines, mode):
     parent = validate_root_sample(lines, mode)
     samples, commits, presents, seals, unmaps = {}, {}, {}, {}, {}
     parent_sample, parent_commit, parent_present = {}, {}, {}
+    revoked = {}
     for i, line in enumerate(lines):
         for regexp, target, label in (
             (PARENT_SAMPLE, parent_sample, "native_sample"),
@@ -87,7 +99,7 @@ def validate_surface_generation(lines, mode):
                 key = (int(m[1]), int(m[2]))
                 if key in target:
                     raise ValueError("duplicate_" + label)
-                vals = tuple(uint32(x) for x in m.groups()[2:])
+                vals = tuple(uint32(x) for x in m.groups()[2:-1]) + (uint64(m.groups()[-1]),)
                 target[key] = (i, vals)
             elif "TIMEW_CI_XDG_GEN_" + {
                     "surface_generation_sample":"SAMPLE",
@@ -95,6 +107,14 @@ def validate_surface_generation(lines, mode):
                     "surface_generation_output_present":"PRESENT"}[label] \
                     + " lifetime=" in line:
                 raise ValueError("malformed_or_trust_promoted_" + label)
+        m = REVOKE.search(line)
+        if m:
+            epoch = uint64(m[2])
+            if epoch == 0 or epoch in revoked:
+                raise ValueError("duplicate_or_zero_watch_revocation")
+            revoked[epoch] = (i, int(m[1]), m[3])
+        elif "TIMEW_CI_XDG_WATCH_REVOKE" in line:
+            raise ValueError("malformed_watch_revocation")
         m = SEAL.search(line)
         if m:
             gen = int(m[1])
@@ -121,16 +141,47 @@ def validate_surface_generation(lines, mode):
     # is captured. It may be a no-buffer state or may wrap: neither is a
     # durable content identifier; 0 remains entirely unqualified.
     client_object_matches = 0
-    for key, (i, (seq, object_match)) in samples.items():
+    watch_samples = {}
+    last_epoch = 0
+    for key, (i, (seq, object_match, epoch)) in samples.items():
         if not parent_sample[key][0] < i < seals[key[0]][0]:
             raise ValueError("root_surface_state_before_native_sample_or_after_seal")
         client_object_matches += object_match
+        if bool(epoch) != bool(object_match):
+            raise ValueError("watch_epoch_without_live_match")
+        if epoch:
+            if epoch <= last_epoch:
+                raise ValueError("reused_or_nonmonotonic_watch_epoch")
+            last_epoch = epoch
+            watch_samples[epoch] = (key, i)
+    if set(revoked) != set(watch_samples):
+        raise ValueError("missing_or_orphan_watch_revocation")
+    previous_revoke = -1
+    for epoch, (key, i) in watch_samples.items():
+        ri, life, reason = revoked[epoch]
+        if life != key[0] or not previous_revoke < i < ri < seals[life][0]:
+            raise ValueError("watch_revocation_lifetime_or_order")
+        previous_revoke = ri
+
+    def verify_watch(key, i, epoch):
+        if epoch:
+            if epoch not in watch_samples:
+                raise ValueError("unknown_watch_epoch")
+            sk, si = watch_samples[epoch]
+            if sk != key or not si < i < revoked[epoch][0]:
+                raise ValueError("stale_or_foreign_watch_epoch")
+        return bool(epoch)
+
+    live_watch_commits = {}
+    live_watch_presents = 0
     sampled_unchanged_at_commit = 0
     sampled_superseded_at_commit = 0
     unsampled_output_commits = 0
     by_serial = {}
     for key, (i, vals) in commits.items():
-        serial, sampled_flag, sample_seq, now = vals
+        serial, sampled_flag, sample_seq, now, epoch = vals
+        if verify_watch(key, i, epoch):
+            live_watch_commits[key] = epoch
         actual_i, actual_serial = parent_commit[key]
         if serial != actual_serial or not actual_i < i < seals[key[0]][0]:
             raise ValueError("wrong_actual_wlroots_output_serial_or_commit_order")
@@ -156,7 +207,8 @@ def validate_surface_generation(lines, mode):
     sampled_superseded_at_present = 0
     unbound_output_present_hold = 0
     for key, (i, vals) in presents.items():
-        serial, now = vals
+        serial, now, epoch = vals
+        verify_watch(key, i, epoch)
         actual_i, actual_serial = parent_present[key]
         if serial != actual_serial or not actual_i < i < seals[key[0]][0]:
             raise ValueError("wrong_actual_output_present_serial_or_order")
@@ -167,6 +219,8 @@ def validate_surface_generation(lines, mode):
             unbound_output_present_hold += 1
             continue
         _, _, sampled_seq, at_commit, sampled = source
+        if epoch and live_watch_commits.get(key) == epoch:
+            live_watch_presents += 1
         if not sampled:
             continue
         if sampled_seq and sampled_seq == at_commit == now:
@@ -191,6 +245,10 @@ def validate_surface_generation(lines, mode):
         "root_client_object_matches_at_sample_diagnostic": client_object_matches,
         "root_client_object_unmatched_at_sample_hold": len(samples) - client_object_matches,
         "client_buffer_attachment_continuity": False,
+        "live_sample_watch_at_commit_diagnostic": len(live_watch_commits),
+        "live_sample_watch_at_matching_present_diagnostic": live_watch_presents,
+        "watch_revoked_by_surface_commit": sum(x[2] == "surface_commit" for x in revoked.values()),
+        "watch_revoked_by_buffer_destroy": sum(x[2] == "buffer_destroy" for x in revoked.values()),
         "accepted_output_commits": len(commits),
         "actual_output_present_events": len(presents),
         "unchanged_at_output_commit_diagnostic": sampled_unchanged_at_commit,
@@ -222,6 +280,10 @@ def main():
         f"actual_root_state_samples={r['actual_root_state_samples']} "
         f"root_client_object_matches_at_sample={r['root_client_object_matches_at_sample_diagnostic']} "
         f"root_client_object_unmatched_at_sample_hold={r['root_client_object_unmatched_at_sample_hold']} "
+        f"live_sample_watch_at_commit={r['live_sample_watch_at_commit_diagnostic']} "
+        f"live_sample_watch_at_matching_present={r['live_sample_watch_at_matching_present_diagnostic']} "
+        f"watch_revoked_by_surface_commit={r['watch_revoked_by_surface_commit']} "
+        f"watch_revoked_by_buffer_destroy={r['watch_revoked_by_buffer_destroy']} "
         "client_buffer_attachment_continuity=UNVERIFIED "
         f"accepted_output_commits={r['accepted_output_commits']} "
         f"output_presents={r['actual_output_present_events']} "
